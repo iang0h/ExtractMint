@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   BadgeCheck,
   BarChart3,
+  Bot,
   CheckCircle2,
   ChevronRight,
   Cloud,
@@ -13,7 +14,9 @@ import {
   LockKeyhole,
   PlayCircle,
   ReceiptText,
+  SendHorizontal,
   ShieldCheck,
+  Sparkles,
   Table2,
   UploadCloud,
 } from 'lucide-react'
@@ -24,6 +27,12 @@ import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCa
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
 
 type ParsedPage = { pageNumber: number; text: string }
+type AgentMessage = {
+  role: 'user' | 'assistant'
+  content: string
+  provider?: string
+  warning?: string
+}
 
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
@@ -40,6 +49,12 @@ const storeValue = (key: string, value: string) => {
   } catch {
     // ignore
   }
+}
+
+const statementPeriodLabel = (period?: ConversionResult['statementPeriod']) => {
+  if (!period?.start && !period?.end) return '—'
+  if (period.start && period.end && period.start !== period.end) return `${period.start} → ${period.end}`
+  return period.start ?? period.end ?? '—'
 }
 
 const supportItems = [
@@ -109,6 +124,11 @@ const faqItems = [
     question: 'Can I resume a conversion later?',
     answer:
       'Yes. Download the review JSON (or the review pack ZIP). Later, upload the .extractmint-review.json file to restore the extracted rows, validations, and continue exporting without re-processing the original PDF.',
+  },
+  {
+    question: 'Can I ask questions about the conversion?',
+    answer:
+      'Yes. Ask ExtractMint can explain validation issues, export choices, missing balances, and next review steps. It uses a built-in fallback by default and can connect to FreeLLMAPI through Vercel environment variables.',
   },
 ]
 
@@ -262,6 +282,16 @@ function App() {
   const [pdfPage, setPdfPage] = useState(1)
   const [pdfUrlsBySha, setPdfUrlsBySha] = useState<Record<string, string>>({})
   const pdfUrlRef = useRef<Record<string, string>>({})
+  const [agentQuestion, setAgentQuestion] = useState('What should I check before exporting to Excel?')
+  const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([
+    {
+      role: 'assistant',
+      content:
+        'Ask me about validation issues, export formats, balance checks, or what to review before using the converted file.',
+      provider: 'ready',
+    },
+  ])
+  const [isAgentThinking, setIsAgentThinking] = useState(false)
   const [progress, setProgress] = useState<ProgressEvent>({
     fileName: 'sample-bank-statement.pdf',
     stage: 'ready',
@@ -273,6 +303,28 @@ function App() {
   const activeSha = activeResult?.fileMeta?.sha256
   const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
   const activePages = useMemo(() => parsePagesFromRawText(activeResult?.rawText ?? ''), [activeResult?.rawText])
+  const agentContext = useMemo(() => {
+    if (!activeResult) return null
+    return {
+      fileName: activeResult.fileName,
+      documentKind: activeResult.summary.documentKind,
+      rowCount: activeResult.rows.length,
+      confidence: activeResult.confidence,
+      currencyCode: activeResult.currencyCode,
+      validationStatus: activeResult.validation.status,
+      issueCount: activeResult.validation.issueCount,
+      statementPeriod: statementPeriodLabel(activeResult.statementPeriod),
+      sampleRows: activeResult.rows.slice(0, 5).map((row) => ({
+        date: row.date,
+        description: row.description,
+        withdrawal: row.withdrawal,
+        deposit: row.deposit,
+        amount: row.amount,
+        balance: row.balance,
+        confidence: row.confidence,
+      })),
+    }
+  }, [activeResult])
 
   useEffect(() => {
     pdfUrlRef.current = pdfUrlsBySha
@@ -302,12 +354,6 @@ function App() {
     refreshOcrCacheStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistOcrCache])
-
-  const statementPeriodLabel = (period?: ConversionResult['statementPeriod']) => {
-    if (!period?.start && !period?.end) return '—'
-    if (period.start && period.end && period.start !== period.end) return `${period.start} → ${period.end}`
-    return period.start ?? period.end ?? '—'
-  }
 
   const parseMoneyInput = (value: string) => {
     const text = value.trim()
@@ -641,6 +687,61 @@ function App() {
     }
   }
 
+  const askAgent = async () => {
+    const question = agentQuestion.trim()
+    if (!question || isAgentThinking) return
+
+    setAgentMessages((previous) => [...previous, { role: 'user', content: question }])
+    setAgentQuestion('')
+    setIsAgentThinking(true)
+
+    try {
+      const response = await fetch('/api/agent/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          context: agentContext,
+        }),
+      })
+      const payload = (response.headers.get('content-type') || '').includes('application/json')
+        ? ((await response.json()) as {
+        answer?: string
+        provider?: string
+        warning?: string
+        error?: string
+          })
+        : {}
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Agent request failed')
+      }
+
+      setAgentMessages((previous) => [
+        ...previous,
+        {
+          role: 'assistant',
+          content: payload.answer || 'I could not generate an answer for that question.',
+          provider: payload.provider,
+          warning: payload.warning,
+        },
+      ])
+    } catch (error) {
+      setAgentMessages((previous) => [
+        ...previous,
+        {
+          role: 'assistant',
+          content:
+            'The agent API is not reachable in this environment. On Vercel, it will answer with the local fallback immediately, and it can use FreeLLMAPI once the gateway environment variables are set.',
+          provider: 'offline',
+          warning: error instanceof Error ? error.message : 'Agent request failed',
+        },
+      ])
+    } finally {
+      setIsAgentThinking(false)
+    }
+  }
+
   const attachPdfToActiveResult = (file: File | null) => {
     if (!file || !activeResult?.fileMeta.sha256) return
     const sha = activeResult.fileMeta.sha256
@@ -675,6 +776,7 @@ function App() {
         <nav aria-label="Primary navigation">
           <a href="#converter">Converter</a>
           <a href="#formats">Formats</a>
+          <a href="#agent">Agent</a>
           <a href="#video">Demo</a>
           <a href="#faq">FAQ</a>
         </nav>
@@ -1409,6 +1511,69 @@ function App() {
           <ShieldCheck size={22} />
           <h3>Ready for SaaS scale</h3>
           <p>The product can grow into credits, API keys, team access, and audit logs.</p>
+        </div>
+      </section>
+
+      <section className="agent-section" id="agent">
+        <div className="section-heading">
+          <span className="eyebrow">Ask ExtractMint</span>
+          <h2>An AI review assistant for every converted document.</h2>
+        </div>
+        <div className="agent-panel">
+          <div className="agent-brief">
+            <span className="agent-icon">
+              <Bot size={24} />
+            </span>
+            <h3>Ask what to check next</h3>
+            <p>
+              The agent answers questions about the active file, validation status,
+              sample rows, export choices, and reconciliation steps.
+            </p>
+            <div className="agent-source">
+              <Sparkles size={16} />
+              <span>FreeLLMAPI-ready via Vercel environment variables</span>
+            </div>
+          </div>
+          <div className="agent-chat" aria-live="polite">
+            <div className="agent-messages">
+              {agentMessages.map((message, index) => (
+                <motion.div
+                  key={`${message.role}-${index}-${message.content.slice(0, 12)}`}
+                  className={`agent-message ${message.role}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <p>{message.content}</p>
+                  {message.provider ? <small>{message.provider}</small> : null}
+                  {message.warning ? <small>{message.warning}</small> : null}
+                </motion.div>
+              ))}
+              {isAgentThinking ? (
+                <div className="agent-message assistant">
+                  <p>Reading the conversion context...</p>
+                  <small>working</small>
+                </div>
+              ) : null}
+            </div>
+            <form
+              className="agent-input"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void askAgent()
+              }}
+            >
+              <input
+                value={agentQuestion}
+                onChange={(event) => setAgentQuestion(event.target.value)}
+                placeholder="Ask about accuracy, exports, or balance issues..."
+                maxLength={1200}
+              />
+              <button type="submit" disabled={isAgentThinking || !agentQuestion.trim()}>
+                <SendHorizontal size={17} />
+                Ask
+              </button>
+            </form>
+          </div>
         </div>
       </section>
 

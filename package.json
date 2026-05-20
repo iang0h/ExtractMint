@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test:agent": "node tests/agent-core.test.mjs",
     "preview": "vite preview",
     "deploy:static": "npm run build",
     "deploy:vercel": "npx --yes vercel --prod --yes",

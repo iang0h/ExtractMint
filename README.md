@@ -12,6 +12,8 @@ Elegant static SaaS prototype for converting bank statements, receipts, scans, P
   - Review pack ZIP export with one `.xlsx` + review JSON per uploaded file.
   - Combined workbook export (`Combined XLSX`) that puts each file into its own worksheet plus a shared Issues sheet.
 - In-app review table with inline edits that immediately re-check the running balance trail.
+- Ask ExtractMint agent panel for conversion questions, review guidance, export choices, and balance-check next steps.
+- Optional FreeLLMAPI-backed answers through a Vercel API route, with a built-in local fallback when the gateway is not configured.
 - Remotion composition for a product explainer.
 - Remotion vertical onboarding promo for launch and social posts.
 - HyperFrames-ready HTML sources for a website-to-video walkthrough and onboarding promo.
@@ -23,9 +25,34 @@ Elegant static SaaS prototype for converting bank statements, receipts, scans, P
 npm install
 npm run dev
 npm run build
+npm run test:agent
 npm run preview
 npm run deploy:vercel
 ```
+
+## Ask ExtractMint agent
+
+The app includes `/api/agent/`, a Vercel serverless route designed to work with
+FreeLLMAPI (`tashfeenahmed/freellmapi`). The frontend never receives provider
+keys.
+
+Default behavior:
+
+- If no gateway is configured, the agent returns local review guidance.
+- If FreeLLMAPI is configured, the route forwards to its OpenAI-compatible
+  `/v1/chat/completions` endpoint.
+
+Set these Vercel environment variables:
+
+```bash
+FREELLMAPI_BASE_URL=https://your-freellmapi-host.example.com/v1
+FREELLMAPI_API_KEY=freellmapi-your-unified-key
+FREELLMAPI_MODEL=auto
+```
+
+FreeLLMAPI itself is a separate Node server with provider-key storage. Run it on
+a server you control, add your free-tier provider keys there, then point
+ExtractMint at its `/v1` base URL.
 
 ## Vercel deployment
 
