@@ -34,6 +34,89 @@
     />
     <meta name="twitter:image" content="https://extractmint.vercel.app/og-image.png" />
     <meta name="theme-color" content="#0b2530" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://extractmint.vercel.app/#organization",
+            "name": "ExtractMint",
+            "url": "https://extractmint.vercel.app/",
+            "logo": "https://extractmint.vercel.app/favicon.svg"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://extractmint.vercel.app/#website",
+            "name": "ExtractMint",
+            "url": "https://extractmint.vercel.app/",
+            "publisher": { "@id": "https://extractmint.vercel.app/#organization" },
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": "https://extractmint.vercel.app/?q={search_term_string}",
+              "query-input": "required name=search_term_string"
+            }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://extractmint.vercel.app/#software",
+            "name": "ExtractMint",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "url": "https://extractmint.vercel.app/",
+            "description": "ExtractMint converts bank statements, receipts, invoices, PDFs, scans, DOCX files, spreadsheets, CSV, and text into Excel, CSV, DOCX, PDF, QBO, and review-pack exports.",
+            "featureList": [
+              "Bank statement to Excel conversion",
+              "PDF and scanned statement OCR",
+              "Balance validation",
+              "QuickBooks-ready QBO export",
+              "Review JSON and review-pack export",
+              "Ask ExtractMint document review agent"
+            ],
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          },
+          {
+            "@type": "Service",
+            "@id": "https://extractmint.vercel.app/#document-conversion-service",
+            "name": "Financial document conversion",
+            "serviceType": "Bank statement and business document extraction",
+            "provider": { "@id": "https://extractmint.vercel.app/#organization" },
+            "areaServed": "Global",
+            "url": "https://extractmint.vercel.app/#converter"
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://extractmint.vercel.app/#faq-schema",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What does ExtractMint convert?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "ExtractMint converts bank statements, receipts, invoices, PDFs, DOCX files, CSV files, spreadsheets, image scans, and plain text into structured exports."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Are files uploaded to a server?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The current static version processes files in the browser. Files stay on the user's device unless a backend conversion queue is added later."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What formats can ExtractMint export?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "ExtractMint exports Excel XLSX, CSV, Google Docs-ready DOCX, PDF summaries, QuickBooks-ready QBO files, review JSON, review packs, and combined workbooks."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
     <title>ExtractMint | Document to Excel, Docs, and PDF Converter</title>
   </head>
   <body>
