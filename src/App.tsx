@@ -278,6 +278,9 @@ function App() {
   const [ocrLanguage, setOcrLanguage] = useState(() => storedValue('extractmint.ocrLanguage') || 'eng')
   const [persistOcrCache, setPersistOcrCache] = useState(() => storedValue('extractmint.persistOcrCache') !== '0')
   const [ocrCacheStats, setOcrCacheStats] = useState<{ entries: number; bytes: number }>({ entries: 0, bytes: 0 })
+  const [includeSourcesInReviewPack, setIncludeSourcesInReviewPack] = useState(
+    () => storedValue('extractmint.reviewPackIncludeSources') === '1',
+  )
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const [pdfPage, setPdfPage] = useState(1)
   const [pdfUrlsBySha, setPdfUrlsBySha] = useState<Record<string, string>>({})
@@ -502,7 +505,34 @@ function App() {
           detail: 'Importing ExtractMint review pack ZIP',
         })
         try {
-          imported.push(...(await converter.importReviewPackZip(file)))
+          const bundle = await converter.importReviewPackZip(file)
+          imported.push(...bundle.results)
+          const sources = bundle.sourcesBySha
+          const sourceShas = Object.keys(sources)
+          if (sourceShas.length > 0) {
+            setPdfUrlsBySha((previous) => {
+              const next: Record<string, string> = { ...previous }
+              for (const sha of sourceShas) {
+                const source = sources[sha]
+                if (!source) continue
+                const isPdf =
+                  (source.mimeType || '').toLowerCase().includes('pdf') ||
+                  (source.fileName || '').toLowerCase().endsWith('.pdf')
+                if (!isPdf) continue
+                const url = URL.createObjectURL(source.blob)
+                const existing = next[sha]
+                if (existing && existing !== url) {
+                  try {
+                    URL.revokeObjectURL(existing)
+                  } catch {
+                    // ignore
+                  }
+                }
+                next[sha] = url
+              }
+              return next
+            })
+          }
         } catch (error) {
           throw new Error(
             `Failed to import ${file.name}: ${error instanceof Error ? error.message : 'Invalid ZIP'}`,
@@ -643,7 +673,42 @@ function App() {
     })
     try {
       const converter = await loadConverter()
-      const blob = await converter.createReviewPackZipBlob(results)
+      const sourcesBySha: Record<string, { blob: Blob; fileName: string; mimeType: string }> = {}
+
+      if (includeSourcesInReviewPack) {
+        setProgress({
+          fileName: `${results.length} files`,
+          stage: 'exporting',
+          percent: 88,
+          detail: 'Collecting source PDFs for the review pack',
+        })
+
+        const uniqueShas = Array.from(
+          new Set(
+            results
+              .map((result) => result.fileMeta.sha256)
+              .filter((sha): sha is string => typeof sha === 'string' && sha.length > 0),
+          ),
+        )
+
+        for (const sha256 of uniqueShas) {
+          const url = pdfUrlsBySha[sha256]
+          if (!url) continue
+          try {
+            const blob = await (await fetch(url)).blob()
+            const result = results.find((candidate) => candidate.fileMeta.sha256 === sha256)
+            sourcesBySha[sha256] = {
+              blob,
+              fileName: result?.fileName || `${sha256}.pdf`,
+              mimeType: blob.type || 'application/pdf',
+            }
+          } catch {
+            // ignore fetch failures
+          }
+        }
+      }
+
+      const blob = await converter.createReviewPackZipBlob(results, sourcesBySha)
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       const stamp = new Date().toISOString().slice(0, 10)
@@ -1103,6 +1168,21 @@ function App() {
                 <ReceiptText size={16} />
                 QuickBooks (QBO)
               </button>
+            </div>
+
+            <div className="export-options" aria-label="Review pack options">
+              <label title="Include the original statement PDFs inside the review pack ZIP so PDF previews work when you import later (larger download).">
+                <input
+                  type="checkbox"
+                  checked={includeSourcesInReviewPack}
+                  onChange={(event) => {
+                    const next = event.target.checked
+                    setIncludeSourcesInReviewPack(next)
+                    storeValue('extractmint.reviewPackIncludeSources', next ? '1' : '0')
+                  }}
+                />
+                Include source PDFs in review pack ZIP
+              </label>
             </div>
           </motion.div>
         </motion.div>

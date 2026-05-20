@@ -84,6 +84,17 @@ export type ExtractionOptions = {
   persistOcrCache?: boolean
 }
 
+export type ReviewPackSource = {
+  blob: Blob
+  fileName: string
+  mimeType: string
+}
+
+export type ReviewPackImport = {
+  results: ConversionResult[]
+  sourcesBySha: Record<string, ReviewPackSource>
+}
+
 const datePattern =
   /(?:\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{2,4}\b)/i
 const amountPattern =
@@ -962,11 +973,12 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   }
 }
 
-export async function importReviewPackZip(file: File): Promise<ConversionResult[]> {
+export async function importReviewPackZip(file: File): Promise<ReviewPackImport> {
   const JSZip = (await import('jszip')).default
   const buffer = await file.arrayBuffer()
   const zip = await JSZip.loadAsync(buffer)
   const results: ConversionResult[] = []
+  const sourcesBySha: Record<string, ReviewPackSource> = {}
 
   const entries = Object.keys(zip.files)
     .map((name) => zip.files[name])
@@ -985,13 +997,55 @@ export async function importReviewPackZip(file: File): Promise<ConversionResult[
     results.push(await importReviewJson(importedFile))
   }
 
-  return results
+  const manifestEntry = Object.keys(zip.files)
+    .map((name) => zip.files[name])
+    .find((entry) => !entry.dir && entry.name.toLowerCase().endsWith('sources/manifest.json'))
+
+  if (manifestEntry) {
+    try {
+      const json = await manifestEntry.async('string')
+      const parsed = JSON.parse(json) as unknown
+      const list = Array.isArray(parsed) ? parsed : []
+      for (const item of list) {
+        if (!item || typeof item !== 'object') continue
+        const record = item as Record<string, unknown>
+        const sha256 = asString(record.sha256)
+        const path = asString(record.path)
+        const fileName = asString(record.fileName)
+        const mimeType = asString(record.mimeType)
+        if (!sha256 || !path) continue
+        const entry = zip.file(path)
+        if (!entry) continue
+        const blob = await entry.async('blob')
+        sourcesBySha[sha256] = {
+          blob,
+          fileName: fileName || path.split('/').pop() || sha256,
+          mimeType: mimeType || 'application/octet-stream',
+        }
+      }
+    } catch {
+      // ignore manifest parse failures
+    }
+  }
+
+  return { results, sourcesBySha }
 }
 
-export async function createReviewPackZipBlob(results: ConversionResult[]) {
+function sanitizeZipName(value: string) {
+  const normalized = (value ?? '')
+    .trim()
+    .replace(/[/\\]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w.\- ()]+/g, '')
+    .trim()
+  return normalized.length > 120 ? normalized.slice(0, 120) : normalized || 'file'
+}
+
+export async function createReviewPackZipBlob(results: ConversionResult[], sourcesBySha?: Record<string, ReviewPackSource>) {
   const JSZip = (await import('jszip')).default
   const zip = new JSZip()
   const root = zip.folder('extractmint-review-pack') ?? zip
+  const sourcesFolder = root.folder('sources') ?? root
 
   for (const result of results) {
     const baseName = result.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
@@ -999,6 +1053,25 @@ export async function createReviewPackZipBlob(results: ConversionResult[]) {
     const json = createReviewJsonBlob(result)
     root.file(`${baseName}.xlsx`, xlsx)
     root.file(`${baseName}.extractmint-review.json`, json)
+  }
+
+  const manifest: Array<{ sha256: string; fileName: string; mimeType: string; size: number; path: string }> = []
+  const entries = sourcesBySha ? Object.entries(sourcesBySha) : []
+  for (const [sha256, source] of entries) {
+    if (!sha256 || !source?.blob) continue
+    const safeName = sanitizeZipName(source.fileName || `${sha256}`)
+    const path = `sources/${sha256}-${safeName}`
+    sourcesFolder.file(`${sha256}-${safeName}`, source.blob)
+    manifest.push({
+      sha256,
+      fileName: source.fileName,
+      mimeType: source.mimeType,
+      size: source.blob.size,
+      path: `extractmint-review-pack/${path}`,
+    })
+  }
+  if (manifest.length > 0) {
+    sourcesFolder.file('manifest.json', JSON.stringify(manifest, null, 2))
   }
 
   return zip.generateAsync({ type: 'blob' })
