@@ -272,6 +272,9 @@ function App() {
   const [showAllRows, setShowAllRows] = useState(false)
   const [onlyIssues, setOnlyIssues] = useState(false)
   const [editRows, setEditRows] = useState(false)
+  const [showSourcePreview, setShowSourcePreview] = useState(
+    () => storedValue('extractmint.showSourcePreview') === '1',
+  )
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [forceOcr, setForceOcr] = useState(() => storedValue('extractmint.forceOcr') === '1')
@@ -1281,7 +1284,11 @@ function App() {
                   </div>
                 </div>
 
-                <div className={editRows ? 'review-split' : undefined}>
+                <div
+                  className={
+                    showSourcePreview && activeResult?.fileType === 'application/pdf' ? 'review-split' : undefined
+                  }
+                >
                   <div className="table-wrap">
                     <div className="table-controls" aria-label="Review controls">
                       <label>
@@ -1308,7 +1315,27 @@ function App() {
                         />
                         Edit values
                       </label>
-                      <span className="table-hint">Edits instantly re-check the running balance trail.</span>
+                      {activeResult?.fileType === 'application/pdf' ? (
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={showSourcePreview}
+                            onChange={(event) => {
+                              const next = event.target.checked
+                              setShowSourcePreview(next)
+                              storeValue('extractmint.showSourcePreview', next ? '1' : '0')
+                            }}
+                          />
+                          Show source PDF
+                        </label>
+                      ) : null}
+                      <span className="table-hint">
+                        {editRows
+                          ? 'Edits instantly re-check the running balance trail.'
+                          : activeResult?.fileType === 'application/pdf' && !showSourcePreview
+                            ? 'Tip: enable “Show source PDF” to audit rows faster.'
+                            : 'Click a row to jump to the most likely page.'}
+                      </span>
                     </div>
                     <table>
                       <thead>
@@ -1440,7 +1467,7 @@ function App() {
                     </table>
                   </div>
 
-                  {editRows && activeResult?.fileType === 'application/pdf' ? (
+                  {showSourcePreview && activeResult?.fileType === 'application/pdf' ? (
                     <aside className="source-preview" aria-label="Source PDF preview">
                       <div className="source-header">
                         <div>
