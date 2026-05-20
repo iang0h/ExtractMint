@@ -474,9 +474,11 @@ function App() {
     const reviewJsonFiles = files.filter((file) =>
       file.name.toLowerCase().endsWith('.extractmint-review.json'),
     )
-    const normalFiles = files.filter(
-      (file) => !file.name.toLowerCase().endsWith('.extractmint-review.json'),
-    )
+    const reviewPackZipFiles = files.filter((file) => file.name.toLowerCase().endsWith('.zip'))
+    const normalFiles = files.filter((file) => {
+      const name = file.name.toLowerCase()
+      return !name.endsWith('.extractmint-review.json') && !name.endsWith('.zip')
+    })
 
     normalFiles.forEach((file) => {
       if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
@@ -491,6 +493,23 @@ function App() {
     setActiveIndex(0)
     try {
       const imported: ConversionResult[] = []
+      for (let index = 0; index < reviewPackZipFiles.length; index += 1) {
+        const file = reviewPackZipFiles[index]
+        setProgress({
+          fileName: file.name,
+          stage: 'reading',
+          percent: Math.round((index / Math.max(1, reviewPackZipFiles.length)) * 100),
+          detail: 'Importing ExtractMint review pack ZIP',
+        })
+        try {
+          imported.push(...(await converter.importReviewPackZip(file)))
+        } catch (error) {
+          throw new Error(
+            `Failed to import ${file.name}: ${error instanceof Error ? error.message : 'Invalid ZIP'}`,
+            { cause: error },
+          )
+        }
+      }
       for (let index = 0; index < reviewJsonFiles.length; index += 1) {
         const file = reviewJsonFiles[index]
         setProgress({
@@ -948,7 +967,7 @@ function App() {
                 ref={inputRef}
                 type="file"
                 multiple
-                accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.docx,.txt,.csv,.xlsx,.xls"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.docx,.txt,.csv,.xlsx,.xls,.zip,.extractmint-review.json"
                 onChange={(event) => {
                   if (event.target.files) void processFiles(event.target.files)
                 }}
@@ -961,7 +980,7 @@ function App() {
                 <Cloud size={28} />
               </motion.span>
               <strong>Drop documents here</strong>
-              <small>or click to choose files from your desktop</small>
+              <small>or click to choose PDFs, images, or ExtractMint review packs (.zip)</small>
             </label>
 
             <div className="ocr-settings" aria-label="OCR settings">

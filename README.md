@@ -9,7 +9,7 @@ Elegant static SaaS prototype for converting bank statements, receipts, scans, P
 - Export buttons for Excel `.xlsx`, Google Docs-ready `.docx`, `.pdf`, `.csv`, and QuickBooks-ready `.qbo` (OFX).
 - Accountant-oriented exports:
   - Per-file review JSON (`*.extractmint-review.json`) with validation flags and SHA-256 fingerprint.
-  - Review pack ZIP export with one `.xlsx` + review JSON per uploaded file.
+  - Review pack ZIP export with one `.xlsx` + review JSON per uploaded file (and ZIP import by uploading the pack back into the app).
   - Combined workbook export (`Combined XLSX`) that puts each file into its own worksheet plus a shared Issues sheet.
 - In-app review table with inline edits that immediately re-check the running balance trail.
 - Ask ExtractMint agent panel for conversion questions, review guidance, export choices, and balance-check next steps.

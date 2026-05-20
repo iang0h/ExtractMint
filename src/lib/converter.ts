@@ -962,6 +962,32 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   }
 }
 
+export async function importReviewPackZip(file: File): Promise<ConversionResult[]> {
+  const JSZip = (await import('jszip')).default
+  const buffer = await file.arrayBuffer()
+  const zip = await JSZip.loadAsync(buffer)
+  const results: ConversionResult[] = []
+
+  const entries = Object.keys(zip.files)
+    .map((name) => zip.files[name])
+    .filter((entry) => !entry.dir && entry.name.toLowerCase().endsWith('.extractmint-review.json'))
+
+  if (entries.length === 0) {
+    throw new Error('No .extractmint-review.json files found in this ZIP')
+  }
+
+  for (const entry of entries) {
+    const json = await entry.async('string')
+    const importedFile = new File([json], entry.name.split('/').pop() || entry.name, {
+      type: 'application/json;charset=utf-8',
+      lastModified: file.lastModified || Date.now(),
+    })
+    results.push(await importReviewJson(importedFile))
+  }
+
+  return results
+}
+
 export async function createReviewPackZipBlob(results: ConversionResult[]) {
   const JSZip = (await import('jszip')).default
   const zip = new JSZip()
