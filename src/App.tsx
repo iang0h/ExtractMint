@@ -23,6 +23,8 @@ import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/c
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
 
+type ParsedPage = { pageNumber: number; text: string }
+
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
   try {
@@ -184,6 +186,65 @@ const createSampleResultLite = (): ConversionResult => ({
   },
 })
 
+function fileSignatureParts(fileName: string, size: number, lastModified: number) {
+  return `${fileName}:${size}:${lastModified}`
+}
+
+function parsePagesFromRawText(rawText: string): ParsedPage[] {
+  const text = rawText ?? ''
+  const matches = Array.from(text.matchAll(/^Page\s+(\d+)\s*$/gim))
+  if (matches.length === 0) {
+    return [{ pageNumber: 1, text }]
+  }
+
+  const pages: ParsedPage[] = []
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index]
+    const start = (match.index ?? 0) + match[0].length
+    const end = index + 1 < matches.length ? (matches[index + 1].index ?? text.length) : text.length
+    const pageNumber = Number(match[1] ?? index + 1)
+    const body = text.slice(start, end).trim()
+    pages.push({ pageNumber: Number.isFinite(pageNumber) ? pageNumber : index + 1, text: body })
+  }
+  return pages.length > 0 ? pages : [{ pageNumber: 1, text }]
+}
+
+function normalizeSearchText(value: string) {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function bestMatchingPage(pages: ParsedPage[], row: ConversionResult['rows'][number] | undefined) {
+  if (!row || pages.length === 0) return pages[0]?.pageNumber ?? 1
+  const dateHint = normalizeSearchText(row.date ?? '')
+  const descHint = normalizeSearchText(row.description).split(' ').slice(0, 8).join(' ')
+  if (!dateHint && !descHint) return pages[0]?.pageNumber ?? 1
+
+  let bestPage = pages[0]?.pageNumber ?? 1
+  let bestScore = -1
+
+  for (const page of pages) {
+    const normalized = normalizeSearchText(page.text)
+    let score = 0
+    if (dateHint && normalized.includes(dateHint)) score += 4
+    if (descHint && normalized.includes(descHint)) score += 5
+    if (descHint) {
+      const words = descHint.split(' ').filter(Boolean)
+      const hits = words.reduce((sum, word) => (normalized.includes(word) ? sum + 1 : sum), 0)
+      score += Math.min(3, hits)
+    }
+    if (score > bestScore) {
+      bestScore = score
+      bestPage = page.pageNumber
+    }
+  }
+
+  return bestPage
+}
+
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [results, setResults] = useState<ConversionResult[]>([createSampleResultLite()])
@@ -197,6 +258,10 @@ function App() {
   const [ocrLanguage, setOcrLanguage] = useState(() => storedValue('extractmint.ocrLanguage') || 'eng')
   const [persistOcrCache, setPersistOcrCache] = useState(() => storedValue('extractmint.persistOcrCache') !== '0')
   const [ocrCacheStats, setOcrCacheStats] = useState<{ entries: number; bytes: number }>({ entries: 0, bytes: 0 })
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
+  const [pdfPage, setPdfPage] = useState(1)
+  const [pdfUrlsBySha, setPdfUrlsBySha] = useState<Record<string, string>>({})
+  const pdfUrlRef = useRef<Record<string, string>>({})
   const [progress, setProgress] = useState<ProgressEvent>({
     fileName: 'sample-bank-statement.pdf',
     stage: 'ready',
@@ -205,6 +270,26 @@ function App() {
   })
 
   const activeResult = results[activeIndex] ?? results[0]
+  const activeSha = activeResult?.fileMeta?.sha256
+  const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
+  const activePages = useMemo(() => parsePagesFromRawText(activeResult?.rawText ?? ''), [activeResult?.rawText])
+
+  useEffect(() => {
+    pdfUrlRef.current = pdfUrlsBySha
+  }, [pdfUrlsBySha])
+
+  useEffect(() => {
+    return () => {
+      const urls = Object.values(pdfUrlRef.current)
+      urls.forEach((url) => {
+        try {
+          URL.revokeObjectURL(url)
+        } catch {
+          // ignore
+        }
+      })
+    }
+  }, [])
 
   const refreshOcrCacheStats = () => {
     if (!persistOcrCache) return
@@ -339,12 +424,22 @@ function App() {
     if (files.length === 0) return
 
     const converter = await loadConverter()
+    const signatureUrls: Record<string, string> = {}
     const reviewJsonFiles = files.filter((file) =>
       file.name.toLowerCase().endsWith('.extractmint-review.json'),
     )
     const normalFiles = files.filter(
       (file) => !file.name.toLowerCase().endsWith('.extractmint-review.json'),
     )
+
+    normalFiles.forEach((file) => {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        const sig = fileSignatureParts(file.name, file.size, file.lastModified)
+        if (!signatureUrls[sig]) {
+          signatureUrls[sig] = URL.createObjectURL(file)
+        }
+      }
+    })
 
     setIsProcessing(true)
     setActiveIndex(0)
@@ -377,6 +472,30 @@ function App() {
               persistOcrCache,
             })
 
+      if (converted.length > 0) {
+        setPdfUrlsBySha((previous) => {
+          const next: Record<string, string> = { ...previous }
+          for (const result of converted) {
+            const sha = result.fileMeta.sha256
+            if (!sha) continue
+            const sig = fileSignatureParts(result.fileName, result.fileMeta.size, result.fileMeta.lastModified)
+            const url = signatureUrls[sig]
+            if (!url) continue
+
+            const existing = next[sha]
+            if (existing && existing !== url) {
+              try {
+                URL.revokeObjectURL(existing)
+              } catch {
+                // ignore
+              }
+            }
+            next[sha] = url
+          }
+          return next
+        })
+      }
+
       const combined = [...imported, ...converted]
       if (combined.length === 0) return
       setResults(combined)
@@ -393,6 +512,13 @@ function App() {
         stage: 'error',
         percent: 100,
         detail: error instanceof Error ? error.message : 'Conversion failed',
+      })
+      Object.values(signatureUrls).forEach((url) => {
+        try {
+          URL.revokeObjectURL(url)
+        } catch {
+          // ignore
+        }
       })
     } finally {
       setIsProcessing(false)
@@ -513,6 +639,25 @@ function App() {
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  const attachPdfToActiveResult = (file: File | null) => {
+    if (!file || !activeResult?.fileMeta.sha256) return
+    const sha = activeResult.fileMeta.sha256
+    const url = URL.createObjectURL(file)
+    setPdfUrlsBySha((previous) => {
+      const next = { ...previous }
+      const existing = next[sha]
+      if (existing && existing !== url) {
+        try {
+          URL.revokeObjectURL(existing)
+        } catch {
+          // ignore
+        }
+      }
+      next[sha] = url
+      return next
+    })
   }
 
   return (
@@ -873,7 +1018,11 @@ function App() {
               <button
                 key={`${result.fileName}-${index}`}
                 className={index === activeIndex ? 'active' : ''}
-                onClick={() => setActiveIndex(index)}
+                onClick={() => {
+                  setActiveIndex(index)
+                  setSelectedRowIndex(null)
+                  setPdfPage(1)
+                }}
               >
                 <FileText size={18} />
                 <span>
@@ -931,132 +1080,223 @@ function App() {
                   </div>
                 </div>
 
-                <div className="table-wrap">
-                  <div className="table-controls" aria-label="Review controls">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={showAllRows}
-                        onChange={(event) => setShowAllRows(event.target.checked)}
-                      />
-                      Show all rows
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={onlyIssues}
-                        onChange={(event) => setOnlyIssues(event.target.checked)}
-                      />
-                      Only flagged rows
-                    </label>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={editRows}
-                        onChange={(event) => setEditRows(event.target.checked)}
-                      />
-                      Edit values
-                    </label>
-                    <span className="table-hint">Edits instantly re-check the running balance trail.</span>
+                <div className={editRows ? 'review-split' : undefined}>
+                  <div className="table-wrap">
+                    <div className="table-controls" aria-label="Review controls">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={showAllRows}
+                          onChange={(event) => setShowAllRows(event.target.checked)}
+                        />
+                        Show all rows
+                      </label>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={onlyIssues}
+                          onChange={(event) => setOnlyIssues(event.target.checked)}
+                        />
+                        Only flagged rows
+                      </label>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={editRows}
+                          onChange={(event) => setEditRows(event.target.checked)}
+                        />
+                        Edit values
+                      </label>
+                      <span className="table-hint">Edits instantly re-check the running balance trail.</span>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Description</th>
+                          <th>Withdrawal</th>
+                          <th>Deposit</th>
+                          <th>Balance</th>
+                          <th>Review</th>
+                          <th>Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleRows.map(({ row, index }) => {
+                          const review = rowReview(activeResult?.validation, index)
+                          const isSelected = selectedRowIndex === index
+                          return (
+                            <tr
+                              key={`${row.description}-${index}`}
+                              className={[
+                                review.status === 'Review' ? 'needs-review' : '',
+                                isSelected ? 'row-selected' : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
+                              onClick={() => {
+                                setSelectedRowIndex(index)
+                                setPdfPage(bestMatchingPage(activePages, row))
+                              }}
+                            >
+                              <td>
+                                {editRows ? (
+                                  <input
+                                    key={`${activeIndex}-${index}-date-${row.date ?? ''}`}
+                                    defaultValue={row.date ?? ''}
+                                    placeholder="YYYY-MM-DD"
+                                    onFocus={() => {
+                                      setSelectedRowIndex(index)
+                                      setPdfPage(bestMatchingPage(activePages, row))
+                                    }}
+                                    onBlur={(event) => updateRow(activeIndex, index, 'date', event.target.value)}
+                                  />
+                                ) : (
+                                  (row.date || 'Detected')
+                                )}
+                              </td>
+                              <td>
+                                {editRows ? (
+                                  <input
+                                    key={`${activeIndex}-${index}-desc-${row.description}`}
+                                    defaultValue={row.description}
+                                    onFocus={() => {
+                                      setSelectedRowIndex(index)
+                                      setPdfPage(bestMatchingPage(activePages, row))
+                                    }}
+                                    onBlur={(event) =>
+                                      updateRow(activeIndex, index, 'description', event.target.value)
+                                    }
+                                  />
+                                ) : (
+                                  row.description
+                                )}
+                                {review.note ? <small className="review-note">{review.note}</small> : null}
+                              </td>
+                              <td>
+                                {editRows ? (
+                                  <input
+                                    key={`${activeIndex}-${index}-withdrawal-${row.withdrawal ?? ''}`}
+                                    defaultValue={row.withdrawal !== undefined ? String(row.withdrawal) : ''}
+                                    inputMode="decimal"
+                                    placeholder="-"
+                                    onFocus={() => {
+                                      setSelectedRowIndex(index)
+                                      setPdfPage(bestMatchingPage(activePages, row))
+                                    }}
+                                    onBlur={(event) =>
+                                      updateRow(activeIndex, index, 'withdrawal', event.target.value)
+                                    }
+                                  />
+                                ) : (
+                                  formatAmount(row.withdrawal, activeResult?.currencyCode)
+                                )}
+                              </td>
+                              <td>
+                                {editRows ? (
+                                  <input
+                                    key={`${activeIndex}-${index}-deposit-${row.deposit ?? ''}`}
+                                    defaultValue={row.deposit !== undefined ? String(row.deposit) : ''}
+                                    inputMode="decimal"
+                                    placeholder="-"
+                                    onFocus={() => {
+                                      setSelectedRowIndex(index)
+                                      setPdfPage(bestMatchingPage(activePages, row))
+                                    }}
+                                    onBlur={(event) => updateRow(activeIndex, index, 'deposit', event.target.value)}
+                                  />
+                                ) : (
+                                  formatAmount(row.deposit, activeResult?.currencyCode)
+                                )}
+                              </td>
+                              <td>
+                                {editRows ? (
+                                  <input
+                                    key={`${activeIndex}-${index}-balance-${row.balance ?? ''}`}
+                                    defaultValue={row.balance !== undefined ? String(row.balance) : ''}
+                                    inputMode="decimal"
+                                    placeholder="-"
+                                    onFocus={() => {
+                                      setSelectedRowIndex(index)
+                                      setPdfPage(bestMatchingPage(activePages, row))
+                                    }}
+                                    onBlur={(event) => updateRow(activeIndex, index, 'balance', event.target.value)}
+                                  />
+                                ) : (
+                                  formatAmount(row.balance, activeResult?.currencyCode)
+                                )}
+                              </td>
+                              <td>
+                                <span className={`review-pill ${review.status.toLowerCase()}`}>
+                                  {review.status}
+                                </span>
+                              </td>
+                              <td>{row.category}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Description</th>
-                        <th>Withdrawal</th>
-                        <th>Deposit</th>
-                        <th>Balance</th>
-                        <th>Review</th>
-                        <th>Type</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleRows.map(({ row, index }) => {
-                        const review = rowReview(activeResult?.validation, index)
-                        return (
-                          <tr
-                            key={`${row.description}-${index}`}
-                            className={review.status === 'Review' ? 'needs-review' : ''}
+
+                  {editRows && activeResult?.fileType === 'application/pdf' ? (
+                    <aside className="source-preview" aria-label="Source PDF preview">
+                      <div className="source-header">
+                        <div>
+                          <span>Source PDF</span>
+                          <strong>{activeResult.fileName}</strong>
+                        </div>
+                        <div className="page-controls">
+                          <button
+                            type="button"
+                            onClick={() => setPdfPage((p) => Math.max(1, p - 1))}
+                            aria-label="Previous page"
                           >
-                            <td>
-                              {editRows ? (
-                                <input
-                                  key={`${activeIndex}-${index}-date-${row.date ?? ''}`}
-                                  defaultValue={row.date ?? ''}
-                                  placeholder="YYYY-MM-DD"
-                                  onBlur={(event) => updateRow(activeIndex, index, 'date', event.target.value)}
-                                />
-                              ) : (
-                                (row.date || 'Detected')
-                              )}
-                            </td>
-                            <td>
-                              {editRows ? (
-                                <input
-                                  key={`${activeIndex}-${index}-desc-${row.description}`}
-                                  defaultValue={row.description}
-                                  onBlur={(event) =>
-                                    updateRow(activeIndex, index, 'description', event.target.value)
-                                  }
-                                />
-                              ) : (
-                                row.description
-                              )}
-                              {review.note ? <small className="review-note">{review.note}</small> : null}
-                            </td>
-                            <td>
-                              {editRows ? (
-                                <input
-                                  key={`${activeIndex}-${index}-withdrawal-${row.withdrawal ?? ''}`}
-                                  defaultValue={row.withdrawal !== undefined ? String(row.withdrawal) : ''}
-                                  inputMode="decimal"
-                                  placeholder="-"
-                                  onBlur={(event) =>
-                                    updateRow(activeIndex, index, 'withdrawal', event.target.value)
-                                  }
-                                />
-                              ) : (
-                                formatAmount(row.withdrawal, activeResult?.currencyCode)
-                              )}
-                            </td>
-                            <td>
-                              {editRows ? (
-                                <input
-                                  key={`${activeIndex}-${index}-deposit-${row.deposit ?? ''}`}
-                                  defaultValue={row.deposit !== undefined ? String(row.deposit) : ''}
-                                  inputMode="decimal"
-                                  placeholder="-"
-                                  onBlur={(event) => updateRow(activeIndex, index, 'deposit', event.target.value)}
-                                />
-                              ) : (
-                                formatAmount(row.deposit, activeResult?.currencyCode)
-                              )}
-                            </td>
-                            <td>
-                              {editRows ? (
-                                <input
-                                  key={`${activeIndex}-${index}-balance-${row.balance ?? ''}`}
-                                  defaultValue={row.balance !== undefined ? String(row.balance) : ''}
-                                  inputMode="decimal"
-                                  placeholder="-"
-                                  onBlur={(event) => updateRow(activeIndex, index, 'balance', event.target.value)}
-                                />
-                              ) : (
-                                formatAmount(row.balance, activeResult?.currencyCode)
-                              )}
-                            </td>
-                            <td>
-                              <span className={`review-pill ${review.status.toLowerCase()}`}>
-                                {review.status}
-                              </span>
-                            </td>
-                            <td>{row.category}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                            Prev
+                          </button>
+                          <label>
+                            <span>Page</span>
+                            <input
+                              value={String(pdfPage)}
+                              inputMode="numeric"
+                              onChange={(event) => {
+                                const next = Number(event.target.value)
+                                if (Number.isFinite(next) && next > 0) setPdfPage(Math.floor(next))
+                              }}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setPdfPage((p) => p + 1)}
+                            aria-label="Next page"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+
+                      {activePdfUrl ? (
+                        <iframe
+                          className="pdf-frame"
+                          title={`PDF preview for ${activeResult.fileName}`}
+                          src={`${activePdfUrl}#page=${pdfPage}&zoom=page-width`}
+                        />
+                      ) : (
+                        <div className="source-empty">
+                          <p>This review JSON does not include the original PDF. Attach it to enable preview.</p>
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            onChange={(event) => attachPdfToActiveResult(event.target.files?.[0] ?? null)}
+                          />
+                        </div>
+                      )}
+
+                      <div className="source-hint">
+                        Click a row to jump to the most likely page (best-effort text match).
+                      </div>
+                    </aside>
+                  ) : null}
                 </div>
               </motion.div>
             </AnimatePresence>
