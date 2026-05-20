@@ -81,4 +81,10 @@ assert.match(fallback, /maybank-statement\.pdf/)
 assert.match(fallback, /2 validation issues/)
 assert.match(fallback, /FreeLLMAPI is not configured/)
 
+const configuredFallback = createFallbackAnswer('What should I check?', context, {
+  configured: true,
+})
+assert.match(configuredFallback, /FreeLLMAPI is configured/)
+assert.doesNotMatch(configuredFallback, /not configured/)
+
 console.log('agent-core tests passed')

@@ -66,7 +66,7 @@ export function parseChatCompletionText(payload) {
   return typeof text === 'string' ? text.trim() : ''
 }
 
-export function createFallbackAnswer(question, context = {}) {
+export function createFallbackAnswer(question, context = {}, options = {}) {
   const issueCount = Number(context.issueCount ?? 0)
   const rowCount = Number(context.rowCount ?? 0)
   const confidence = Number(context.confidence ?? 0)
@@ -88,6 +88,8 @@ export function createFallbackAnswer(question, context = {}) {
     `For ${fileName}, ExtractMint has ${rowCount} rows at ${confidence}% confidence for ${period}.`,
     `Validation status: ${status}. ${reviewLine}`,
     exportLine,
-    'FreeLLMAPI is not configured yet, so this is the built-in local guidance. Add FREELLMAPI_BASE_URL and FREELLMAPI_API_KEY in Vercel to enable live AI answers.',
+    options.configured
+      ? 'FreeLLMAPI is configured, but the gateway is not reachable yet. This is the built-in local guidance until the gateway URL responds.'
+      : 'FreeLLMAPI is not configured yet, so this is the built-in local guidance. Add FREELLMAPI_BASE_URL and FREELLMAPI_API_KEY in Vercel to enable live AI answers.',
   ].join('\n\n')
 }

@@ -56,9 +56,9 @@ export default async function handler(request, response) {
     })
   } catch (error) {
     return response.status(200).json({
-      answer: createFallbackAnswer(question, context),
+      answer: createFallbackAnswer(question, context, { configured: true }),
       provider: 'local-fallback',
-      configured: false,
+      configured: true,
       warning: error instanceof Error ? error.message : 'FreeLLMAPI request failed',
     })
   }
