@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import { PdfCanvasViewer, type PdfDocumentProxy } from './components/PdfCanvasViewer'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
@@ -323,6 +324,7 @@ function App() {
   const [pdfUrlsBySha, setPdfUrlsBySha] = useState<Record<string, string>>({})
   const pdfUrlRef = useRef<Record<string, string>>({})
   const pdfDocRef = useRef<unknown>(null)
+  const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null)
   const [agentQuestion, setAgentQuestion] = useState('What should I check before exporting to Excel?')
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([
     {
@@ -348,6 +350,27 @@ function App() {
     if (!activeSha || !activePdfUrl || !showSourcePreview || !pdfPageCount) return []
     return thumbnailPages(pdfPageCount, pdfPage, 12)
   }, [activePdfUrl, activeSha, pdfPage, pdfPageCount, showSourcePreview])
+  const selectedRow = selectedRowIndex !== null ? (activeResult?.rows?.[selectedRowIndex] ?? null) : null
+  const pdfHighlightQueries = useMemo(() => {
+    if (!selectedRow) return []
+    const queries: string[] = []
+    if (selectedRow.date) queries.push(selectedRow.date)
+
+    const addNumberQueries = (value?: number) => {
+      if (value === undefined || !Number.isFinite(value)) return
+      const fixed = Math.abs(value).toFixed(2)
+      queries.push(fixed)
+      const withCommas = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+        Math.abs(value),
+      )
+      queries.push(withCommas)
+    }
+
+    addNumberQueries(selectedRow.withdrawal)
+    addNumberQueries(selectedRow.deposit)
+    addNumberQueries(selectedRow.amount)
+    return Array.from(new Set(queries)).slice(0, 6)
+  }, [selectedRow])
   const agentContext = useMemo(() => {
     if (!activeResult) return null
     return {
@@ -391,6 +414,7 @@ function App() {
   useEffect(() => {
     if (!showSourcePreview || !activePdfUrl) {
       pdfDocRef.current = null
+      setPdfDoc(null)
       setPdfPageCount(null)
       setPdfThumbStatus('idle')
       return
@@ -398,6 +422,7 @@ function App() {
 
     let cancelled = false
     pdfDocRef.current = null
+    setPdfDoc(null)
     setPdfPageCount(null)
     setPdfThumbStatus('loading')
 
@@ -413,12 +438,14 @@ function App() {
         const pdf = await pdfjs.getDocument({ data: buffer }).promise
         if (cancelled) return
         pdfDocRef.current = pdf
+        setPdfDoc(pdf as unknown as PdfDocumentProxy)
         setPdfPageCount(pdf.numPages)
         setPdfPage((current) => clampPage(current, pdf.numPages))
         setPdfThumbStatus('ready')
       } catch (error) {
         if (cancelled) return
         pdfDocRef.current = null
+        setPdfDoc(null)
         setPdfPageCount(null)
         setPdfThumbStatus('error')
         console.warn('PDF preview load failed', error)
@@ -432,19 +459,7 @@ function App() {
 
   useEffect(() => {
     if (!activeSha || !activePdfUrl || !showSourcePreview) return
-    const pdf = pdfDocRef.current as
-      | {
-          getPage: (pageNumber: number) => Promise<{
-            getViewport: (options: { scale: number }) => { width: number; height: number }
-            render: (options: {
-              canvasContext: CanvasRenderingContext2D
-              canvas: HTMLCanvasElement
-              viewport: unknown
-            }) => { promise: Promise<unknown> }
-          }>
-        }
-      | null
-    if (!pdf || !pdfPageCount) return
+    if (!pdfDoc || !pdfPageCount) return
 
     let cancelled = false
 
@@ -457,7 +472,7 @@ function App() {
       for (const pageNumber of missing) {
         if (cancelled) return
         try {
-          const page = await pdf.getPage(pageNumber)
+          const page = await pdfDoc.getPage(pageNumber)
           const viewport = page.getViewport({ scale: 0.18 })
           const canvas = document.createElement('canvas')
           canvas.width = Math.max(1, Math.floor(viewport.width))
@@ -479,7 +494,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activePdfUrl, activeSha, pdfPage, pdfPageCount, pdfThumbUrls, showSourcePreview])
+  }, [activePdfUrl, activeSha, pdfDoc, pdfPage, pdfPageCount, pdfThumbUrls, showSourcePreview])
 
   const refreshOcrCacheStats = () => {
     if (!persistOcrCache) return
@@ -1664,11 +1679,13 @@ function App() {
 	                      ) : null}
 
 	                      {activePdfUrl ? (
-	                        <iframe
-	                          className="pdf-frame"
-	                          title={`PDF preview for ${activeResult.fileName}`}
-	                          src={`${activePdfUrl}#page=${pdfPage}&zoom=page-width`}
-	                        />
+	                        pdfDoc ? (
+	                          <PdfCanvasViewer pdf={pdfDoc} pageNumber={pdfPage} highlightQueries={pdfHighlightQueries} />
+	                        ) : (
+	                          <div className="pdf-canvas-fallback" aria-label="Loading PDF">
+	                            Loading PDF…
+	                          </div>
+	                        )
                       ) : (
                         <div className="source-empty">
                           <p>This review JSON does not include the original PDF. Attach it to enable preview.</p>
