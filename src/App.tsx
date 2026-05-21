@@ -265,6 +265,37 @@ function bestMatchingPage(pages: ParsedPage[], row: ConversionResult['rows'][num
   return bestPage
 }
 
+function clampPage(page: number, upperBound: number | null) {
+  if (!Number.isFinite(page)) return 1
+  const floored = Math.max(1, Math.floor(page))
+  if (!upperBound || upperBound <= 0) return floored
+  return Math.min(upperBound, floored)
+}
+
+function thumbnailPages(totalPages: number, activePage: number, maxThumbs = 12) {
+  const safeTotal = Math.max(1, Math.floor(totalPages))
+  const safeActive = clampPage(activePage, safeTotal)
+  if (safeTotal <= maxThumbs) return Array.from({ length: safeTotal }, (_, index) => index + 1)
+
+  const pages = new Set<number>()
+  pages.add(1)
+  pages.add(safeTotal)
+
+  for (let delta = -3; delta <= 3; delta += 1) {
+    pages.add(clampPage(safeActive + delta, safeTotal))
+  }
+
+  const needed = maxThumbs - pages.size
+  if (needed > 0) {
+    const step = (safeTotal - 1) / (needed + 1)
+    for (let i = 1; i <= needed; i += 1) {
+      pages.add(clampPage(1 + step * i, safeTotal))
+    }
+  }
+
+  return Array.from(pages).sort((a, b) => a - b).slice(0, maxThumbs)
+}
+
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [results, setResults] = useState<ConversionResult[]>([createSampleResultLite()])
@@ -286,8 +317,12 @@ function App() {
   )
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const [pdfPage, setPdfPage] = useState(1)
+  const [pdfPageCount, setPdfPageCount] = useState<number | null>(null)
+  const [pdfThumbUrls, setPdfThumbUrls] = useState<Record<string, string>>({})
+  const [pdfThumbStatus, setPdfThumbStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [pdfUrlsBySha, setPdfUrlsBySha] = useState<Record<string, string>>({})
   const pdfUrlRef = useRef<Record<string, string>>({})
+  const pdfDocRef = useRef<unknown>(null)
   const [agentQuestion, setAgentQuestion] = useState('What should I check before exporting to Excel?')
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([
     {
@@ -309,6 +344,10 @@ function App() {
   const activeSha = activeResult?.fileMeta?.sha256
   const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
   const activePages = useMemo(() => parsePagesFromRawText(activeResult?.rawText ?? ''), [activeResult?.rawText])
+  const activeThumbPages = useMemo(() => {
+    if (!activeSha || !activePdfUrl || !showSourcePreview || !pdfPageCount) return []
+    return thumbnailPages(pdfPageCount, pdfPage, 12)
+  }, [activePdfUrl, activeSha, pdfPage, pdfPageCount, showSourcePreview])
   const agentContext = useMemo(() => {
     if (!activeResult) return null
     return {
@@ -348,6 +387,99 @@ function App() {
       })
     }
   }, [])
+
+  useEffect(() => {
+    if (!showSourcePreview || !activePdfUrl) {
+      pdfDocRef.current = null
+      setPdfPageCount(null)
+      setPdfThumbStatus('idle')
+      return
+    }
+
+    let cancelled = false
+    pdfDocRef.current = null
+    setPdfPageCount(null)
+    setPdfThumbStatus('loading')
+
+    void (async () => {
+      try {
+        const [pdfjs, worker] = await Promise.all([
+          import('pdfjs-dist'),
+          import('pdfjs-dist/build/pdf.worker.mjs?url'),
+        ])
+        pdfjs.GlobalWorkerOptions.workerSrc = worker.default
+        const response = await fetch(activePdfUrl)
+        const buffer = await response.arrayBuffer()
+        const pdf = await pdfjs.getDocument({ data: buffer }).promise
+        if (cancelled) return
+        pdfDocRef.current = pdf
+        setPdfPageCount(pdf.numPages)
+        setPdfPage((current) => clampPage(current, pdf.numPages))
+        setPdfThumbStatus('ready')
+      } catch (error) {
+        if (cancelled) return
+        pdfDocRef.current = null
+        setPdfPageCount(null)
+        setPdfThumbStatus('error')
+        console.warn('PDF preview load failed', error)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activePdfUrl, showSourcePreview])
+
+  useEffect(() => {
+    if (!activeSha || !activePdfUrl || !showSourcePreview) return
+    const pdf = pdfDocRef.current as
+      | {
+          getPage: (pageNumber: number) => Promise<{
+            getViewport: (options: { scale: number }) => { width: number; height: number }
+            render: (options: {
+              canvasContext: CanvasRenderingContext2D
+              canvas: HTMLCanvasElement
+              viewport: unknown
+            }) => { promise: Promise<unknown> }
+          }>
+        }
+      | null
+    if (!pdf || !pdfPageCount) return
+
+    let cancelled = false
+
+    void (async () => {
+      const pagesToRender = thumbnailPages(pdfPageCount, pdfPage, 12)
+      const missing = pagesToRender.filter((pageNumber) => !pdfThumbUrls[`${activeSha}:${pageNumber}`])
+      if (missing.length === 0) return
+
+      const nextThumbs: Record<string, string> = {}
+      for (const pageNumber of missing) {
+        if (cancelled) return
+        try {
+          const page = await pdf.getPage(pageNumber)
+          const viewport = page.getViewport({ scale: 0.18 })
+          const canvas = document.createElement('canvas')
+          canvas.width = Math.max(1, Math.floor(viewport.width))
+          canvas.height = Math.max(1, Math.floor(viewport.height))
+          const context = canvas.getContext('2d')
+          if (!context) continue
+          await page.render({ canvasContext: context, canvas, viewport }).promise
+          nextThumbs[`${activeSha}:${pageNumber}`] = canvas.toDataURL('image/jpeg', 0.72)
+        } catch {
+          // best-effort thumbnails
+        }
+      }
+
+      if (cancelled) return
+      if (Object.keys(nextThumbs).length === 0) return
+      setPdfThumbUrls((previous) => ({ ...previous, ...nextThumbs }))
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activePdfUrl, activeSha, pdfPage, pdfPageCount, pdfThumbUrls, showSourcePreview])
 
   const refreshOcrCacheStats = () => {
     if (!persistOcrCache) return
@@ -1474,41 +1606,69 @@ function App() {
                           <span>Source PDF</span>
                           <strong>{activeResult.fileName}</strong>
                         </div>
-                        <div className="page-controls">
-                          <button
-                            type="button"
-                            onClick={() => setPdfPage((p) => Math.max(1, p - 1))}
-                            aria-label="Previous page"
-                          >
-                            Prev
-                          </button>
-                          <label>
-                            <span>Page</span>
-                            <input
-                              value={String(pdfPage)}
-                              inputMode="numeric"
-                              onChange={(event) => {
-                                const next = Number(event.target.value)
-                                if (Number.isFinite(next) && next > 0) setPdfPage(Math.floor(next))
-                              }}
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setPdfPage((p) => p + 1)}
-                            aria-label="Next page"
-                          >
-                            Next
-                          </button>
-                        </div>
-                      </div>
+	                        <div className="page-controls">
+	                          <button
+	                            type="button"
+	                            onClick={() => setPdfPage((p) => clampPage(p - 1, pdfPageCount))}
+	                            aria-label="Previous page"
+	                          >
+	                            Prev
+	                          </button>
+	                          <label>
+	                            <span>Page</span>
+	                            <input
+	                              value={String(pdfPage)}
+	                              inputMode="numeric"
+	                              onChange={(event) => {
+	                                const next = Number(event.target.value)
+	                                if (Number.isFinite(next) && next > 0) setPdfPage(clampPage(next, pdfPageCount))
+	                              }}
+	                            />
+	                          </label>
+	                          {pdfPageCount ? <span className="page-total">of {pdfPageCount}</span> : null}
+	                          <button
+	                            type="button"
+	                            onClick={() => setPdfPage((p) => clampPage(p + 1, pdfPageCount))}
+	                            aria-label="Next page"
+	                          >
+	                            Next
+	                          </button>
+	                        </div>
+	                      </div>
 
-                      {activePdfUrl ? (
-                        <iframe
-                          className="pdf-frame"
-                          title={`PDF preview for ${activeResult.fileName}`}
-                          src={`${activePdfUrl}#page=${pdfPage}&zoom=page-width`}
-                        />
+	                      {activePdfUrl ? (
+	                        <div className="pdf-thumbnails" aria-label="PDF page thumbnails">
+	                          {activeThumbPages.map((pageNumber) => {
+	                            const key = `${activeSha ?? 'unknown'}:${pageNumber}`
+	                            const url = pdfThumbUrls[key]
+	                            const isActive = pageNumber === pdfPage
+	                            return (
+	                              <button
+	                                key={key}
+	                                type="button"
+	                                className={isActive ? 'active' : ''}
+	                                onClick={() => setPdfPage(clampPage(pageNumber, pdfPageCount))}
+	                                aria-label={`Jump to page ${pageNumber}`}
+	                              >
+	                                {url ? <img src={url} alt={`Page ${pageNumber}`} loading="lazy" /> : <span />}
+	                                <small>{pageNumber}</small>
+	                              </button>
+	                            )
+	                          })}
+	                          {pdfThumbStatus === 'loading' ? (
+	                            <div className="thumb-status" aria-label="Loading thumbnails">
+	                              Loading thumbnails…
+	                            </div>
+	                          ) : null}
+	                        </div>
+	                      ) : null}
+
+	                      {activePdfUrl ? (
+	                        <iframe
+	                          className="pdf-frame"
+	                          title={`PDF preview for ${activeResult.fileName}`}
+	                          src={`${activePdfUrl}#page=${pdfPage}&zoom=page-width`}
+	                        />
                       ) : (
                         <div className="source-empty">
                           <p>This review JSON does not include the original PDF. Attach it to enable preview.</p>

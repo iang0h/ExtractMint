@@ -1031,6 +1031,71 @@ footer {
   font-size: 12px;
 }
 
+.page-total {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pdf-thumbnails {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid #f2ede2;
+  background: #fff;
+}
+
+.pdf-thumbnails button {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 6px;
+  padding: 0;
+  border: 1px solid rgba(16, 32, 41, 0.14);
+  border-radius: 12px;
+  background: #fff;
+  width: 92px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.pdf-thumbnails button span {
+  display: block;
+  width: 100%;
+  height: 96px;
+  background: #f6f8f2;
+}
+
+.pdf-thumbnails button img {
+  display: block;
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  background: #f6f8f2;
+}
+
+.pdf-thumbnails button small {
+  display: block;
+  padding: 6px 0 8px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pdf-thumbnails button.active {
+  border-color: rgba(41, 176, 128, 0.65);
+  box-shadow: 0 0 0 2px rgba(41, 176, 128, 0.18);
+}
+
+.thumb-status {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .pdf-frame {
   width: 100%;
   height: 560px;
