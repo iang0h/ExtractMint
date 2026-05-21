@@ -9,6 +9,13 @@ type PdfTextItem = {
   height?: number
 }
 
+export type PdfMatchInfo = {
+  confidence: number
+  snippet: string
+  matchedTokens: number
+  totalTokens: number
+}
+
 type PdfPageProxy = {
   getViewport: (options: { scale: number }) => {
     width: number
@@ -56,19 +63,85 @@ function normalizeQuery(text: string) {
   return text.trim().toLowerCase()
 }
 
-function buildHighlights(items: PdfTextItem[], viewport: { scale: number; transform: Transform }, queries: string[]) {
-  const normalizedQueries = queries.map(normalizeQuery).filter(Boolean)
-  if (normalizedQueries.length === 0) return [] as HighlightBox[]
+function normalizeForMatch(value: string) {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function tokenWeight(token: string) {
+  if (!token) return 0
+  const numeric = /^[0-9.]+$/.test(token)
+  if (numeric) return 2
+  if (token.length >= 5) return 2
+  return 1
+}
+
+function buildHighlights(
+  items: PdfTextItem[],
+  viewport: { scale: number; transform: Transform },
+  queries: string[],
+): { boxes: HighlightBox[]; matchInfo: PdfMatchInfo | null } {
+  const normalizedQueries = queries.map(normalizeForMatch).filter(Boolean)
+  if (normalizedQueries.length === 0) return { boxes: [], matchInfo: null }
+
+  const tokens = Array.from(
+    new Set(
+      normalizedQueries
+        .flatMap((query) => query.split(' '))
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2),
+    ),
+  )
+  const totalWeight = tokens.reduce((sum, token) => sum + tokenWeight(token), 0)
+  if (tokens.length === 0 || totalWeight <= 0) return { boxes: [], matchInfo: null }
+
+  const normalizedItems = items.map((item) => normalizeForMatch(item.str ?? ''))
+  const rawItems = items.map((item) => (item.str ?? '').replace(/\s+/g, ' ').trim())
+
+  const windowRadius = 2
+  let bestIndex = -1
+  let bestScore = -1
+  let bestMatchedWeight = 0
+  let bestWindowText = ''
+
+  for (let index = 0; index < items.length; index += 1) {
+    const start = Math.max(0, index - windowRadius)
+    const end = Math.min(items.length - 1, index + windowRadius)
+    const windowText = normalizedItems.slice(start, end + 1).filter(Boolean).join(' ')
+    if (!windowText) continue
+
+    let matchedWeight = 0
+    for (const token of tokens) {
+      if (windowText.includes(token)) matchedWeight += tokenWeight(token)
+    }
+
+    if (matchedWeight > bestScore) {
+      bestScore = matchedWeight
+      bestMatchedWeight = matchedWeight
+      bestIndex = index
+      bestWindowText = rawItems.slice(start, end + 1).filter(Boolean).join(' ')
+    }
+  }
+
+  if (bestIndex < 0 || bestScore <= 0) return { boxes: [], matchInfo: null }
+
+  const highlightIndices = new Set<number>()
+  const windowStart = Math.max(0, bestIndex - windowRadius)
+  const windowEnd = Math.min(items.length - 1, bestIndex + windowRadius)
+  for (let index = windowStart; index <= windowEnd; index += 1) {
+    const normalized = normalizedItems[index]
+    if (!normalized) continue
+    const matches = tokens.some((token) => normalized.includes(token))
+    if (matches) highlightIndices.add(index)
+  }
 
   const boxes: HighlightBox[] = []
-  for (const item of items) {
-    const str = item.str
-    if (!str || !item.transform) continue
-    const normalizedText = normalizeQuery(str)
-    if (!normalizedText) continue
-    const matches = normalizedQueries.some((query) => normalizedText.includes(query))
-    if (!matches) continue
-
+  for (const index of highlightIndices) {
+    const item = items[index]
+    if (!item?.transform) continue
     const combined = multiplyTransform(viewport.transform, item.transform)
     const x = combined[4]
     const y = combined[5]
@@ -82,17 +155,31 @@ function buildHighlights(items: PdfTextItem[], viewport: { scale: number; transf
     })
   }
 
-  return boxes.slice(0, 24)
+  const snippet = bestWindowText.slice(0, 160)
+  const totalTokens = tokens.length
+  const matchedTokens = tokens.reduce((sum, token) => (normalizeForMatch(bestWindowText).includes(token) ? sum + 1 : sum), 0)
+  const confidence = Math.max(0, Math.min(100, Math.round((bestMatchedWeight / totalWeight) * 100)))
+  return {
+    boxes: boxes.slice(0, 24),
+    matchInfo: {
+      confidence,
+      snippet,
+      matchedTokens,
+      totalTokens,
+    },
+  }
 }
 
 export function PdfCanvasViewer({
   pdf,
   pageNumber,
   highlightQueries,
+  onMatchInfo,
 }: {
   pdf: PdfDocumentProxy
   pageNumber: number
   highlightQueries?: string[]
+  onMatchInfo?: (info: PdfMatchInfo | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -112,6 +199,7 @@ export function PdfCanvasViewer({
     const render = async () => {
       setRenderStatus('rendering')
       setBoxes([])
+      onMatchInfo?.(null)
       try {
         const page = await pdf.getPage(pageNumber)
         if (cancelled) return
@@ -138,10 +226,11 @@ export function PdfCanvasViewer({
 
         const content = await page.getTextContent()
         if (cancelled) return
-        const nextBoxes = highlightQueries?.length
+        const { boxes: nextBoxes, matchInfo } = highlightQueries?.length
           ? buildHighlights(content.items ?? [], { scale, transform: viewport.transform }, highlightQueries)
-          : []
+          : { boxes: [], matchInfo: null }
         setBoxes(nextBoxes)
+        onMatchInfo?.(matchInfo)
         setRenderStatus('ready')
       } catch (error) {
         if (cancelled) return

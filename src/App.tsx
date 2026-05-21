@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import { PdfCanvasViewer, type PdfDocumentProxy } from './components/PdfCanvasViewer'
+import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
@@ -325,6 +325,7 @@ function App() {
   const pdfUrlRef = useRef<Record<string, string>>({})
   const pdfDocRef = useRef<unknown>(null)
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null)
+  const [pdfMatchInfo, setPdfMatchInfo] = useState<PdfMatchInfo | null>(null)
   const [agentQuestion, setAgentQuestion] = useState('What should I check before exporting to Excel?')
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([
     {
@@ -355,6 +356,13 @@ function App() {
     if (!selectedRow) return []
     const queries: string[] = []
     if (selectedRow.date) queries.push(selectedRow.date)
+
+    const descWords = (selectedRow.description ?? '')
+      .split(/\s+/g)
+      .map((word) => word.trim())
+      .filter((word) => word.length >= 4 && !/^[0-9.]+$/.test(word))
+      .slice(0, 3)
+    if (descWords.length) queries.push(descWords.join(' '))
 
     const addNumberQueries = (value?: number) => {
       if (value === undefined || !Number.isFinite(value)) return
@@ -417,6 +425,7 @@ function App() {
       setPdfDoc(null)
       setPdfPageCount(null)
       setPdfThumbStatus('idle')
+      setPdfMatchInfo(null)
       return
     }
 
@@ -1680,7 +1689,12 @@ function App() {
 
 	                      {activePdfUrl ? (
 	                        pdfDoc ? (
-	                          <PdfCanvasViewer pdf={pdfDoc} pageNumber={pdfPage} highlightQueries={pdfHighlightQueries} />
+	                          <PdfCanvasViewer
+	                            pdf={pdfDoc}
+	                            pageNumber={pdfPage}
+	                            highlightQueries={pdfHighlightQueries}
+	                            onMatchInfo={setPdfMatchInfo}
+	                          />
 	                        ) : (
 	                          <div className="pdf-canvas-fallback" aria-label="Loading PDF">
 	                            Loading PDF…
@@ -1698,7 +1712,32 @@ function App() {
                       )}
 
                       <div className="source-hint">
-                        Click a row to jump to the most likely page (best-effort text match).
+                        <div>Click a row to jump to the most likely page (best-effort text match).</div>
+                        {selectedRow && pdfMatchInfo ? (
+                          <div className="pdf-match-meta">
+                            <span className="pdf-match-pill" aria-label="PDF match confidence">
+                              Match {pdfMatchInfo.confidence}% ({pdfMatchInfo.matchedTokens}/{pdfMatchInfo.totalTokens})
+                            </span>
+                            <span className="pdf-match-snippet" title={pdfMatchInfo.snippet}>
+                              {pdfMatchInfo.snippet ? `“${pdfMatchInfo.snippet}”` : null}
+                            </span>
+                            {pdfMatchInfo.snippet ? (
+                              <button
+                                type="button"
+                                className="pdf-match-copy"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(pdfMatchInfo.snippet)
+                                  } catch {
+                                    // ignore
+                                  }
+                                }}
+                              >
+                                Copy snippet
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                     </aside>
                   ) : null}
