@@ -196,6 +196,10 @@ export async function createExcelBlob(result: ConversionResult) {
   workbook.creator = 'ExtractMint'
   workbook.created = new Date()
 
+  const numberOrNull = (value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? value : null
+  const moneyFmt = '#,##0.00;[Red]-#,##0.00'
+
   const reconciliation = reconciliationForResult(result)
 
   const summary = workbook.addWorksheet('Summary')
@@ -237,7 +241,7 @@ export async function createExcelBlob(result: ConversionResult) {
       kind: issue.severity,
       currency: '',
       confidence: '',
-      total: issue.delta ?? '',
+      total: numberOrNull(issue.delta),
       validation: issue.message,
       issues: '',
       sha256: '',
@@ -362,16 +366,21 @@ export async function createExcelBlob(result: ConversionResult) {
     { header: 'Confidence', key: 'confidence', width: 16 },
     { header: 'Source', key: 'source', width: 18 },
   ]
+  ;['withdrawal', 'deposit', 'tax', 'amount', 'balance'].forEach((key) => {
+    const column = rows.getColumn(key)
+    column.numFmt = moneyFmt
+    column.alignment = { horizontal: 'right' }
+  })
   result.rows.forEach((row, index) => {
     rows.addRow({
       date: row.date ?? '',
       description: row.description,
       reference: row.reference ?? '',
-      withdrawal: row.withdrawal ?? '',
-      deposit: row.deposit ?? '',
-      tax: row.tax ?? '',
-      amount: row.amount ?? '',
-      balance: row.balance ?? '',
+      withdrawal: numberOrNull(row.withdrawal),
+      deposit: numberOrNull(row.deposit),
+      tax: numberOrNull(row.tax),
+      amount: numberOrNull(row.amount),
+      balance: numberOrNull(row.balance),
       reviewStatus: rowReviewStatus(result.validation, index),
       reviewNotes: rowReviewNotes(result.validation, index),
       category: row.category,
@@ -397,6 +406,10 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'ExtractMint'
   workbook.created = new Date()
+
+  const numberOrNull = (value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? value : null
+  const moneyFmt = '#,##0.00;[Red]-#,##0.00'
 
   const summary = workbook.addWorksheet('Summary')
   summary.columns = [
@@ -448,6 +461,29 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     { header: 'Validation', key: 'validation', width: 18 },
   ]
 
+  ;[
+    { sheet: summary, keys: ['opening', 'closing', 'net', 'deposits', 'withdrawals'] },
+    {
+      sheet: reconciliationSheet,
+      keys: [
+        'opening',
+        'closing',
+        'net',
+        'deposits',
+        'withdrawals',
+        'transactionNet',
+        'discrepancy',
+      ],
+    },
+    { sheet: issuesSheet, keys: ['delta', 'expected', 'actual'] },
+  ].forEach(({ sheet, keys }) => {
+    keys.forEach((key) => {
+      const column = sheet.getColumn(key)
+      column.numFmt = moneyFmt
+      column.alignment = { horizontal: 'right' }
+    })
+  })
+
   const usedSheetNames = new Set<string>(['Summary', 'Issues'])
 
   for (const result of results) {
@@ -464,11 +500,11 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       statementEnd: result.statementPeriod?.end ?? '',
       rows: result.rows.length,
       confidence: `${result.confidence}%`,
-      opening: opening ?? '',
-      closing: closing ?? '',
-      net: net ?? '',
-      deposits: totals.deposit,
-      withdrawals: totals.withdrawal,
+      opening: numberOrNull(opening),
+      closing: numberOrNull(closing),
+      net: numberOrNull(net),
+      deposits: numberOrNull(totals.deposit),
+      withdrawals: numberOrNull(totals.withdrawal),
       validation: validationLabel(result.validation.status),
       issues: result.validation.issueCount,
       sha256: result.fileMeta.sha256 ?? '',
@@ -482,13 +518,13 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       statementStart: result.statementPeriod?.start ?? '',
       statementEnd: result.statementPeriod?.end ?? '',
       rows: result.rows.length,
-      opening: reconciliation.openingBalance ?? '',
-      closing: reconciliation.closingBalance ?? '',
-      net: reconciliation.netChange ?? '',
-      deposits: reconciliation.deposits,
-      withdrawals: reconciliation.withdrawals,
-      transactionNet: reconciliation.transactionNet,
-      discrepancy: reconciliation.discrepancy ?? '',
+      opening: numberOrNull(reconciliation.openingBalance),
+      closing: numberOrNull(reconciliation.closingBalance),
+      net: numberOrNull(reconciliation.netChange),
+      deposits: numberOrNull(reconciliation.deposits),
+      withdrawals: numberOrNull(reconciliation.withdrawals),
+      transactionNet: numberOrNull(reconciliation.transactionNet),
+      discrepancy: numberOrNull(reconciliation.discrepancy),
       checkedRows: result.validation.checkedRows,
       issues: result.validation.issueCount,
       validation: validationLabel(result.validation.status),
@@ -499,9 +535,9 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
         file: result.fileName,
         row: issue.rowIndex !== undefined ? issue.rowIndex + 1 : '',
         severity: issue.severity,
-        delta: issue.delta ?? '',
-        expected: issue.expectedBalance ?? '',
-        actual: issue.actualBalance ?? '',
+        delta: numberOrNull(issue.delta),
+        expected: numberOrNull(issue.expectedBalance),
+        actual: numberOrNull(issue.actualBalance),
         message: issue.message,
       })
     })
@@ -522,16 +558,21 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       { header: 'Confidence', key: 'confidence', width: 16 },
       { header: 'Source', key: 'source', width: 18 },
     ]
+    ;['withdrawal', 'deposit', 'tax', 'amount', 'balance'].forEach((key) => {
+      const column = rowsSheet.getColumn(key)
+      column.numFmt = moneyFmt
+      column.alignment = { horizontal: 'right' }
+    })
     result.rows.forEach((row, index) => {
       rowsSheet.addRow({
         date: row.date ?? '',
         description: row.description,
         reference: row.reference ?? '',
-        withdrawal: row.withdrawal ?? '',
-        deposit: row.deposit ?? '',
-        tax: row.tax ?? '',
-        amount: row.amount ?? '',
-        balance: row.balance ?? '',
+        withdrawal: numberOrNull(row.withdrawal),
+        deposit: numberOrNull(row.deposit),
+        tax: numberOrNull(row.tax),
+        amount: numberOrNull(row.amount),
+        balance: numberOrNull(row.balance),
         reviewStatus: rowReviewStatus(result.validation, index),
         reviewNotes: rowReviewNotes(result.validation, index),
         category: row.category,
