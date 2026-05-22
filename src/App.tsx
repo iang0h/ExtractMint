@@ -239,13 +239,16 @@ function normalizeSearchText(value: string) {
 }
 
 function bestMatchingPage(pages: ParsedPage[], row: ConversionResult['rows'][number] | undefined) {
-  if (!row || pages.length === 0) return pages[0]?.pageNumber ?? 1
+  return rankMatchingPages(pages, row)[0]?.pageNumber ?? (pages[0]?.pageNumber ?? 1)
+}
+
+function rankMatchingPages(pages: ParsedPage[], row: ConversionResult['rows'][number] | undefined) {
+  if (!row || pages.length === 0) return [{ pageNumber: pages[0]?.pageNumber ?? 1, score: 0 }]
   const dateHint = normalizeSearchText(row.date ?? '')
   const descHint = normalizeSearchText(row.description).split(' ').slice(0, 8).join(' ')
-  if (!dateHint && !descHint) return pages[0]?.pageNumber ?? 1
+  if (!dateHint && !descHint) return [{ pageNumber: pages[0]?.pageNumber ?? 1, score: 0 }]
 
-  let bestPage = pages[0]?.pageNumber ?? 1
-  let bestScore = -1
+  const ranked: Array<{ pageNumber: number; score: number }> = []
 
   for (const page of pages) {
     const normalized = normalizeSearchText(page.text)
@@ -257,13 +260,12 @@ function bestMatchingPage(pages: ParsedPage[], row: ConversionResult['rows'][num
       const hits = words.reduce((sum, word) => (normalized.includes(word) ? sum + 1 : sum), 0)
       score += Math.min(3, hits)
     }
-    if (score > bestScore) {
-      bestScore = score
-      bestPage = page.pageNumber
-    }
+    ranked.push({ pageNumber: page.pageNumber, score })
   }
 
-  return bestPage
+  return ranked
+    .sort((a, b) => b.score - a.score || a.pageNumber - b.pageNumber)
+    .filter((item, index, all) => all.findIndex((other) => other.pageNumber === item.pageNumber) === index)
 }
 
 function clampPage(page: number, upperBound: number | null) {
@@ -352,6 +354,10 @@ function App() {
     return thumbnailPages(pdfPageCount, pdfPage, 12)
   }, [activePdfUrl, activeSha, pdfPage, pdfPageCount, showSourcePreview])
   const selectedRow = selectedRowIndex !== null ? (activeResult?.rows?.[selectedRowIndex] ?? null) : null
+  const pageCandidates = useMemo(() => {
+    if (!selectedRow) return []
+    return rankMatchingPages(activePages, selectedRow).filter((item) => item.score > 0).slice(0, 6)
+  }, [activePages, selectedRow])
   const pdfHighlightQueries = useMemo(() => {
     if (!selectedRow) return []
     const queries: string[] = []
@@ -1694,6 +1700,9 @@ function App() {
 	                            pageNumber={pdfPage}
 	                            highlightQueries={pdfHighlightQueries}
 	                            onMatchInfo={setPdfMatchInfo}
+	                            scrollToMatchKey={
+	                              selectedRowIndex !== null ? `${activeSha ?? 'unknown'}:${selectedRowIndex}:${pdfPage}` : undefined
+	                            }
 	                          />
 	                        ) : (
 	                          <div className="pdf-canvas-fallback" aria-label="Loading PDF">
@@ -1721,6 +1730,19 @@ function App() {
                             <span className="pdf-match-snippet" title={pdfMatchInfo.snippet}>
                               {pdfMatchInfo.snippet ? `“${pdfMatchInfo.snippet}”` : null}
                             </span>
+                            {pageCandidates.length > 1 ? (
+                              <button
+                                type="button"
+                                className="pdf-match-copy"
+                                onClick={() => {
+                                  const currentIndex = pageCandidates.findIndex((item) => item.pageNumber === pdfPage)
+                                  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % pageCandidates.length : 0
+                                  setPdfPage(clampPage(pageCandidates[nextIndex]?.pageNumber ?? 1, pdfPageCount))
+                                }}
+                              >
+                                Next match
+                              </button>
+                            ) : null}
                             {pdfMatchInfo.snippet ? (
                               <button
                                 type="button"
