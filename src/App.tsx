@@ -246,6 +246,36 @@ function normalizePdfMatchText(value: string) {
     .trim()
 }
 
+function rowConfidencePercent(value: number | undefined) {
+  if (value === undefined || value === null) return 0
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  const normalized = numeric <= 1 ? numeric * 100 : numeric
+  return Math.max(0, Math.min(100, Math.round(normalized)))
+}
+
+function bestSnippetFromPageText(rawText: string, tokens: string[], maxChars = 96) {
+  const text = (rawText ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  const lower = text.toLowerCase()
+  let bestIndex = Number.POSITIVE_INFINITY
+  for (const token of tokens) {
+    if (!token) continue
+    const index = lower.indexOf(token)
+    if (index >= 0 && index < bestIndex) bestIndex = index
+  }
+  if (!Number.isFinite(bestIndex)) return text.length > maxChars ? `${text.slice(0, maxChars)}…` : text
+
+  const halfWindow = Math.floor(maxChars / 2)
+  const start = Math.max(0, bestIndex - halfWindow)
+  const end = Math.min(text.length, bestIndex + halfWindow)
+  const snippet = text.slice(start, end).trim()
+  if (!snippet) return ''
+  const prefix = start > 0 ? '…' : ''
+  const suffix = end < text.length ? '…' : ''
+  return `${prefix}${snippet}${suffix}`
+}
+
 function tokenWeight(token: string) {
   if (!token) return 0
   const numeric = /^[0-9.]+$/.test(token)
@@ -329,6 +359,14 @@ function App() {
   const [activeIndex, setActiveIndex] = useState(0)
   const [showAllRows, setShowAllRows] = useState(false)
   const [onlyIssues, setOnlyIssues] = useState(false)
+  const [onlyLowConfidence, setOnlyLowConfidence] = useState(
+    () => storedValue('extractmint.onlyLowConfidence') === '1',
+  )
+  const [lowConfidenceThreshold, setLowConfidenceThreshold] = useState(() => {
+    const raw = storedValue('extractmint.lowConfidenceThreshold')
+    const parsed = raw ? Number.parseInt(raw, 10) : 70
+    return Number.isFinite(parsed) ? Math.max(1, Math.min(99, parsed)) : 70
+  })
   const [editRows, setEditRows] = useState(false)
   const [showSourcePreview, setShowSourcePreview] = useState(
     () => storedValue('extractmint.showSourcePreview') === '1',
@@ -355,6 +393,7 @@ function App() {
   const [pdfRowMatches, setPdfRowMatches] = useState<PdfPageMatchCandidate[]>([])
   const [pdfRowMatchStatus, setPdfRowMatchStatus] = useState<'idle' | 'indexing' | 'ready' | 'error'>('idle')
   const pdfTextIndexRef = useRef<Map<string, string>>(new Map())
+  const pdfRawTextIndexRef = useRef<Map<string, string>>(new Map())
   const pdfRowMatchCacheRef = useRef<Map<string, PdfPageMatchCandidate[]>>(new Map())
   const [agentQuestion, setAgentQuestion] = useState('What should I check before exporting to Excel?')
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([
@@ -556,23 +595,26 @@ function App() {
     void (async () => {
       try {
         const matches: PdfPageMatchCandidate[] = []
-        for (let pageNumber = 1; pageNumber <= pdfPageCount; pageNumber += 1) {
-          if (cancelled) return
-          const pageKey = `${activeSha}:${pageNumber}`
-          let normalizedPageText = pdfTextIndexRef.current.get(pageKey)
-          if (!normalizedPageText) {
-            const page = await pdfDoc.getPage(pageNumber)
-            if (cancelled) return
-            const content = await page.getTextContent()
-            if (cancelled) return
-            const rawText = (content.items ?? [])
-              .map((item) => ('str' in item ? (item.str ?? '') : ''))
-              .join(' ')
-              .replace(/\s+/g, ' ')
-              .trim()
-            normalizedPageText = normalizePdfMatchText(rawText)
-            pdfTextIndexRef.current.set(pageKey, normalizedPageText)
-          }
+	        for (let pageNumber = 1; pageNumber <= pdfPageCount; pageNumber += 1) {
+	          if (cancelled) return
+	          const pageKey = `${activeSha}:${pageNumber}`
+	          let normalizedPageText = pdfTextIndexRef.current.get(pageKey)
+	          let rawPageText = pdfRawTextIndexRef.current.get(pageKey) ?? ''
+	          if (!normalizedPageText) {
+	            const page = await pdfDoc.getPage(pageNumber)
+	            if (cancelled) return
+	            const content = await page.getTextContent()
+	            if (cancelled) return
+	            const rawText = (content.items ?? [])
+	              .map((item) => ('str' in item ? (item.str ?? '') : ''))
+	              .join(' ')
+	              .replace(/\s+/g, ' ')
+	              .trim()
+	            rawPageText = rawText
+	            normalizedPageText = normalizePdfMatchText(rawText)
+	            pdfTextIndexRef.current.set(pageKey, normalizedPageText)
+	            pdfRawTextIndexRef.current.set(pageKey, rawText)
+	          }
 
           if (!normalizedPageText) continue
           let matchedWeight = 0
@@ -585,14 +627,14 @@ function App() {
           }
           if (matchedWeight <= 0) continue
 
-          matches.push({
-            pageNumber,
-            confidence: Math.max(0, Math.min(100, Math.round((matchedWeight / totalWeight) * 100))),
-            matchedTokens,
-            totalTokens: tokens.length,
-            snippet: '',
-          })
-        }
+	          matches.push({
+	            pageNumber,
+	            confidence: Math.max(0, Math.min(100, Math.round((matchedWeight / totalWeight) * 100))),
+	            matchedTokens,
+	            totalTokens: tokens.length,
+	            snippet: bestSnippetFromPageText(rawPageText, tokens, 90),
+	          })
+	        }
 
         if (cancelled) return
         const ranked = matches
@@ -759,14 +801,26 @@ function App() {
     const result = activeResult
     if (!result) return []
     const indexed = result.rows.map((row, index) => ({ row, index }))
-    const filtered = onlyIssues
+    const filteredIssues = onlyIssues
       ? indexed.filter(({ index }) => {
           const review = rowReview(result.validation, index)
           return review.status === 'Review' || review.status === 'Check'
         })
       : indexed
-    return showAllRows ? filtered : filtered.slice(0, 8)
-  }, [activeResult, onlyIssues, showAllRows])
+    const filteredConfidence = onlyLowConfidence
+      ? filteredIssues.filter(({ row }) => rowConfidencePercent(row.confidence) < lowConfidenceThreshold)
+      : filteredIssues
+    return showAllRows ? filteredConfidence : filteredConfidence.slice(0, 8)
+  }, [activeResult, lowConfidenceThreshold, onlyIssues, onlyLowConfidence, showAllRows])
+
+  const lowConfidenceRowIndices = useMemo(() => {
+    const result = activeResult
+    if (!result) return []
+    return result.rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => rowConfidencePercent(row.confidence) < lowConfidenceThreshold)
+      .map(({ index }) => index)
+  }, [activeResult, lowConfidenceThreshold])
   const totals = useMemo(() => {
     const rows = results.flatMap((result) => result.rows)
     const amount = rows.reduce((sum, row) => sum + (row.amount ?? 0), 0)
@@ -1623,6 +1677,59 @@ function App() {
                       <label>
                         <input
                           type="checkbox"
+                          checked={onlyLowConfidence}
+                          onChange={(event) => {
+                            const next = event.target.checked
+                            setOnlyLowConfidence(next)
+                            storeValue('extractmint.onlyLowConfidence', next ? '1' : '0')
+                          }}
+                        />
+                        Low-confidence rows
+                      </label>
+                      <label className="table-inline-control" aria-label="Low confidence threshold">
+                        <span>Threshold</span>
+                        <select
+                          value={String(lowConfidenceThreshold)}
+                          onChange={(event) => {
+                            const next = Math.max(1, Math.min(99, Number.parseInt(event.target.value, 10) || 70))
+                            setLowConfidenceThreshold(next)
+                            storeValue('extractmint.lowConfidenceThreshold', String(next))
+                          }}
+                          disabled={!onlyLowConfidence}
+                        >
+                          {[50, 60, 70, 75, 80, 85, 90].map((value) => (
+                            <option key={value} value={String(value)}>
+                              {value}%
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="table-action"
+                        disabled={lowConfidenceRowIndices.length === 0}
+                        onClick={() => {
+                          if (!activeResult) return
+                          const current = selectedRowIndex ?? -1
+                          const nextIndex =
+                            lowConfidenceRowIndices.find((index) => index > current) ?? lowConfidenceRowIndices[0]
+                          if (nextIndex === undefined) return
+                          setSelectedRowIndex(nextIndex)
+                          const row = activeResult.rows[nextIndex]
+                          setPdfPage(bestMatchingPage(activePages, row))
+                        }}
+                        aria-label="Jump to next low-confidence row"
+                        title={
+                          lowConfidenceRowIndices.length > 0
+                            ? `${lowConfidenceRowIndices.length} row(s) below ${lowConfidenceThreshold}%`
+                            : `No rows below ${lowConfidenceThreshold}%`
+                        }
+                      >
+                        Next low-confidence ({lowConfidenceRowIndices.length})
+                      </button>
+                      <label>
+                        <input
+                          type="checkbox"
                           checked={editRows}
                           onChange={(event) => setEditRows(event.target.checked)}
                         />
@@ -1892,6 +1999,11 @@ function App() {
                                     type="button"
                                     className={`pdf-match-page ${match.pageNumber === pdfPage ? 'is-active' : ''}`}
                                     onClick={() => setPdfPage(clampPage(match.pageNumber, pdfPageCount))}
+                                    title={
+                                      match.snippet
+                                        ? `p${match.pageNumber} · ${match.confidence}%\n${match.snippet}`
+                                        : `p${match.pageNumber} · ${match.confidence}%`
+                                    }
                                   >
                                     p{match.pageNumber}
                                     {index === 0 ? '' : ` (${match.confidence}%)`}
