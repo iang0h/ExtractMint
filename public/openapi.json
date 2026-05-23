@@ -1,0 +1,128 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ExtractMint Agent API",
+    "version": "1.0.0",
+    "description": "Machine-readable contract for Ask ExtractMint, the document review assistant that answers questions about converted financial documents, validation issues, and export choices."
+  },
+  "servers": [
+    {
+      "url": "https://extractmint.vercel.app",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/api/agent/": {
+      "post": {
+        "operationId": "askExtractMintAgent",
+        "summary": "Ask a question about the active ExtractMint conversion",
+        "description": "Returns a concise review answer using FreeLLMAPI when configured, or a deterministic local fallback when the gateway is unavailable.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Question is missing"
+          },
+          "405": {
+            "description": "Method not allowed"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AgentRequest": {
+        "type": "object",
+        "required": ["question"],
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 1200,
+            "description": "Question about accuracy, validation issues, exports, balances, or next review steps."
+          },
+          "context": {
+            "$ref": "#/components/schemas/ConversionContext"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConversionContext": {
+        "type": "object",
+        "properties": {
+          "fileName": { "type": "string" },
+          "documentKind": { "type": "string" },
+          "rowCount": { "type": "integer", "minimum": 0 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 100 },
+          "currencyCode": { "type": "string" },
+          "validationStatus": {
+            "type": "string",
+            "enum": ["valid", "review", "missing"]
+          },
+          "issueCount": { "type": "integer", "minimum": 0 },
+          "statementPeriod": { "type": "string" },
+          "sampleRows": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": { "type": "string" },
+                "description": { "type": "string" },
+                "reference": { "type": "string" },
+                "withdrawal": { "type": "number" },
+                "deposit": { "type": "number" },
+                "amount": { "type": "number" },
+                "balance": { "type": "number" },
+                "confidence": { "type": "number" }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "AgentResponse": {
+        "type": "object",
+        "required": ["answer", "provider", "configured"],
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "Plain-language answer for the user."
+          },
+          "provider": {
+            "type": "string",
+            "description": "freellmapi, local-fallback, or offline."
+          },
+          "configured": {
+            "type": "boolean",
+            "description": "Whether FreeLLMAPI environment variables are present."
+          },
+          "warning": {
+            "type": "string",
+            "description": "Optional upstream warning when fallback guidance is used."
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

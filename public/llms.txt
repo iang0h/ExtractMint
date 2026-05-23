@@ -65,6 +65,11 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 - Maybank statement to Excel Markdown: https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/index.md
 - Singapore bank statement to Excel Markdown: https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/index.md
 
+## Machine-Readable API Contract
+
+- OpenAPI: https://extractmint.vercel.app/openapi.json
+- Agent endpoint: https://extractmint.vercel.app/api/agent/
+
 ## Contact
 
 - Website: https://extractmint.vercel.app/
