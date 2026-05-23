@@ -726,6 +726,111 @@ footer span {
   letter-spacing: 0;
 }
 
+.export-sanity {
+  padding: 0 20px 20px;
+}
+
+.export-sanity-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 14px 14px 12px;
+  box-shadow: 0 14px 30px rgba(44, 53, 44, 0.08);
+}
+
+.export-sanity-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.export-sanity-header strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.export-sanity-header small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.export-sanity-status {
+  align-self: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 720;
+  color: var(--ink);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.export-sanity-card.is-valid .export-sanity-status {
+  border-color: rgba(26, 167, 94, 0.26);
+  background: rgba(26, 167, 94, 0.1);
+}
+
+.export-sanity-card.is-review .export-sanity-status {
+  border-color: rgba(211, 138, 16, 0.26);
+  background: rgba(211, 138, 16, 0.12);
+}
+
+.export-sanity-card.is-missing .export-sanity-status {
+  border-color: rgba(90, 97, 92, 0.26);
+  background: rgba(90, 97, 92, 0.1);
+}
+
+.export-sanity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.export-sanity-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 10px 9px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.export-sanity-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.export-sanity-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.export-sanity-discrepancy {
+  grid-column: span 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.export-sanity-discrepancy strong {
+  margin-top: 0;
+}
+
 .export-options label {
   display: inline-flex;
   align-items: center;
@@ -1911,6 +2016,14 @@ footer strong {
 
   .export-row {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .export-sanity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .export-sanity-discrepancy {
+    grid-column: span 1;
   }
 
   .preview-header {

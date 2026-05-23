@@ -35,6 +35,17 @@ type AgentMessage = {
   warning?: string
 }
 
+type ExportSanitySnapshot = {
+  openingBalance?: number
+  closingBalance?: number
+  netChange?: number
+  deposits: number
+  withdrawals: number
+  transactionNet: number
+  discrepancy?: number
+  hasBalanceTrail: boolean
+}
+
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
   try {
@@ -56,6 +67,33 @@ const statementPeriodLabel = (period?: ConversionResult['statementPeriod']) => {
   if (!period?.start && !period?.end) return '—'
   if (period.start && period.end && period.start !== period.end) return `${period.start} → ${period.end}`
   return period.start ?? period.end ?? '—'
+}
+
+const exportSanitySnapshot = (result: ConversionResult): ExportSanitySnapshot => {
+  const deposits = result.rows.reduce((sum, row) => sum + (row.deposit ?? 0), 0)
+  const withdrawals = result.rows.reduce((sum, row) => sum + (row.withdrawal ?? 0), 0)
+  const amountSum = result.rows.reduce((sum, row) => sum + (row.amount ?? 0), 0)
+  const hasDebitCredit = result.rows.some((row) => row.deposit !== undefined || row.withdrawal !== undefined)
+  const transactionNet = hasDebitCredit ? deposits - withdrawals : amountSum
+
+  const openingBalance = result.validation.openingBalance
+  const closingBalance = result.validation.closingBalance
+  const hasBalanceTrail = openingBalance !== undefined && closingBalance !== undefined
+  const netChange = hasBalanceTrail ? closingBalance - openingBalance : undefined
+  const discrepancy = netChange !== undefined ? netChange - transactionNet : undefined
+
+  const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
+
+  return {
+    openingBalance,
+    closingBalance,
+    netChange: netChange !== undefined ? roundMoney(netChange) : undefined,
+    deposits: roundMoney(deposits),
+    withdrawals: roundMoney(withdrawals),
+    transactionNet: roundMoney(transactionNet),
+    discrepancy: discrepancy !== undefined ? roundMoney(discrepancy) : undefined,
+    hasBalanceTrail,
+  }
 }
 
 const supportItems = [
@@ -1539,6 +1577,63 @@ function App() {
                 QuickBooks (QBO)
               </button>
             </div>
+
+            {activeResult ? (
+              <div className="export-sanity" aria-label="Export sanity checks">
+                {(() => {
+                  const snapshot = exportSanitySnapshot(activeResult)
+                  const okThreshold = 0.02
+                  const status =
+                    snapshot.discrepancy === undefined
+                      ? { label: 'Not enough balance data', className: 'is-missing' }
+                      : Math.abs(snapshot.discrepancy) <= okThreshold
+                        ? { label: 'Matches balance trail', className: 'is-valid' }
+                        : { label: 'Discrepancy — review', className: 'is-review' }
+
+                  return (
+                    <div className={`export-sanity-card ${status.className}`}>
+                      <div className="export-sanity-header">
+                        <div>
+                          <strong>Export sanity checks</strong>
+                          <small>Compares opening/closing balances to extracted transaction totals.</small>
+                        </div>
+                        <span className="export-sanity-status">{status.label}</span>
+                      </div>
+                      <div className="export-sanity-grid">
+                        <div>
+                          <span>Opening balance</span>
+                          <strong>{formatAmount(snapshot.openingBalance, activeResult.currencyCode)}</strong>
+                        </div>
+                        <div>
+                          <span>Closing balance</span>
+                          <strong>{formatAmount(snapshot.closingBalance, activeResult.currencyCode)}</strong>
+                        </div>
+                        <div>
+                          <span>Net change</span>
+                          <strong>{formatAmount(snapshot.netChange, activeResult.currencyCode)}</strong>
+                        </div>
+                        <div>
+                          <span>Transaction net</span>
+                          <strong>{formatAmount(snapshot.transactionNet, activeResult.currencyCode)}</strong>
+                        </div>
+                        <div>
+                          <span>Total deposits</span>
+                          <strong>{formatAmount(snapshot.deposits, activeResult.currencyCode)}</strong>
+                        </div>
+                        <div>
+                          <span>Total withdrawals</span>
+                          <strong>{formatAmount(snapshot.withdrawals, activeResult.currencyCode)}</strong>
+                        </div>
+                        <div className="export-sanity-discrepancy">
+                          <span>Discrepancy</span>
+                          <strong>{formatAmount(snapshot.discrepancy, activeResult.currencyCode)}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            ) : null}
 
             <div className="export-options" aria-label="Review pack options">
               <label title="Include the original statement PDFs inside the review pack ZIP so PDF previews work when you import later (larger download).">
