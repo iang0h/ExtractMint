@@ -605,6 +605,76 @@ h3 {
   font-weight: 600;
 }
 
+.privacy-panel {
+  flex: 1 1 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(16, 32, 41, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+}
+
+.privacy-panel summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  color: var(--ink);
+  font-weight: 760;
+}
+
+.privacy-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.privacy-panel-body {
+  padding: 0 12px 12px;
+  color: #516067;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.privacy-panel-body p {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+
+.privacy-panel-body ul {
+  margin: 0 0 12px 18px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.privacy-panel-body strong {
+  color: var(--ink);
+}
+
+.privacy-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.privacy-actions button {
+  justify-self: start;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 32, 41, 0.18);
+  background: rgba(247, 244, 237, 0.8);
+  color: var(--ink);
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.privacy-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.privacy-actions small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 640;
+}
+
 .link-button {
   border: 0;
   padding: 0;

@@ -35,6 +35,7 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 - Balance-trail validation and reconciliation-oriented exports.
 - Multiple output formats from the same extracted rows.
 - OCR fallback for scanned statements and images.
+- Optional local caches (OCR + PDF review index) can be persisted in the browser and cleared in-app.
 - Review JSON import/export so a conversion can be resumed later.
 - FreeLLMAPI-ready agent route for explaining validation issues and export choices.
 

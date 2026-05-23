@@ -428,6 +428,7 @@ function App() {
     entries: 0,
     bytes: 0,
   })
+  const [cacheClearStatus, setCacheClearStatus] = useState<'idle' | 'clearing' | 'done' | 'error'>('idle')
   const [includeSourcesInReviewPack, setIncludeSourcesInReviewPack] = useState(
     () => storedValue('extractmint.reviewPackIncludeSources') === '1',
   )
@@ -785,6 +786,35 @@ function App() {
     if (!persistPdfTextIndex) return
     void (async () => {
       setPdfTextIndexStats(await getPersistentPdfTextIndexStats())
+    })()
+  }
+
+  const clearAllLocalCaches = () => {
+    void (async () => {
+      if (cacheClearStatus === 'clearing') return
+      setCacheClearStatus('clearing')
+      try {
+        await Promise.all([clearPersistentOcrCache(), clearPersistentPdfTextIndex()])
+
+        pdfTextIndexRef.current.clear()
+        pdfRawTextIndexRef.current.clear()
+        pdfRowMatchCacheRef.current.clear()
+        setPdfRowMatches([])
+        setPdfMatchInfo(null)
+        setPdfRowMatchStatus('idle')
+
+        const converter = getConverterIfLoaded()
+        converter?.clearInMemoryOcrCache()
+
+        setOcrCacheStats({ entries: 0, bytes: 0 })
+        setPdfTextIndexStats({ entries: 0, bytes: 0 })
+
+        setCacheClearStatus('done')
+        window.setTimeout(() => setCacheClearStatus('idle'), 2400)
+      } catch {
+        setCacheClearStatus('error')
+        window.setTimeout(() => setCacheClearStatus('idle'), 3200)
+      }
     })()
   }
 
@@ -1558,10 +1588,10 @@ function App() {
                   </span>
                 ) : null}
 	              </label>
-	              <label className="ocr-cache-row">
-	                <input
-	                  type="checkbox"
-	                  checked={persistPdfTextIndex}
+		              <label className="ocr-cache-row">
+		                <input
+		                  type="checkbox"
+		                  checked={persistPdfTextIndex}
 	                  onChange={(event) => {
 	                    const next = event.target.checked
 	                    setPersistPdfTextIndex(next)
@@ -1585,9 +1615,46 @@ function App() {
 	                      Clear
 	                    </button>
 	                  </span>
-	                ) : null}
-	              </label>
-	            </div>
+		                ) : null}
+		              </label>
+
+                  <details className="privacy-panel">
+                    <summary>Trust &amp; privacy (local-only processing)</summary>
+                    <div className="privacy-panel-body">
+                      <p>
+                        ExtractMint reads files in your browser in this static build. Nothing is uploaded unless you later add a server-side
+                        conversion backend.
+                      </p>
+                      <ul>
+                        <li>
+                          <strong>Optional local caches:</strong> “Persist OCR cache” and “Persist PDF review index” store derived text in your
+                          browser (IndexedDB) for faster repeat exports and row matching.
+                        </li>
+                        <li>
+                          <strong>Review packs are exports:</strong> downloaded review JSON/ZIP can contain extracted rows (and optionally source
+                          PDFs) so treat them like financial documents.
+                        </li>
+                        <li>
+                          <strong>Clear anytime:</strong> remove cached OCR + PDF index data from this browser with one click.
+                        </li>
+                      </ul>
+                      <div className="privacy-actions">
+                        <button type="button" onClick={clearAllLocalCaches} disabled={cacheClearStatus === 'clearing'}>
+                          {cacheClearStatus === 'clearing'
+                            ? 'Clearing local caches…'
+                            : cacheClearStatus === 'done'
+                              ? 'Cleared'
+                              : cacheClearStatus === 'error'
+                                ? 'Clear failed (retry)'
+                                : 'Clear all local caches'}
+                        </button>
+                        <small>
+                          Clears persistent OCR + PDF index caches (and in-memory review caches) for this browser profile.
+                        </small>
+                      </div>
+                    </div>
+                  </details>
+		            </div>
 
 	            <div className="progress-panel">
 	              <div>

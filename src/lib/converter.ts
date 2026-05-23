@@ -1186,6 +1186,10 @@ async function createPdfBlobAsync(result: ConversionResult) {
 
 const ocrTextCache = new Map<string, string>()
 
+export function clearInMemoryOcrCache() {
+  ocrTextCache.clear()
+}
+
 function fileSignature(file: File) {
   return `${file.name}:${file.size}:${file.lastModified}`
 }

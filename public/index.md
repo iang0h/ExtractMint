@@ -36,6 +36,7 @@ ExtractMint is a browser-based financial document extraction product for operato
 
 - Browser-side processing in the current static build.
 - OCR fallback for scans and image-heavy PDFs.
+- Optional local caches (OCR + PDF review index) can be persisted in the browser and cleared in-app.
 - Balance-trail checks for bank statement reconciliation.
 - Review JSON import and export for resume-later workflows.
 - QuickBooks QBO export for accountant handoff.
@@ -64,4 +65,3 @@ The current static version processes files in the browser. A future SaaS backend
 ### Should scanned statements be reviewed?
 
 Yes. Scanned statements rely on OCR and should be checked against the original statement before accounting use.
-
