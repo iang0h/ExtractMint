@@ -7,7 +7,8 @@ type OcrCacheRecord = {
 
 const DB_NAME = 'extractmint'
 const STORE_NAME = 'ocrTextCache'
-const DB_VERSION = 1
+const PDF_STORE_NAME = 'pdfPageTextCache'
+const DB_VERSION = 2
 
 let openPromise: Promise<IDBDatabase> | undefined
 
@@ -25,6 +26,9 @@ function openDb(): Promise<IDBDatabase> {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(PDF_STORE_NAME)) {
+        db.createObjectStore(PDF_STORE_NAME, { keyPath: 'key' })
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -99,4 +103,3 @@ export async function getPersistentOcrCacheStats(): Promise<{ entries: number; b
     return { entries: 0, bytes: 0 }
   }
 }
-

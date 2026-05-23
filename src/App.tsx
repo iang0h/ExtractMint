@@ -25,6 +25,12 @@ import './App.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
+import {
+  clearPersistentPdfTextIndex,
+  getPersistentPdfPageText,
+  getPersistentPdfTextIndexStats,
+  setPersistentPdfPageText,
+} from './lib/pdfTextIndexCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
 
 type ParsedPage = { pageNumber: number; text: string }
@@ -414,7 +420,14 @@ function App() {
   const [forceOcr, setForceOcr] = useState(() => storedValue('extractmint.forceOcr') === '1')
   const [ocrLanguage, setOcrLanguage] = useState(() => storedValue('extractmint.ocrLanguage') || 'eng')
   const [persistOcrCache, setPersistOcrCache] = useState(() => storedValue('extractmint.persistOcrCache') !== '0')
+  const [persistPdfTextIndex, setPersistPdfTextIndex] = useState(
+    () => storedValue('extractmint.persistPdfTextIndex') !== '0',
+  )
   const [ocrCacheStats, setOcrCacheStats] = useState<{ entries: number; bytes: number }>({ entries: 0, bytes: 0 })
+  const [pdfTextIndexStats, setPdfTextIndexStats] = useState<{ entries: number; bytes: number }>({
+    entries: 0,
+    bytes: 0,
+  })
   const [includeSourcesInReviewPack, setIncludeSourcesInReviewPack] = useState(
     () => storedValue('extractmint.reviewPackIncludeSources') === '1',
   )
@@ -638,6 +651,16 @@ function App() {
 	          const pageKey = `${activeSha}:${pageNumber}`
 	          let normalizedPageText = pdfTextIndexRef.current.get(pageKey)
 	          let rawPageText = pdfRawTextIndexRef.current.get(pageKey) ?? ''
+	          if (!normalizedPageText && persistPdfTextIndex) {
+	            const persistent = await getPersistentPdfPageText(pageKey)
+	            if (cancelled) return
+	            if (persistent) {
+	              rawPageText = persistent.rawText
+	              normalizedPageText = persistent.normalizedText
+	              pdfTextIndexRef.current.set(pageKey, normalizedPageText)
+	              pdfRawTextIndexRef.current.set(pageKey, rawPageText)
+	            }
+	          }
 	          if (!normalizedPageText) {
 	            const page = await pdfDoc.getPage(pageNumber)
 	            if (cancelled) return
@@ -652,6 +675,9 @@ function App() {
 	            normalizedPageText = normalizePdfMatchText(rawText)
 	            pdfTextIndexRef.current.set(pageKey, normalizedPageText)
 	            pdfRawTextIndexRef.current.set(pageKey, rawText)
+	            if (persistPdfTextIndex) {
+	              void setPersistentPdfPageText(pageKey, rawText, normalizedPageText)
+	            }
 	          }
 
           if (!normalizedPageText) continue
@@ -681,6 +707,11 @@ function App() {
         pdfRowMatchCacheRef.current.set(cacheKey, ranked)
         setPdfRowMatches(ranked)
         setPdfRowMatchStatus('ready')
+        if (persistPdfTextIndex) {
+          void (async () => {
+            setPdfTextIndexStats(await getPersistentPdfTextIndexStats())
+          })()
+        }
       } catch (error) {
         if (cancelled) return
         console.warn('PDF row match indexing failed', error)
@@ -698,10 +729,11 @@ function App() {
     pdfHighlightQueries,
     pdfPageCount,
     pdfRowMatchQueriesKey,
-    selectedRow,
-    selectedRowIndex,
-    showSourcePreview,
-  ])
+	    selectedRow,
+	    selectedRowIndex,
+	    persistPdfTextIndex,
+	    showSourcePreview,
+	  ])
 
   useEffect(() => {
     if (!activeSha || !activePdfUrl || !showSourcePreview) return
@@ -749,10 +781,22 @@ function App() {
     })()
   }
 
+  const refreshPdfTextIndexStats = () => {
+    if (!persistPdfTextIndex) return
+    void (async () => {
+      setPdfTextIndexStats(await getPersistentPdfTextIndexStats())
+    })()
+  }
+
   useEffect(() => {
     refreshOcrCacheStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistOcrCache])
+
+  useEffect(() => {
+    refreshPdfTextIndexStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistPdfTextIndex])
 
   const parseMoneyInput = (value: string) => {
     const text = value.trim()
@@ -1485,7 +1529,7 @@ function App() {
                   <option value="chi_sim">Chinese (Simplified)</option>
                 </select>
               </label>
-              <label className="ocr-cache-row">
+	              <label className="ocr-cache-row">
                 <input
                   type="checkbox"
                   checked={persistOcrCache}
@@ -1513,8 +1557,37 @@ function App() {
                     </button>
                   </span>
                 ) : null}
-              </label>
-            </div>
+	              </label>
+	              <label className="ocr-cache-row">
+	                <input
+	                  type="checkbox"
+	                  checked={persistPdfTextIndex}
+	                  onChange={(event) => {
+	                    const next = event.target.checked
+	                    setPersistPdfTextIndex(next)
+	                    storeValue('extractmint.persistPdfTextIndex', next ? '1' : '0')
+	                  }}
+	                />
+	                Persist PDF review index (faster row matching)
+	                {persistPdfTextIndex ? (
+	                  <span className="ocr-cache-meta">
+	                    {pdfTextIndexStats.entries} pages saved · {Math.round(pdfTextIndexStats.bytes / 1024)} KB
+	                    <button
+	                      type="button"
+	                      className="link-button"
+	                      onClick={() => {
+	                        void (async () => {
+	                          await clearPersistentPdfTextIndex()
+	                          refreshPdfTextIndexStats()
+	                        })()
+	                      }}
+	                    >
+	                      Clear
+	                    </button>
+	                  </span>
+	                ) : null}
+	              </label>
+	            </div>
 
 	            <div className="progress-panel">
 	              <div>
