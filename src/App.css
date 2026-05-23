@@ -1934,6 +1934,22 @@ footer strong {
   gap: 10px;
 }
 
+.footer-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-weight: 650;
+}
+
+.footer-links a {
+  color: var(--mint-dark);
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
 .footer-mark {
   display: grid;
   place-items: center;

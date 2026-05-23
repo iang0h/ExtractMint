@@ -2489,6 +2489,11 @@ function App() {
           ExtractMint
         </strong>
         <span>Document extraction for operators, accountants, and founders.</span>
+        <div className="footer-links" aria-label="Site links">
+          <a href="/privacy/">Privacy</a>
+          <a href="/security/">Security</a>
+          <a href="/llms.txt">LLMs.txt</a>
+        </div>
       </footer>
 
       {isProcessing && (

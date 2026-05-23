@@ -49,6 +49,8 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 ## HTML Pages
 
 - Home and converter: https://extractmint.vercel.app/
+- Privacy: https://extractmint.vercel.app/privacy/
+- Security: https://extractmint.vercel.app/security/
 - Bank statement to Excel: https://extractmint.vercel.app/convert/bank-statement-to-excel/
 - PDF bank statement to Excel: https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/
 - Scanned bank statement to Excel: https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/
@@ -59,6 +61,8 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 ## Markdown Mirrors
 
 - Home Markdown: https://extractmint.vercel.app/index.md
+- Privacy Markdown: https://extractmint.vercel.app/privacy/index.md
+- Security Markdown: https://extractmint.vercel.app/security/index.md
 - Bank statement to Excel Markdown: https://extractmint.vercel.app/convert/bank-statement-to-excel/index.md
 - PDF bank statement to Excel Markdown: https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/index.md
 - Scanned bank statement to Excel Markdown: https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/index.md

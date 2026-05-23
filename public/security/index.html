@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Security | ExtractMint</title>
+    <meta
+      name="description"
+      content="ExtractMint’s static build processes files in the browser with optional local caches. Learn the current security posture and accountant workflow checklist."
+    />
+    <link rel="canonical" href="https://extractmint.vercel.app/security/" />
+    <link rel="stylesheet" href="/seo.css" />
+    <meta property="og:title" content="Security | ExtractMint" />
+    <meta
+      property="og:description"
+      content="Local-first browser processing with optional caches you can clear. Accountant workflow checklist included."
+    />
+    <meta property="og:image" content="https://extractmint.vercel.app/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "ExtractMint Security",
+        "url": "https://extractmint.vercel.app/security/",
+        "isPartOf": { "@type": "WebSite", "name": "ExtractMint", "url": "https://extractmint.vercel.app/" }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true">EM</span>
+          ExtractMint
+        </a>
+        <div class="nav-links">
+          <a href="/#converter">Converter</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/privacy/">Privacy</a>
+        </div>
+      </nav>
+
+      <main>
+        <section class="hero">
+          <div>
+            <span class="eyebrow">Security</span>
+            <h1>Designed for local-first conversion in the static build.</h1>
+            <p class="lede">
+              ExtractMint processes documents in your browser. Optional local caches can speed repeat exports, and can be cleared in-app.
+            </p>
+            <div class="cta-row">
+              <a class="button" href="/#converter">Try the converter</a>
+              <a class="button secondary" href="/privacy/">Read privacy</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Current posture (static build)</h2>
+          <ul>
+            <li>Browser-side processing for conversions.</li>
+            <li>No account system or server-side storage in this prototype.</li>
+            <li>Optional local caches (OCR + PDF review index) that can be cleared.</li>
+          </ul>
+        </section>
+
+        <section class="panel">
+          <h2>Accountant workflow checklist</h2>
+          <ul>
+            <li>Use a dedicated browser profile with minimal extensions.</li>
+            <li>Confirm the domain is <code>extractmint.vercel.app</code> before processing client documents.</li>
+            <li>After export, validate opening/closing balances and review low-confidence rows.</li>
+            <li>Clear all local caches after completing a client batch if required.</li>
+          </ul>
+        </section>
+
+        <section class="panel">
+          <h2>What this is not</h2>
+          <ul>
+            <li>This page is not a compliance certification claim.</li>
+            <li>Like any browser app, device hygiene and extensions can affect security.</li>
+          </ul>
+        </section>
+
+        <section class="related" aria-label="Related pages">
+          <a href="/privacy/">Privacy</a>
+          <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
+          <a href="/convert/scanned-bank-statement-to-excel/">Scanned statement OCR</a>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>ExtractMint</span>
+        <span>Bank statements, receipts, invoices, and scans to clean working files.</span>
+      </footer>
+    </div>
+  </body>
+</html>
+

@@ -2,85 +2,109 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://extractmint.vercel.app/</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/index.md</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
+    <loc>https://extractmint.vercel.app/privacy/</loc>
+    <lastmod>2026-05-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://extractmint.vercel.app/privacy/index.md</loc>
+    <lastmod>2026-05-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://extractmint.vercel.app/security/</loc>
+    <lastmod>2026-05-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://extractmint.vercel.app/security/index.md</loc>
+    <lastmod>2026-05-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://extractmint.vercel.app/convert/bank-statement-to-excel/</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/bank-statement-to-excel/index.md</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.75</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/index.md</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/index.md</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.68</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.75</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/index.md</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.65</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/index.md</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.62</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/index.md</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-05-24</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.62</priority>
   </url>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Privacy | ExtractMint</title>
+    <meta
+      name="description"
+      content="ExtractMint is private by default: this static build processes files in the browser with optional local-only caches you can clear."
+    />
+    <link rel="canonical" href="https://extractmint.vercel.app/privacy/" />
+    <link rel="stylesheet" href="/seo.css" />
+    <meta property="og:title" content="Privacy | ExtractMint" />
+    <meta
+      property="og:description"
+      content="Private by default. Browser-side processing with optional local caches you can clear."
+    />
+    <meta property="og:image" content="https://extractmint.vercel.app/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "ExtractMint Privacy",
+        "url": "https://extractmint.vercel.app/privacy/",
+        "isPartOf": { "@type": "WebSite", "name": "ExtractMint", "url": "https://extractmint.vercel.app/" }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true">EM</span>
+          ExtractMint
+        </a>
+        <div class="nav-links">
+          <a href="/#converter">Converter</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/security/">Security</a>
+        </div>
+      </nav>
+
+      <main>
+        <section class="hero">
+          <div>
+            <span class="eyebrow">Privacy</span>
+            <h1>Private by default in the current static build.</h1>
+            <p class="lede">
+              ExtractMint runs conversions in your browser. Optional local caches can speed repeat work, and can be cleared at any time.
+            </p>
+            <div class="cta-row">
+              <a class="button" href="/#converter">Try the converter</a>
+              <a class="button secondary" href="/security/">Read security</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>What happens to my file?</h2>
+          <ul>
+            <li>No upload by default: the static app processes files locally in the browser.</li>
+            <li>No sign-in: there is no account system in this prototype.</li>
+            <li>You control persistence: optional caches can be enabled or cleared.</li>
+          </ul>
+        </section>
+
+        <section class="grid">
+          <article class="panel">
+            <h2>Local OCR cache (optional)</h2>
+            <p>For scanned PDFs, ExtractMint may OCR pages. You can persist an OCR cache locally so repeat exports are faster.</p>
+          </article>
+          <article class="panel">
+            <h2>Local PDF review index (optional)</h2>
+            <p>For review-mode matching, ExtractMint can cache per-page text indices locally in your browser.</p>
+          </article>
+          <article class="panel">
+            <h2>Clear all caches</h2>
+            <p>Use the in-app Trust &amp; privacy panel and click “Clear all local caches” for accountant workflows.</p>
+          </article>
+        </section>
+
+        <section class="panel">
+          <h2>Accountant workflow checklist</h2>
+          <ul>
+            <li>Use a dedicated browser profile for client work.</li>
+            <li>Verify opening and closing balances after export.</li>
+            <li>Clear caches after finishing a client batch if required by policy.</li>
+          </ul>
+        </section>
+
+        <section class="related" aria-label="Related pages">
+          <a href="/security/">Security</a>
+          <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
+          <a href="/convert/scanned-bank-statement-to-excel/">Scanned statement OCR</a>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>ExtractMint</span>
+        <span>Bank statements, receipts, invoices, and scans to clean working files.</span>
+      </footer>
+    </div>
+  </body>
+</html>
+

@@ -10,6 +10,8 @@ const openapi = JSON.parse(readText('public/openapi.json'))
 
 const markdownMirrors = [
   'https://extractmint.vercel.app/index.md',
+  'https://extractmint.vercel.app/privacy/index.md',
+  'https://extractmint.vercel.app/security/index.md',
   'https://extractmint.vercel.app/convert/bank-statement-to-excel/index.md',
   'https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/index.md',
   'https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/index.md',
