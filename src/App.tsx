@@ -11,6 +11,7 @@ import {
   FileArchive,
   FileSpreadsheet,
   FileText,
+  Tag,
   LockKeyhole,
   PlayCircle,
   ReceiptText,
@@ -1406,6 +1407,10 @@ function App() {
               <PlayCircle size={18} />
               Watch flow
             </a>
+            <a className="secondary-button" href="/pricing/">
+              <Tag size={18} />
+              Pricing
+            </a>
           </motion.div>
           <motion.div
             className="hero-proof"
@@ -2490,6 +2495,7 @@ function App() {
         </strong>
         <span>Document extraction for operators, accountants, and founders.</span>
         <div className="footer-links" aria-label="Site links">
+          <a href="/pricing/">Pricing</a>
           <a href="/privacy/">Privacy</a>
           <a href="/security/">Security</a>
           <a href="/llms.txt">LLMs.txt</a>
