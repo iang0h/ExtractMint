@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 
+Sitemap: https://extractmint.iangoh.com/sitemap.xml
 Sitemap: https://extractmint.vercel.app/sitemap.xml
