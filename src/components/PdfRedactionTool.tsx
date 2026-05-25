@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 
+import JSZip from 'jszip'
+
 import type { PdfDocumentProxy } from './PdfCanvasViewer'
 
-type RedactionRect = { x: number; y: number; width: number; height: number }
+type RedactionRectPx = { x: number; y: number; width: number; height: number }
+type RedactionRectPct = { x: number; y: number; width: number; height: number }
 
-function normalizeRect(rect: RedactionRect): RedactionRect | null {
+function normalizeRect(rect: RedactionRectPx): RedactionRectPx | null {
   const x1 = rect.x
   const y1 = rect.y
   const x2 = rect.x + rect.width
@@ -18,7 +21,7 @@ function normalizeRect(rect: RedactionRect): RedactionRect | null {
   return { x: left, y: top, width, height }
 }
 
-function clampRectToCanvas(rect: RedactionRect, canvas: HTMLCanvasElement): RedactionRect {
+function clampRectToCanvas(rect: RedactionRectPx, canvas: HTMLCanvasElement): RedactionRectPx {
   const x = Math.max(0, Math.min(canvas.width, rect.x))
   const y = Math.max(0, Math.min(canvas.height, rect.y))
   const width = Math.max(0, Math.min(canvas.width - x, rect.width))
@@ -26,17 +29,39 @@ function clampRectToCanvas(rect: RedactionRect, canvas: HTMLCanvasElement): Reda
   return { x, y, width, height }
 }
 
+function pxToPctRect(rect: RedactionRectPx, canvas: HTMLCanvasElement): RedactionRectPct {
+  const width = Math.max(1, canvas.width)
+  const height = Math.max(1, canvas.height)
+  const clamp01 = (value: number) => Math.max(0, Math.min(1, value))
+  return {
+    x: clamp01(rect.x / width),
+    y: clamp01(rect.y / height),
+    width: clamp01(rect.width / width),
+    height: clamp01(rect.height / height),
+  }
+}
+
+function pctToPxRect(rect: RedactionRectPct, canvas: HTMLCanvasElement): RedactionRectPx {
+  return {
+    x: rect.x * canvas.width,
+    y: rect.y * canvas.height,
+    width: rect.width * canvas.width,
+    height: rect.height * canvas.height,
+  }
+}
+
 function drawOverlay(
   ctx: CanvasRenderingContext2D,
-  redactions: RedactionRect[],
-  draft: RedactionRect | null,
+  redactions: RedactionRectPct[],
+  draft: RedactionRectPx | null,
 ) {
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
   for (const rect of redactions) {
+    const px = pctToPxRect(rect, ctx.canvas)
     ctx.fillStyle = '#0b0b0c'
-    ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.fillRect(px.x, px.y, px.width, px.height)
   }
 
   if (draft) {
@@ -63,15 +88,22 @@ export function PdfRedactionTool({
   const baseCanvasRef = useRef<HTMLCanvasElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
 
+  const [currentPage, setCurrentPage] = useState(Math.max(1, Math.floor(pageNumber || 1)))
   const [renderStatus, setRenderStatus] = useState<'idle' | 'rendering' | 'ready' | 'error'>('idle')
-  const [redactions, setRedactions] = useState<RedactionRect[]>([])
-  const [draft, setDraft] = useState<RedactionRect | null>(null)
+  const [redactionsByPage, setRedactionsByPage] = useState<Record<number, RedactionRectPct[]>>({})
+  const [draft, setDraft] = useState<RedactionRectPx | null>(null)
   const [dragging, setDragging] = useState<{ startX: number; startY: number } | null>(null)
+  const [zipPagesInput, setZipPagesInput] = useState<string>('current')
+  const [zipStatus, setZipStatus] = useState<string | null>(null)
+  const zipBusyRef = useRef(false)
 
   const safeBaseName = useMemo(() => (fileName ?? 'statement').replace(/\.[^.]+$/, ''), [fileName])
+  const pageCount = pdf?.numPages ?? null
+
+  const redactions = useMemo(() => redactionsByPage[currentPage] ?? [], [redactionsByPage, currentPage])
 
   useEffect(() => {
-    if (!pdf || !pageNumber) return
+    if (!pdf || !currentPage) return
     const container = containerRef.current
     const baseCanvas = baseCanvasRef.current
     const overlayCanvas = overlayCanvasRef.current
@@ -83,7 +115,7 @@ export function PdfRedactionTool({
     const render = async () => {
       setRenderStatus('rendering')
       try {
-        const page = await pdf.getPage(pageNumber)
+        const page = await pdf.getPage(currentPage)
         if (cancelled) return
 
         const baseViewport = page.getViewport({ scale: 1 })
@@ -134,7 +166,7 @@ export function PdfRedactionTool({
       observer.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdf, pageNumber])
+  }, [pdf, currentPage])
 
   useEffect(() => {
     const overlayCanvas = overlayCanvasRef.current
@@ -179,11 +211,78 @@ export function PdfRedactionTool({
     if (!normalized) return
     const clamped = clampRectToCanvas(normalized, canvas)
     if (clamped.width < 6 || clamped.height < 6) return
-    setRedactions((previous) => [...previous, clamped].slice(0, 32))
+    const pct = pxToPctRect(clamped, canvas)
+    setRedactionsByPage((previous) => {
+      const existing = previous[currentPage] ?? []
+      return { ...previous, [currentPage]: [...existing, pct].slice(0, 32) }
+    })
   }
 
-  const undo = () => setRedactions((previous) => previous.slice(0, -1))
-  const clear = () => setRedactions([])
+  const undo = () => {
+    setRedactionsByPage((previous) => {
+      const existing = previous[currentPage] ?? []
+      if (existing.length === 0) return previous
+      return { ...previous, [currentPage]: existing.slice(0, -1) }
+    })
+  }
+  const clear = () => {
+    setRedactionsByPage((previous) => {
+      if (!previous[currentPage]?.length) return previous
+      return { ...previous, [currentPage]: [] }
+    })
+  }
+
+  const parsePagesSpec = (spec: string): number[] => {
+    if (!pageCount) return [currentPage]
+    const trimmed = spec.trim().toLowerCase()
+    if (!trimmed || trimmed === 'current') return [currentPage]
+    if (trimmed === 'all') return Array.from({ length: pageCount }, (_, index) => index + 1)
+
+    const pages = new Set<number>()
+    for (const part of trimmed.split(',').map((p) => p.trim()).filter(Boolean)) {
+      if (part.includes('-')) {
+        const [a, b] = part.split('-').map((t) => Number.parseInt(t.trim(), 10))
+        if (!Number.isFinite(a) || !Number.isFinite(b)) continue
+        const start = Math.max(1, Math.min(pageCount, Math.min(a, b)))
+        const end = Math.max(1, Math.min(pageCount, Math.max(a, b)))
+        for (let p = start; p <= end; p += 1) pages.add(p)
+        continue
+      }
+      const n = Number.parseInt(part, 10)
+      if (!Number.isFinite(n)) continue
+      if (n < 1 || n > pageCount) continue
+      pages.add(n)
+    }
+    return [...pages].sort((a, b) => a - b)
+  }
+
+  const renderRedactedPngBlob = async (targetPage: number): Promise<Blob | null> => {
+    const page = await pdf.getPage(targetPage)
+    const viewport = page.getViewport({ scale: 2 })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.floor(viewport.width))
+    canvas.height = Math.max(1, Math.floor(viewport.height))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    await page.render({ canvasContext: ctx, canvas, viewport }).promise
+
+    const rects = redactionsByPage[targetPage] ?? []
+    if (rects.length > 0) {
+      ctx.fillStyle = '#0b0b0c'
+      for (const rect of rects) {
+        const px = pctToPxRect(rect, canvas)
+        ctx.fillRect(px.x, px.y, px.width, px.height)
+      }
+    }
+
+    return await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), 'image/png')
+    })
+  }
 
   const download = () => {
     const baseCanvas = baseCanvasRef.current
@@ -204,22 +303,72 @@ export function PdfRedactionTool({
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `${safeBaseName}-redacted-p${pageNumber}.png`
+      anchor.download = `${safeBaseName}-redacted-p${currentPage}.png`
       anchor.click()
       URL.revokeObjectURL(url)
     }, 'image/png')
+  }
+
+  const downloadZip = () => {
+    if (!pageCount) return
+    if (zipBusyRef.current) return
+    zipBusyRef.current = true
+    setZipStatus('Preparing ZIP…')
+
+    void (async () => {
+      try {
+        const pages = parsePagesSpec(zipPagesInput)
+        if (pages.length === 0) {
+          setZipStatus('No valid pages selected. Use: current, all, or e.g. 1-3,5')
+          return
+        }
+
+        const zip = new JSZip()
+        for (let index = 0; index < pages.length; index += 1) {
+          const pageNumber = pages[index]!
+          setZipStatus(`Rendering page ${pageNumber} (${index + 1}/${pages.length})…`)
+          const blob = await renderRedactedPngBlob(pageNumber)
+          if (!blob) throw new Error('Failed to render redacted PNG')
+          zip.file(`${safeBaseName}-redacted-p${pageNumber}.png`, blob)
+        }
+
+        setZipStatus('Compressing ZIP…')
+        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' })
+        const url = URL.createObjectURL(zipBlob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `${safeBaseName}-redacted-pages.zip`
+        anchor.click()
+        URL.revokeObjectURL(url)
+        setZipStatus('ZIP downloaded.')
+      } catch (error) {
+        console.warn('ZIP export failed', error)
+        setZipStatus('ZIP export failed. Try fewer pages or refresh and retry.')
+      } finally {
+        zipBusyRef.current = false
+        window.setTimeout(() => setZipStatus(null), 4000)
+      }
+    })()
+  }
+
+  const clampPage = (value: number) => {
+    const max = pageCount ?? 1
+    return Math.max(1, Math.min(max, Math.floor(value)))
   }
 
   return (
     <div className="redaction-tool" aria-label="PDF redaction helper">
       <div className="redaction-header">
         <div>
-          <strong>Redact page {pageNumber}</strong>
+          <strong>Redact page {currentPage}</strong>
           <small>Drag to add black boxes. Review carefully before sharing.</small>
         </div>
         <div className="redaction-actions">
           <button type="button" onClick={download} disabled={renderStatus !== 'ready'}>
             Download redacted PNG
+          </button>
+          <button type="button" onClick={downloadZip} disabled={renderStatus !== 'ready' || !pageCount}>
+            Download ZIP
           </button>
           <button type="button" onClick={undo} disabled={redactions.length === 0}>
             Undo
@@ -228,6 +377,47 @@ export function PdfRedactionTool({
             Clear
           </button>
         </div>
+      </div>
+
+      <div className="redaction-controls" aria-label="Redaction export options">
+        <div className="redaction-page-nav">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => clampPage(p - 1))}
+            disabled={renderStatus === 'rendering' || currentPage <= 1}
+          >
+            Prev
+          </button>
+          <label>
+            Page
+            <input
+              type="number"
+              min={1}
+              max={pageCount ?? 1}
+              value={String(currentPage)}
+              onChange={(event) => setCurrentPage(clampPage(Number(event.target.value)))}
+            />
+            {pageCount ? <span className="page-total">of {pageCount}</span> : null}
+          </label>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => clampPage(p + 1))}
+            disabled={renderStatus === 'rendering' || (pageCount ? currentPage >= pageCount : true)}
+          >
+            Next
+          </button>
+        </div>
+        <label className="redaction-zip-pages">
+          ZIP pages
+          <input
+            type="text"
+            value={zipPagesInput}
+            onChange={(event) => setZipPagesInput(event.target.value)}
+            placeholder="current | all | 1-3,5"
+            aria-label="Pages to include in ZIP"
+          />
+        </label>
+        {zipStatus ? <div className="redaction-zip-status">{zipStatus}</div> : null}
       </div>
 
       <div ref={containerRef} className="redaction-stage" aria-label="Redaction canvas">

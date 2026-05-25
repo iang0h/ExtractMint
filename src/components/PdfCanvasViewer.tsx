@@ -31,6 +31,7 @@ type PdfPageProxy = {
 }
 
 export type PdfDocumentProxy = {
+  numPages: number
   getPage: (pageNumber: number) => Promise<PdfPageProxy>
 }
 
