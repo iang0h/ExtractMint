@@ -37,6 +37,18 @@ The app includes `/api/agent/`, a Vercel serverless route designed to work with
 FreeLLMAPI (`tashfeenahmed/freellmapi`). The frontend never receives provider
 keys.
 
+## Optional support email CTA
+
+If you set `VITE_SUPPORT_EMAIL`, the app shows an “Email support” button in the
+Support panel (pre-filled template; users can attach the Diagnostic export and
+optionally a redacted sample page ZIP).
+
+Example:
+
+```bash
+VITE_SUPPORT_EMAIL=support@example.com
+```
+
 Default behavior:
 
 - If no gateway is configured, the agent returns local review guidance.

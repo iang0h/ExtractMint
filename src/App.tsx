@@ -422,6 +422,7 @@ const TELEMETRY_STORAGE_KEY = 'extractmint.telemetry.v1'
 
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
+  const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL ?? '').trim()
   const [results, setResults] = useState<ConversionResult[]>([createSampleResultLite()])
   const [activeIndex, setActiveIndex] = useState(0)
   const [showAllRows, setShowAllRows] = useState(false)
@@ -516,6 +517,23 @@ function App() {
   const activeResult = results[activeIndex] ?? results[0]
   const activeSha = activeResult?.fileMeta?.sha256
   const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
+  const supportMailtoHref = useMemo(() => {
+    if (!supportEmail) return null
+    const subject = 'ExtractMint support request'
+    const body = [
+      'Hi ExtractMint Support,',
+      '',
+      'I need help converting a statement.',
+      '',
+      'What I have already prepared:',
+      '- Diagnostic JSON export (privacy-safe; no transactions).',
+      '- Support copy JSON from the app (privacy-safe; no statement text/rows/filenames).',
+      '- If needed, I can also attach a redacted sample page (PNG/ZIP).',
+      '',
+      'Thanks!',
+    ].join('\n')
+    return `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  }, [supportEmail])
   const activePages = useMemo(() => parsePagesFromRawText(activeResult?.rawText ?? ''), [activeResult?.rawText])
   const activeThumbPages = useMemo(() => {
     if (!activeSha || !activePdfUrl || !showSourcePreview || !pdfPageCount) return []
@@ -1813,7 +1831,7 @@ function App() {
                     </div>
                   </details>
 
-                  <details className="privacy-panel">
+                  <details className="privacy-panel" id="support">
                     <summary>Support &amp; telemetry (local-only, no PII)</summary>
                     <div className="privacy-panel-body">
                       <p>
@@ -1828,6 +1846,19 @@ function App() {
                           Copies a pre-filled support request (JSON) to your clipboard. Paste into email and optionally attach the Diagnostic
                           export.
                         </small>
+                        {supportMailtoHref ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                window.location.href = supportMailtoHref
+                              }}
+                            >
+                              Email support
+                            </button>
+                            <small>Opens your email client with a pre-filled template (attach Diagnostic + optional redacted sample).</small>
+                          </>
+                        ) : null}
                         <button type="button" onClick={clearTelemetry} disabled={telemetryEvents.length === 0}>
                           Clear telemetry history
                         </button>
@@ -2718,6 +2749,7 @@ function App() {
         </strong>
         <span>Document extraction for operators, accountants, and founders.</span>
         <div className="footer-links" aria-label="Site links">
+          <a href="/#support">Support</a>
           <a href="/pricing/">Pricing</a>
           <a href="/privacy/">Privacy</a>
           <a href="/security/">Security</a>
