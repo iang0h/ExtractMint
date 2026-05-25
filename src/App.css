@@ -1335,6 +1335,121 @@ footer {
   border-top: 1px solid #f2ede2;
 }
 
+.support-redaction {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f2ede2;
+}
+
+.support-redaction-empty {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(146, 162, 157, 0.5);
+  background: rgba(247, 244, 237, 0.55);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.redaction-tool {
+  border-radius: 14px;
+  border: 1px solid rgba(16, 32, 41, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  overflow: hidden;
+}
+
+.redaction-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f2ede2;
+}
+
+.redaction-header strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.redaction-header small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.redaction-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.redaction-actions button {
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 32, 41, 0.18);
+  background: rgba(247, 244, 237, 0.8);
+  color: var(--ink);
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.redaction-actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.redaction-stage {
+  position: relative;
+  width: 100%;
+  max-height: 560px;
+  overflow: auto;
+  background: #f6f8f2;
+  touch-action: none;
+}
+
+.redaction-stage canvas {
+  display: block;
+}
+
+.redaction-canvas-stage {
+  position: relative;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.redaction-overlay {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+}
+
+.redaction-status {
+  position: sticky;
+  bottom: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid #f2ede2;
+}
+
+.redaction-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-top: 1px solid #f2ede2;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 640;
+}
+
 .source-empty {
   padding: 14px;
 }
