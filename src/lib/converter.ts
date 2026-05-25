@@ -175,20 +175,20 @@ export async function convertFiles(
       detail: 'Finding rows, totals, and document signals',
     })
 
-	    results.push(
-	      parseRawText(
-	        rawText,
-	        file.name,
-	        file.type || extensionOf(file.name),
-	        {
-	          size: file.size,
-	          lastModified: file.lastModified,
-	          sha256,
-	        },
-	        options,
-	      ),
-	    )
-	  }
+    results.push(
+      parseRawText(
+        rawText,
+        file.name,
+        file.type || extensionOf(file.name),
+        {
+          size: file.size,
+          lastModified: file.lastModified,
+          sha256,
+        },
+        options,
+      ),
+    )
+  }
 
   return results
 }

@@ -424,6 +424,8 @@ const TELEMETRY_EXPORT_SCHEMA = 'extractmint.telemetry-export.v1'
 
 type ParsingProfile = 'auto' | 'sg' | 'us' | 'eu' | 'custom'
 
+type StatementLayout = 'auto' | 'amount_balance' | 'debit_credit_balance'
+
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL ?? '').trim()
@@ -1292,6 +1294,7 @@ function App() {
               forceOcr,
               ocrLanguage,
               persistOcrCache,
+              statementLayout,
               persistPdfTextIndex,
             }
           }),
@@ -1887,10 +1890,10 @@ function App() {
                 />
                 Force OCR (scanned PDFs)
               </label>
-	              <label>
-	                OCR language
-	                <select
-	                  value={ocrLanguage}
+              <label>
+                OCR language
+                <select
+                  value={ocrLanguage}
 	                  onChange={(event) => {
 	                    const next = event.target.value
 	                    setOcrLanguage(next)
@@ -1901,59 +1904,59 @@ function App() {
 	                  <option value="msa">Malay</option>
 	                  <option value="ind">Indonesian</option>
 	                  <option value="chi_sim">Chinese (Simplified)</option>
-	                </select>
-	              </label>
-	              <label>
-	                Parsing profile
-	                <select
-	                  value={parsingProfile}
-	                  onChange={(event) => {
-	                    const next = (event.target.value || 'custom') as ParsingProfile
-	                    applyParsingProfile(next)
-	                  }}
-	                >
-	                  <option value="auto">Auto</option>
-	                  <option value="sg">Singapore / Malaysia (DD/MM + debit/credit)</option>
-	                  <option value="us">US (MM/DD + amount)</option>
-	                  <option value="eu">EU (DD/MM + amount)</option>
-	                  <option value="custom">Custom</option>
-	                </select>
-	              </label>
-	              <label>
-	                Statement layout
-	                <select
-	                  value={statementLayout}
-	                  onChange={(event) => {
-	                    const next = (event.target.value as StatementLayout) || 'auto'
-	                    setStatementLayout(next)
-	                    storeValue('extractmint.statementLayout', next)
-	                  }}
-	                >
-	                  <option value="auto">Auto</option>
-	                  <option value="amount_balance">Amount + balance</option>
-	                  <option value="debit_credit_balance">Debit + credit + balance</option>
-	                </select>
-	              </label>
-	              <label>
-	                Date format (ambiguous 01/02/2026)
-	                <select
-	                  value={dateFormatPreference}
-	                  onChange={(event) => {
-	                    const raw = (event.target.value || '').toLowerCase()
-	                    const next = raw === 'dmy' || raw === 'mdy' ? (raw as DateFormatPreference) : 'auto'
-	                    setDateFormatPreference(next)
-	                    storeValue('extractmint.dateFormatPreference', next)
-	                  }}
-	                >
-	                  <option value="auto">Auto</option>
-	                  <option value="mdy">MM/DD/YYYY</option>
-	                  <option value="dmy">DD/MM/YYYY</option>
-	                </select>
-	              </label>
-		              <label className="ocr-cache-row">
-	                <input
-	                  type="checkbox"
-	                  checked={persistOcrCache}
+                </select>
+              </label>
+              <label>
+                Parsing profile
+                <select
+                  value={parsingProfile}
+                  onChange={(event) => {
+                    const next = (event.target.value || 'custom') as ParsingProfile
+                    applyParsingProfile(next)
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="sg">Singapore / Malaysia (DD/MM + debit/credit)</option>
+                  <option value="us">US (MM/DD + amount)</option>
+                  <option value="eu">EU (DD/MM + amount)</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label>
+                Statement layout
+                <select
+                  value={statementLayout}
+                  onChange={(event) => {
+                    const next = (event.target.value as StatementLayout) || 'auto'
+                    setStatementLayout(next)
+                    storeValue('extractmint.statementLayout', next)
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="amount_balance">Amount + balance</option>
+                  <option value="debit_credit_balance">Debit + credit + balance</option>
+                </select>
+              </label>
+              <label>
+                Date format (ambiguous 01/02/2026)
+                <select
+                  value={dateFormatPreference}
+                  onChange={(event) => {
+                    const raw = (event.target.value || '').toLowerCase()
+                    const next = raw === 'dmy' || raw === 'mdy' ? (raw as DateFormatPreference) : 'auto'
+                    setDateFormatPreference(next)
+                    storeValue('extractmint.dateFormatPreference', next)
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="mdy">MM/DD/YYYY</option>
+                  <option value="dmy">DD/MM/YYYY</option>
+                </select>
+              </label>
+              <label className="ocr-cache-row">
+                <input
+                  type="checkbox"
+                  checked={persistOcrCache}
                   onChange={(event) => {
                     const next = event.target.checked
                     setPersistOcrCache(next)
