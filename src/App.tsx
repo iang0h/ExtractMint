@@ -1217,6 +1217,22 @@ function App() {
     }
   }
 
+  const downloadDiagnostic = () => {
+    if (!activeResult) return
+    void (async () => {
+      const converter = await loadConverter()
+      const blob = converter.createPrivacySafeDiagnosticBlob(activeResult)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const sha = activeResult.fileMeta.sha256
+      const stamp = new Date().toISOString().slice(0, 10)
+      anchor.href = url
+      anchor.download = `extractmint-diagnostic-${sha ? sha.slice(0, 10) : stamp}.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    })()
+  }
+
   const downloadCombinedWorkbook = async () => {
     if (results.length < 2) return
     setIsProcessing(true)
@@ -1640,6 +1656,10 @@ function App() {
                           PDFs) so treat them like financial documents.
                         </li>
                         <li>
+                          <strong>Support diagnostics are privacy-safe:</strong> the Diagnostic JSON contains only counts/signals (no statement
+                          text or transactions) so you can share it when a bank format fails.
+                        </li>
+                        <li>
                           <strong>Clear anytime:</strong> remove cached OCR + PDF index data from this browser with one click.
                         </li>
                       </ul>
@@ -1704,6 +1724,14 @@ function App() {
               <button onClick={() => void downloadReviewPack()} disabled={results.length === 0}>
                 <FileArchive size={16} />
                 Review pack (ZIP)
+              </button>
+              <button
+                onClick={downloadDiagnostic}
+                disabled={!activeResult}
+                title="Downloads a privacy-safe diagnostic JSON (no transactions) to help support new bank formats."
+              >
+                <Tag size={16} />
+                Diagnostic
               </button>
               <button onClick={() => void downloadBlob('docx')} disabled={!activeResult}>
                 <FileText size={16} />

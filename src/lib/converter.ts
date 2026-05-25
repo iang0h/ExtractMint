@@ -914,6 +914,147 @@ export function createReviewJsonBlob(result: ConversionResult) {
   })
 }
 
+export type PrivacySafeDiagnostic = {
+  schema: 'extractmint.diagnostic.v1'
+  createdAt: string
+  file: {
+    fileType: string
+    fileExtension: string
+    size: number
+    lastModified: number
+    sha256?: string
+  }
+  extraction: {
+    pagesDetected: number
+    totalChars: number
+    nonWhitespaceChars: number
+    avgNonWhitespaceCharsPerPage: number
+    lineCount: number
+    tabLineCount: number
+    moneyTokenCount: number
+    dateTokenCount: number
+    keywordsPresent: string[]
+  }
+  parsing: {
+    documentKind: string
+    currencyCode: string
+    statementPeriod?: ConversionResult['statementPeriod']
+    rowCount: number
+    hasAmount: boolean
+    hasDeposit: boolean
+    hasWithdrawal: boolean
+    hasBalance: boolean
+    validation: Pick<ValidationSummary, 'status' | 'checkedRows' | 'issueCount'>
+  }
+}
+
+function extensionOfFileName(fileName: string) {
+  const match = fileName.toLowerCase().match(/\.([a-z0-9]+)$/)
+  return match?.[1] ?? ''
+}
+
+function countMatches(haystack: string, pattern: RegExp) {
+  const global = pattern.global ? pattern : new RegExp(pattern.source, `${pattern.flags}g`)
+  let count = 0
+  for (;;) {
+    const match = global.exec(haystack)
+    if (!match) break
+    count += 1
+  }
+  return count
+}
+
+function detectedPagesFromRawText(rawText: string) {
+  const matches = rawText.match(/^Page\s+\d+\b/gm) ?? []
+  return Math.max(1, matches.length)
+}
+
+function diagnosticKeywords(rawText: string) {
+  const lower = rawText.toLowerCase()
+  const keywords = [
+    'balance',
+    'opening balance',
+    'closing balance',
+    'withdrawal',
+    'debit',
+    'deposit',
+    'credit',
+    'transaction',
+    'statement',
+    'account',
+    'reference',
+    'description',
+    'date',
+    'amount',
+    'total fees',
+    'fee',
+    'tax',
+  ]
+  return keywords.filter((keyword) => lower.includes(keyword))
+}
+
+export function createPrivacySafeDiagnostic(result: ConversionResult): PrivacySafeDiagnostic {
+  const rawText = result.rawText || ''
+  const pagesDetected = detectedPagesFromRawText(rawText)
+  const totalChars = rawText.length
+  const nonWhitespaceChars = rawText.replace(/\s+/g, '').length
+  const lineCount = rawText ? rawText.split(/\r?\n/).length : 0
+  const tabLineCount = rawText ? rawText.split(/\r?\n/).filter((line) => line.includes('\t')).length : 0
+  const moneyTokenCount = countMatches(rawText, amountPattern)
+  const dateTokenCount = countMatches(rawText, datePattern)
+  const avgNonWhitespaceCharsPerPage = Math.round(nonWhitespaceChars / Math.max(1, pagesDetected))
+
+  const hasAmount = result.rows.some((row) => typeof row.amount === 'number')
+  const hasDeposit = result.rows.some((row) => typeof row.deposit === 'number')
+  const hasWithdrawal = result.rows.some((row) => typeof row.withdrawal === 'number')
+  const hasBalance = result.rows.some((row) => typeof row.balance === 'number')
+
+  return {
+    schema: 'extractmint.diagnostic.v1',
+    createdAt: new Date().toISOString(),
+    file: {
+      fileType: result.fileType,
+      fileExtension: extensionOfFileName(result.fileName),
+      size: result.fileMeta.size,
+      lastModified: result.fileMeta.lastModified,
+      sha256: result.fileMeta.sha256,
+    },
+    extraction: {
+      pagesDetected,
+      totalChars,
+      nonWhitespaceChars,
+      avgNonWhitespaceCharsPerPage,
+      lineCount,
+      tabLineCount,
+      moneyTokenCount,
+      dateTokenCount,
+      keywordsPresent: diagnosticKeywords(rawText),
+    },
+    parsing: {
+      documentKind: result.summary.documentKind,
+      currencyCode: result.currencyCode,
+      statementPeriod: result.statementPeriod,
+      rowCount: result.rows.length,
+      hasAmount,
+      hasDeposit,
+      hasWithdrawal,
+      hasBalance,
+      validation: {
+        status: result.validation.status,
+        checkedRows: result.validation.checkedRows,
+        issueCount: result.validation.issueCount,
+      },
+    },
+  }
+}
+
+export function createPrivacySafeDiagnosticBlob(result: ConversionResult) {
+  const payload = createPrivacySafeDiagnostic(result)
+  return new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json;charset=utf-8',
+  })
+}
+
 const asFiniteNumber = (value: unknown) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string') {
