@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Cloud,
+  Copy,
   FileArchive,
   FileSpreadsheet,
   FileText,
@@ -398,6 +399,26 @@ type PdfPageMatchCandidate = {
   snippet: string
 }
 
+type TelemetryEvent = {
+  at: string
+  fileType: string
+  fileSize: number
+  shaPrefix?: string
+  rows: number
+  confidence: number
+  validationStatus: ConversionResult['validation']['status']
+  validationIssues: number
+  hasBalanceTrail: boolean
+  discrepancy?: number
+  usedOcr: boolean
+  forceOcr: boolean
+  ocrLanguage: string
+  persistOcrCache: boolean
+  persistPdfTextIndex: boolean
+}
+
+const TELEMETRY_STORAGE_KEY = 'extractmint.telemetry.v1'
+
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [results, setResults] = useState<ConversionResult[]>([createSampleResultLite()])
@@ -458,12 +479,38 @@ function App() {
     },
   ])
   const [isAgentThinking, setIsAgentThinking] = useState(false)
+  const [telemetryEvents, setTelemetryEvents] = useState<TelemetryEvent[]>(() => {
+    const raw = storedValue(TELEMETRY_STORAGE_KEY)
+    if (!raw) return []
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (!Array.isArray(parsed)) return []
+      return parsed.filter(Boolean).slice(0, 50) as TelemetryEvent[]
+    } catch {
+      return []
+    }
+  })
   const [progress, setProgress] = useState<ProgressEvent>({
     fileName: 'sample-bank-statement.pdf',
     stage: 'ready',
     percent: 100,
     detail: 'Sample conversion loaded',
   })
+  const conversionSawOcrRef = useRef(false)
+
+  const appendTelemetry = (events: TelemetryEvent[]) => {
+    if (events.length === 0) return
+    setTelemetryEvents((previous) => {
+      const next = [...events, ...previous].slice(0, 50)
+      storeValue(TELEMETRY_STORAGE_KEY, JSON.stringify(next))
+      return next
+    })
+  }
+
+  const clearTelemetry = () => {
+    setTelemetryEvents([])
+    storeValue(TELEMETRY_STORAGE_KEY, '[]')
+  }
 
   const activeResult = results[activeIndex] ?? results[0]
   const activeSha = activeResult?.fileMeta?.sha256
@@ -1041,10 +1088,16 @@ function App() {
         }
       }
 
+      conversionSawOcrRef.current = false
+      const onConversionProgress = (event: ProgressEvent) => {
+        if (event.stage === 'ocr') conversionSawOcrRef.current = true
+        setProgress(event)
+      }
+
       const converted =
         normalFiles.length === 0
           ? []
-          : await converter.convertFiles(normalFiles, setProgress, {
+          : await converter.convertFiles(normalFiles, onConversionProgress, {
               forceOcr,
               ocrLanguage,
               persistOcrCache,
@@ -1076,6 +1129,31 @@ function App() {
 
       const combined = [...imported, ...converted]
       if (combined.length === 0) return
+      if (converted.length > 0) {
+        const usedOcr = forceOcr || conversionSawOcrRef.current
+        appendTelemetry(
+          converted.map((result) => {
+            const snapshot = exportSanitySnapshot(result)
+            return {
+              at: new Date().toISOString(),
+              fileType: result.fileType,
+              fileSize: result.fileMeta.size,
+              shaPrefix: result.fileMeta.sha256 ? result.fileMeta.sha256.slice(0, 10) : undefined,
+              rows: result.rows.length,
+              confidence: result.confidence,
+              validationStatus: result.validation.status,
+              validationIssues: result.validation.issueCount,
+              hasBalanceTrail: snapshot.hasBalanceTrail,
+              discrepancy: snapshot.discrepancy,
+              usedOcr,
+              forceOcr,
+              ocrLanguage,
+              persistOcrCache,
+              persistPdfTextIndex,
+            }
+          }),
+        )
+      }
       setResults(combined)
       refreshOcrCacheStats()
       setProgress({
@@ -1230,6 +1308,60 @@ function App() {
       anchor.download = `extractmint-diagnostic-${sha ? sha.slice(0, 10) : stamp}.json`
       anchor.click()
       URL.revokeObjectURL(url)
+    })()
+  }
+
+  const copySupportRequest = () => {
+    if (!activeResult) return
+    void (async () => {
+      const converter = await loadConverter()
+      const diagnostic = converter.createPrivacySafeDiagnostic(activeResult)
+      const payload = {
+        app: 'ExtractMint',
+        origin: window.location.origin,
+        at: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        userAgent: navigator.userAgent,
+        file: {
+          type: activeResult.fileType,
+          size: activeResult.fileMeta.size,
+          sha256Prefix: activeResult.fileMeta.sha256 ? activeResult.fileMeta.sha256.slice(0, 10) : undefined,
+        },
+        diagnostic,
+      }
+
+      const body = [
+        'Hi ExtractMint Support,',
+        '',
+        'I have a statement format that ExtractMint is not extracting correctly.',
+        '',
+        'Privacy-safe diagnostic payload (no statement text/rows/filenames):',
+        '',
+        JSON.stringify(payload, null, 2),
+        '',
+        'Notes:',
+        '- If you need more context, I can also share a redacted PDF sample.',
+        '- I can attach the separate Diagnostic JSON download if requested.',
+        '',
+        'Thanks!',
+      ].join('\n')
+
+      try {
+        await navigator.clipboard.writeText(body)
+        setProgress({
+          fileName: activeResult.fileName,
+          stage: 'complete',
+          percent: 100,
+          detail: 'Support request copied (paste into email; attach Diagnostic JSON if requested).',
+        })
+      } catch (error) {
+        setProgress({
+          fileName: activeResult.fileName,
+          stage: 'error',
+          percent: 100,
+          detail: error instanceof Error ? error.message : 'Failed to copy support request',
+        })
+      }
     })()
   }
 
@@ -1679,7 +1811,43 @@ function App() {
                       </div>
                     </div>
                   </details>
-		            </div>
+
+                  <details className="privacy-panel">
+                    <summary>Support &amp; telemetry (local-only, no PII)</summary>
+                    <div className="privacy-panel-body">
+                      <p>
+                        Telemetry stays in your browser and only stores counts/signals (no statement text, rows, or filenames). Use it to spot
+                        patterns like “OCR needed” or “balance discrepancy”.
+                      </p>
+                      <div className="privacy-actions">
+                        <button type="button" onClick={copySupportRequest} disabled={!activeResult}>
+                          Copy support request (privacy-safe)
+                        </button>
+                        <small>
+                          Copies a pre-filled support request (JSON) to your clipboard. Paste into email and optionally attach the Diagnostic
+                          export.
+                        </small>
+                        <button type="button" onClick={clearTelemetry} disabled={telemetryEvents.length === 0}>
+                          Clear telemetry history
+                        </button>
+                      </div>
+                      {telemetryEvents.length > 0 ? (
+                        <ul>
+                          {telemetryEvents.slice(0, 8).map((event, index) => (
+                            <li key={`${event.at}-${event.shaPrefix ?? index}`}>
+                              <strong>{new Date(event.at).toLocaleString()}</strong> — {event.fileType} · {event.rows} rows ·{' '}
+                              {Math.round(event.confidence * 100)}% confidence · {event.validationStatus}
+                              {event.hasBalanceTrail && event.discrepancy !== undefined
+                                ? ` · discrepancy ${event.discrepancy.toFixed(2)}`
+                                : ''}
+                              {event.usedOcr ? ' · OCR' : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  </details>
+			            </div>
 
 	            <div className="progress-panel">
 	              <div>
@@ -1725,18 +1893,26 @@ function App() {
                 <FileArchive size={16} />
                 Review pack (ZIP)
               </button>
-              <button
-                onClick={downloadDiagnostic}
-                disabled={!activeResult}
-                title="Downloads a privacy-safe diagnostic JSON (no transactions) to help support new bank formats."
-              >
-                <Tag size={16} />
-                Diagnostic
-              </button>
-              <button onClick={() => void downloadBlob('docx')} disabled={!activeResult}>
-                <FileText size={16} />
-                Google Docs
-              </button>
+	              <button
+	                onClick={downloadDiagnostic}
+	                disabled={!activeResult}
+	                title="Downloads a privacy-safe diagnostic JSON (no transactions) to help support new bank formats."
+	              >
+	                <Tag size={16} />
+	                Diagnostic
+	              </button>
+	              <button
+	                onClick={copySupportRequest}
+	                disabled={!activeResult}
+	                title="Copies a pre-filled, privacy-safe support request to your clipboard (no statement text/rows/filename)."
+	              >
+	                <Copy size={16} />
+	                Support copy
+	              </button>
+	              <button onClick={() => void downloadBlob('docx')} disabled={!activeResult}>
+	                <FileText size={16} />
+	                Google Docs
+	              </button>
               <button onClick={() => void downloadBlob('pdf')} disabled={!activeResult}>
                 <FileText size={16} />
                 PDF
