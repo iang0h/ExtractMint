@@ -745,6 +745,53 @@ export function createCsvBlob(result: ConversionResult) {
   return new Blob([csv], { type: 'text/csv;charset=utf-8' })
 }
 
+export function createCombinedCsvBlob(results: ConversionResult[]) {
+  const rows = [
+    [
+      'File',
+      'Currency',
+      'Date',
+      'Description',
+      'Reference',
+      'Withdrawal',
+      'Deposit',
+      'Tax',
+      'Amount',
+      'Balance',
+      'Review Status',
+      'Review Notes',
+      'Category',
+      'Confidence',
+      'Source',
+    ],
+    ...results.flatMap((result) =>
+      result.rows.map((row, index) => [
+        result.fileName,
+        result.currencyCode,
+        row.date ?? '',
+        row.description,
+        row.reference ?? '',
+        String(row.withdrawal ?? ''),
+        String(row.deposit ?? ''),
+        String(row.tax ?? ''),
+        String(row.amount ?? ''),
+        String(row.balance ?? ''),
+        rowReviewStatus(result.validation, index),
+        rowReviewNotes(result.validation, index),
+        row.category,
+        `${row.confidence}%`,
+        row.source,
+      ]),
+    ),
+  ]
+
+  const csv = rows
+    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+    .join('\n')
+
+  return new Blob([csv], { type: 'text/csv;charset=utf-8' })
+}
+
 function totalsForResult(result: ConversionResult) {
   return {
     amount: result.rows.reduce((sum, row) => sum + (row.amount ?? 0), 0),

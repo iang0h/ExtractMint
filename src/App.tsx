@@ -1671,6 +1671,43 @@ function App() {
     }
   }
 
+  const downloadCombinedCsv = async () => {
+    if (results.length < 2) return
+    setIsProcessing(true)
+    setProgress({
+      fileName: `${results.length} files`,
+      stage: 'exporting',
+      percent: 92,
+      detail: 'Building combined CSV',
+    })
+    try {
+      const converter = await loadConverter()
+      const blob = converter.createCombinedCsvBlob(results)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const stamp = new Date().toISOString().slice(0, 10)
+      anchor.href = url
+      anchor.download = `extractmint-combined-${stamp}.csv`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setProgress({
+        fileName: `${results.length} files`,
+        stage: 'complete',
+        percent: 100,
+        detail: 'Combined CSV downloaded',
+      })
+    } catch (error) {
+      setProgress({
+        fileName: `${results.length} files`,
+        stage: 'error',
+        percent: 100,
+        detail: error instanceof Error ? error.message : 'Combined CSV export failed',
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const askAgent = async () => {
     const question = agentQuestion.trim()
     if (!question || isAgentThinking) return
@@ -2256,6 +2293,14 @@ function App() {
               >
                 <Table2 size={16} />
                 Combined XLSX
+              </button>
+              <button
+                onClick={() => void downloadCombinedCsv()}
+                disabled={results.length < 2}
+                title="Download a single CSV with all extracted rows. Adds a File column so you can re-split later."
+              >
+                <ArrowDownToLine size={16} />
+                Combined CSV
               </button>
               <button onClick={downloadReviewJson} disabled={!activeResult}>
                 <ShieldCheck size={16} />
