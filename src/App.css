@@ -845,6 +845,8 @@ footer span {
 
 .export-sanity {
   padding: 0 20px 20px;
+  display: grid;
+  gap: 12px;
 }
 
 .export-sanity-card {
@@ -946,6 +948,42 @@ footer span {
 
 .export-sanity-discrepancy strong {
   margin-top: 0;
+}
+
+.continuity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.continuity-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 10px 9px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.continuity-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.continuity-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.continuity-note {
+  margin: 10px 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .export-options label {

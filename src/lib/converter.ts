@@ -439,6 +439,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
   const numberOrNull = (value: number | undefined) =>
     typeof value === 'number' && Number.isFinite(value) ? value : null
   const moneyFmt = '#,##0.00;[Red]-#,##0.00'
+  const okThreshold = 0.02
 
   const summary = workbook.addWorksheet('Summary')
   summary.columns = [
@@ -490,6 +491,20 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     { header: 'Validation', key: 'validation', width: 18 },
   ]
 
+  const continuitySheet = workbook.addWorksheet('Continuity')
+  continuitySheet.columns = [
+    { header: 'File', key: 'file', width: 34 },
+    { header: 'Currency', key: 'currency', width: 12 },
+    { header: 'Statement Start', key: 'statementStart', width: 18 },
+    { header: 'Statement End', key: 'statementEnd', width: 18 },
+    { header: 'Opening Balance', key: 'opening', width: 18 },
+    { header: 'Closing Balance', key: 'closing', width: 18 },
+    { header: 'Next File', key: 'nextFile', width: 34 },
+    { header: 'Next Opening', key: 'nextOpening', width: 18 },
+    { header: 'Delta', key: 'delta', width: 16 },
+    { header: 'Status', key: 'status', width: 22 },
+  ]
+
   ;[
     { sheet: summary, keys: ['opening', 'closing', 'net', 'deposits', 'withdrawals'] },
     {
@@ -505,6 +520,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       ],
     },
     { sheet: issuesSheet, keys: ['delta', 'expected', 'actual'] },
+    { sheet: continuitySheet, keys: ['opening', 'closing', 'nextOpening', 'delta'] },
   ].forEach(({ sheet, keys }) => {
     keys.forEach((key) => {
       const column = sheet.getColumn(key)
@@ -513,7 +529,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     })
   })
 
-  const usedSheetNames = new Set<string>(['Summary', 'Issues'])
+  const usedSheetNames = new Set<string>(['Summary', 'Issues', 'Reconciliation', 'Continuity'])
 
   for (const result of results) {
     const totals = totalsForResult(result)
@@ -613,12 +629,71 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     rowsSheet.views = [{ state: 'frozen', ySplit: 1 }]
   }
 
-  ;[summary, issuesSheet].forEach((sheet) => {
+  ;[summary, issuesSheet, continuitySheet].forEach((sheet) => {
     sheet.getRow(1).font = { bold: true }
     sheet.views = [{ state: 'frozen', ySplit: 1 }]
   })
   reconciliationSheet.getRow(1).font = { bold: true }
   reconciliationSheet.views = [{ state: 'frozen', ySplit: 1 }]
+
+  const parseYmd = (value: string) => {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!match) return null
+    const year = Number(match[1])
+    const month = Number(match[2])
+    const day = Number(match[3])
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+    const date = new Date(Date.UTC(year, month - 1, day))
+    if (Number.isNaN(date.getTime())) return null
+    return date
+  }
+
+  const statementSortKey = (result: ConversionResult) => {
+    const start = result.statementPeriod?.start ? parseYmd(result.statementPeriod.start) : null
+    const end = result.statementPeriod?.end ? parseYmd(result.statementPeriod.end) : null
+    const minRowDate = result.rows
+      .map((row) => (row.date ? parseYmd(row.date) : null))
+      .filter((value): value is Date => Boolean(value))
+      .sort((a, b) => a.getTime() - b.getTime())[0]
+
+    return (start ?? minRowDate ?? end)?.getTime() ?? Number.POSITIVE_INFINITY
+  }
+
+  const ordered = [...results].sort((a, b) => statementSortKey(a) - statementSortKey(b) || a.fileName.localeCompare(b.fileName))
+  for (let index = 0; index < ordered.length; index += 1) {
+    const current = ordered[index]
+    const next = ordered[index + 1] ?? null
+    const opening = current.validation.openingBalance
+    const closing = current.validation.closingBalance
+    const nextOpening = next?.validation.openingBalance
+    const sameCurrency = next ? current.currencyCode === next.currencyCode : true
+    const delta =
+      sameCurrency && closing !== undefined && nextOpening !== undefined
+        ? roundMoney(nextOpening - closing)
+        : undefined
+
+    const status = (() => {
+      if (!next) return 'End'
+      if (!sameCurrency) return 'Currency differs'
+      if (closing === undefined || nextOpening === undefined) return 'Missing balances'
+      if (delta === undefined) return 'Missing balances'
+      if (Math.abs(delta) <= okThreshold) return 'OK'
+      return delta > 0 ? 'Gap — review' : 'Overlap — review'
+    })()
+
+    continuitySheet.addRow({
+      file: current.fileName,
+      currency: current.currencyCode,
+      statementStart: current.statementPeriod?.start ?? '',
+      statementEnd: current.statementPeriod?.end ?? '',
+      opening: numberOrNull(opening),
+      closing: numberOrNull(closing),
+      nextFile: next?.fileName ?? '',
+      nextOpening: numberOrNull(nextOpening),
+      delta: numberOrNull(delta),
+      status,
+    })
+  }
 
   const buffer = await workbook.xlsx.writeBuffer()
   return new Blob([buffer], {

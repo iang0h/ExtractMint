@@ -55,6 +55,22 @@ type ExportSanitySnapshot = {
   hasBalanceTrail: boolean
 }
 
+type ContinuityBreak = {
+  fromFile: string
+  toFile: string
+  currencyCode: string
+  closingBalance?: number
+  nextOpeningBalance?: number
+  delta?: number
+  status: 'missing' | 'currency' | 'gap' | 'overlap'
+}
+
+type ContinuitySnapshot = {
+  checkedLinks: number
+  breakCount: number
+  breaks: ContinuityBreak[]
+}
+
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
   try {
@@ -102,6 +118,86 @@ const exportSanitySnapshot = (result: ConversionResult): ExportSanitySnapshot =>
     transactionNet: roundMoney(transactionNet),
     discrepancy: discrepancy !== undefined ? roundMoney(discrepancy) : undefined,
     hasBalanceTrail,
+  }
+}
+
+const continuitySnapshot = (results: ConversionResult[]): ContinuitySnapshot => {
+  const okThreshold = 0.02
+
+  const parseYmd = (value: string) => {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!match) return null
+    const year = Number(match[1])
+    const month = Number(match[2])
+    const day = Number(match[3])
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+    const date = new Date(Date.UTC(year, month - 1, day))
+    if (Number.isNaN(date.getTime())) return null
+    return date
+  }
+
+  const sortKey = (result: ConversionResult) => {
+    const start = result.statementPeriod?.start ? parseYmd(result.statementPeriod.start) : null
+    const end = result.statementPeriod?.end ? parseYmd(result.statementPeriod.end) : null
+    const minRow = result.rows
+      .map((row) => (row.date ? parseYmd(row.date) : null))
+      .filter((value): value is Date => Boolean(value))
+      .sort((a, b) => a.getTime() - b.getTime())[0]
+
+    return (start ?? minRow ?? end)?.getTime() ?? Number.POSITIVE_INFINITY
+  }
+
+  const ordered = [...results].sort((a, b) => sortKey(a) - sortKey(b) || a.fileName.localeCompare(b.fileName))
+  const breaks: ContinuityBreak[] = []
+
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const current = ordered[index]
+    const next = ordered[index + 1]
+    const closing = current.validation.closingBalance
+    const opening = next.validation.openingBalance
+    const currencyCode = current.currencyCode || next.currencyCode || 'USD'
+
+    if (current.currencyCode !== next.currencyCode) {
+      breaks.push({
+        fromFile: current.fileName,
+        toFile: next.fileName,
+        currencyCode,
+        closingBalance: closing,
+        nextOpeningBalance: opening,
+        status: 'currency',
+      })
+      continue
+    }
+
+    if (closing === undefined || opening === undefined) {
+      breaks.push({
+        fromFile: current.fileName,
+        toFile: next.fileName,
+        currencyCode,
+        closingBalance: closing,
+        nextOpeningBalance: opening,
+        status: 'missing',
+      })
+      continue
+    }
+
+    const delta = Math.round(((opening - closing) + Number.EPSILON) * 100) / 100
+    if (Math.abs(delta) <= okThreshold) continue
+    breaks.push({
+      fromFile: current.fileName,
+      toFile: next.fileName,
+      currencyCode,
+      closingBalance: closing,
+      nextOpeningBalance: opening,
+      delta,
+      status: delta > 0 ? 'gap' : 'overlap',
+    })
+  }
+
+  return {
+    checkedLinks: Math.max(0, ordered.length - 1),
+    breakCount: breaks.length,
+    breaks,
   }
 }
 
@@ -2276,6 +2372,64 @@ function App() {
                     </div>
                   )
                 })()}
+
+                {results.length >= 2 ? (
+                  (() => {
+                    const snapshot = continuitySnapshot(results)
+                    const status =
+                      snapshot.checkedLinks === 0
+                        ? { label: 'Not enough files', className: 'is-missing' }
+                        : snapshot.breakCount === 0
+                          ? { label: 'Statements chain', className: 'is-valid' }
+                          : { label: 'Breaks detected — review', className: 'is-review' }
+
+                    const breakPreview = snapshot.breaks.slice(0, 2)
+                    const breakCopy =
+                      breakPreview.length === 0
+                        ? 'Closing balance of one statement matches the next opening balance.'
+                        : breakPreview
+                            .map((item) => {
+                              const deltaLabel =
+                                item.status === 'currency'
+                                  ? 'Currency differs'
+                                  : item.status === 'missing'
+                                    ? 'Missing balances'
+                                    : `${item.status === 'gap' ? '+' : ''}${formatAmount(item.delta, item.currencyCode)}`
+                              return `${item.fromFile} → ${item.toFile} (${deltaLabel})`
+                            })
+                            .join(' · ')
+
+                    return (
+                      <div className={`export-sanity-card ${status.className}`}>
+                        <div className="export-sanity-header">
+                          <div>
+                            <strong>Statement continuity</strong>
+                            <small>
+                              Checks if each statement’s closing balance matches the next statement’s opening balance (best-effort ordering by
+                              statement period).
+                            </small>
+                          </div>
+                          <span className="export-sanity-status">{status.label}</span>
+                        </div>
+                        <div className="continuity-grid">
+                          <div>
+                            <span>Statements</span>
+                            <strong>{results.length}</strong>
+                          </div>
+                          <div>
+                            <span>Links checked</span>
+                            <strong>{snapshot.checkedLinks}</strong>
+                          </div>
+                          <div>
+                            <span>Breaks</span>
+                            <strong>{snapshot.breakCount}</strong>
+                          </div>
+                        </div>
+                        <p className="continuity-note">{breakCopy}</p>
+                      </div>
+                    )
+                  })()
+                ) : null}
               </div>
             ) : null}
 
