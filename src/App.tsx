@@ -1064,7 +1064,7 @@ function App() {
         rows: nextRows,
         validation: nextValidation,
         statementPeriod: converter
-          ? converter.refreshStatementPeriod(nextRows, target.statementPeriod)
+          ? converter.refreshStatementPeriod(nextRows, target.statementPeriod, dateFormatPreference)
           : target.statementPeriod,
       }
       return nextResults
@@ -1148,9 +1148,9 @@ function App() {
           percent: Math.round((index / Math.max(1, reviewPackZipFiles.length)) * 100),
           detail: 'Importing ExtractMint review pack ZIP',
         })
-	        try {
-	          const bundle = await converter.importReviewPackZip(file, { dateFormatPreference, statementLayout })
-	          imported.push(...bundle.results)
+        try {
+          const bundle = await converter.importReviewPackZip(file, { dateFormatPreference, statementLayout })
+          imported.push(...bundle.results)
           const sources = bundle.sourcesBySha
           const sourceShas = Object.keys(sources)
           if (sourceShas.length > 0) {
@@ -1192,19 +1192,19 @@ function App() {
           percent: Math.round((index / Math.max(1, reviewJsonFiles.length)) * 100),
           detail: 'Importing ExtractMint review JSON',
         })
-	        try {
-	          imported.push(await converter.importReviewJson(file, { dateFormatPreference, statementLayout }))
-	        } catch (error) {
-	          throw new Error(
-	            `Failed to import ${file.name}: ${error instanceof Error ? error.message : 'Invalid JSON'}`,
-	            { cause: error },
-	          )
-	        }
-	      }
+        try {
+          imported.push(await converter.importReviewJson(file, { dateFormatPreference, statementLayout }))
+        } catch (error) {
+          throw new Error(
+            `Failed to import ${file.name}: ${error instanceof Error ? error.message : 'Invalid JSON'}`,
+            { cause: error },
+          )
+        }
+      }
 
-	      if (normalFiles.length === 0) {
-	        const importedPrefs = imported[0]?.parsingPreferences
-	        if (importedPrefs?.statementLayout || importedPrefs?.dateFormatPreference) {
+      if (normalFiles.length === 0) {
+        const importedPrefs = imported[0]?.parsingPreferences
+        if (importedPrefs?.statementLayout || importedPrefs?.dateFormatPreference) {
 	          applyParsingPreferences({
 	            statementLayout: importedPrefs.statementLayout,
 	            dateFormatPreference: importedPrefs.dateFormatPreference,

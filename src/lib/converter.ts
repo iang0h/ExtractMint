@@ -86,7 +86,6 @@ type ProgressCallback = (event: ProgressEvent) => void
 export type DateFormatPreference = 'auto' | 'dmy' | 'mdy'
 
 export type StatementLayout = 'auto' | 'amount_balance' | 'debit_credit_balance'
-
 export type ExtractionOptions = {
   forceOcr?: boolean
   ocrLanguage?: string
@@ -1196,7 +1195,11 @@ export async function importReviewJson(file: File, options: ExtractionOptions = 
           payload.statementPeriod as ConversionResult['statementPeriod'],
           parsingPreferences?.dateFormatPreference ?? options.dateFormatPreference ?? 'auto',
         )
-      : refreshStatementPeriod(rows, undefined, parsingPreferences?.dateFormatPreference ?? options.dateFormatPreference ?? 'auto')
+      : refreshStatementPeriod(
+          rows,
+          undefined,
+          parsingPreferences?.dateFormatPreference ?? options.dateFormatPreference ?? 'auto',
+        )
 
   return {
     fileName,
