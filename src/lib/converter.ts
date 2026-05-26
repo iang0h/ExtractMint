@@ -52,6 +52,7 @@ export type ConversionResult = {
   fileName: string
   fileType: string
   currencyCode: string
+  currencyDetected?: string
   statementPeriod?: {
     start?: string
     end?: string
@@ -893,6 +894,7 @@ export function createReviewJsonBlob(result: ConversionResult) {
     fileName: result.fileName,
     fileType: result.fileType,
     currencyCode: result.currencyCode,
+    currencyDetected: result.currencyDetected ?? result.currencyCode,
     statementPeriod: result.statementPeriod,
     fileMeta: result.fileMeta,
     processedAt: result.processedAt,
@@ -1086,6 +1088,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   const fileName = asString(payload.fileName) ?? file.name
   const fileType = asString(payload.fileType) ?? 'application/json'
   const currencyCode = asString(payload.currencyCode) ?? 'USD'
+  const currencyDetected = asString(payload.currencyDetected) ?? currencyCode
   const processedAt = asString(payload.processedAt) ?? asString(payload.createdAt) ?? new Date().toISOString()
 
   const summary =
@@ -1144,6 +1147,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
     fileName,
     fileType,
     currencyCode,
+    currencyDetected,
     statementPeriod,
     fileMeta,
     rawText: '',
@@ -1665,6 +1669,7 @@ function parseRawText(
     fileName,
     fileType,
     currencyCode,
+    currencyDetected: currencyCode,
     statementPeriod,
     fileMeta,
     rawText: normalized,
