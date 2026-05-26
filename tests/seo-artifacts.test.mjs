@@ -8,17 +8,19 @@ const llms = readText('public/llms.txt')
 const vercel = JSON.parse(readText('vercel.json'))
 const openapi = JSON.parse(readText('public/openapi.json'))
 
+const canonicalOrigin = 'https://extractmint.iangoh.com'
+
 const markdownMirrors = [
-  'https://extractmint.vercel.app/index.md',
-  'https://extractmint.vercel.app/pricing/index.md',
-  'https://extractmint.vercel.app/privacy/index.md',
-  'https://extractmint.vercel.app/security/index.md',
-  'https://extractmint.vercel.app/convert/bank-statement-to-excel/index.md',
-  'https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/index.md',
-  'https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/index.md',
-  'https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/index.md',
-  'https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/index.md',
-  'https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/index.md',
+  `${canonicalOrigin}/index.md`,
+  `${canonicalOrigin}/pricing/index.md`,
+  `${canonicalOrigin}/privacy/index.md`,
+  `${canonicalOrigin}/security/index.md`,
+  `${canonicalOrigin}/convert/bank-statement-to-excel/index.md`,
+  `${canonicalOrigin}/convert/pdf-bank-statement-to-excel/index.md`,
+  `${canonicalOrigin}/convert/scanned-bank-statement-to-excel/index.md`,
+  `${canonicalOrigin}/convert/cimb-bank-statement-to-excel/index.md`,
+  `${canonicalOrigin}/convert/maybank-bank-statement-to-excel/index.md`,
+  `${canonicalOrigin}/convert/singapore-bank-statement-to-excel/index.md`,
 ]
 
 for (const url of markdownMirrors) {
@@ -37,6 +39,6 @@ assert.equal(openapi.openapi, '3.1.0')
 assert.equal(openapi.info.title, 'ExtractMint Agent API')
 assert.ok(openapi.paths['/api/agent/']?.post, 'OpenAPI must document POST /api/agent/')
 assert.match(llms, /OpenAPI/)
-assert.match(llms, /https:\/\/extractmint\.vercel\.app\/openapi\.json/)
+assert.match(llms, /https:\/\/extractmint\.iangoh\.com\/openapi\.json/)
 
 console.log('seo artifacts tests passed')

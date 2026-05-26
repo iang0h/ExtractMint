@@ -7,8 +7,12 @@
   },
   "servers": [
     {
+      "url": "https://extractmint.iangoh.com",
+      "description": "Production (custom domain)"
+    },
+    {
       "url": "https://extractmint.vercel.app",
-      "description": "Production"
+      "description": "Production (Vercel fallback)"
     }
   ],
   "paths": {
