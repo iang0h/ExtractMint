@@ -1459,16 +1459,12 @@ function App() {
     }
   }
 
-  const reparseActiveResult = async () => {
+  const reparseActiveResult = async (options: { skipEditedConfirm?: boolean } = {}) => {
     const target = activeResult
     if (!target) return
     const key = resultKey(target)
-    if (editedResultKeys[key]) {
-      const confirmed = window.confirm(
-        'Re-parsing will overwrite any manual row edits you made for this statement.\n\nTip: click “Export review JSON” first if you want a backup.\n\nContinue?',
-      )
-      if (!confirmed) return
-    }
+    const needsConfirm = Boolean(editedResultKeys[key])
+    if (needsConfirm && !options.skipEditedConfirm) return
     setIsReparsingActive(true)
     try {
       const converter = await loadConverter()
@@ -1509,6 +1505,25 @@ function App() {
     }
   }
 
+  const [reparseConfirmKey, setReparseConfirmKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!reparseConfirmKey) return
+    const currentKey = activeResult ? resultKey(activeResult) : null
+    if (currentKey !== reparseConfirmKey) setReparseConfirmKey(null)
+  }, [activeResult, reparseConfirmKey])
+
+  const requestReparseActiveResult = () => {
+    const target = activeResult
+    if (!target) return
+    const key = resultKey(target)
+    if (editedResultKeys[key]) {
+      setReparseConfirmKey(key)
+      return
+    }
+    void reparseActiveResult()
+  }
+
   const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
     event.preventDefault()
     setIsDragging(false)
@@ -1537,19 +1552,17 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  const downloadReviewJson = () => {
+  const downloadReviewJson = async () => {
     if (!activeResult) return
-    void (async () => {
-      const converter = await loadConverter()
-      const blob = converter.createReviewJsonBlob(activeResult)
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
-      anchor.href = url
-      anchor.download = `${baseName}.extractmint-review.json`
-      anchor.click()
-      URL.revokeObjectURL(url)
-    })()
+    const converter = await loadConverter()
+    const blob = converter.createReviewJsonBlob(activeResult)
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
+    anchor.href = url
+    anchor.download = `${baseName}.extractmint-review.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
   const downloadReviewPack = async () => {
@@ -2713,7 +2726,7 @@ function App() {
                     <button
                       type="button"
                       className="table-action"
-                      onClick={() => void reparseActiveResult()}
+                      onClick={() => requestReparseActiveResult()}
                       disabled={!activeResult || isProcessing || isReparsingActive}
                       title="Re-run extraction for this statement using the settings above (saved into review exports)."
                     >
@@ -2722,7 +2735,7 @@ function App() {
                     <button
                       type="button"
                       className="link-button"
-                      onClick={() => downloadReviewJson()}
+                      onClick={() => void downloadReviewJson()}
                       disabled={!activeResult || isProcessing || isReparsingActive}
                       title="Download a review JSON backup for this statement before experimenting with re-parse."
                     >
@@ -2744,6 +2757,54 @@ function App() {
                       Saved per file: {activeParsingPreferences?.statementLayout ?? statementLayout} ·{' '}
                       {activeParsingPreferences?.dateFormatPreference ?? dateFormatPreference}
                     </small>
+                  </div>
+                ) : null}
+
+                {reparseConfirmKey && activeResult && resultKey(activeResult) === reparseConfirmKey ? (
+                  <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm re-parse">
+                    <div className="modal">
+                      <h3>Re-parse will overwrite edits</h3>
+                      <p>
+                        You have manual row edits for this statement. Re-parsing will replace extracted rows and
+                        validation results.
+                      </p>
+                      <p className="modal-hint">Tip: export a review JSON backup before re-parsing.</p>
+                      <div className="modal-actions">
+                        <button
+                          type="button"
+                          className="table-action"
+                          onClick={() => {
+                            void (async () => {
+                              setReparseConfirmKey(null)
+                              await downloadReviewJson()
+                              await reparseActiveResult({ skipEditedConfirm: true })
+                            })()
+                          }}
+                          disabled={isProcessing || isReparsingActive}
+                        >
+                          Export JSON + re-parse
+                        </button>
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() => {
+                            setReparseConfirmKey(null)
+                            void reparseActiveResult({ skipEditedConfirm: true })
+                          }}
+                          disabled={isProcessing || isReparsingActive}
+                        >
+                          Re-parse only
+                        </button>
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() => setReparseConfirmKey(null)}
+                          disabled={isProcessing || isReparsingActive}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
 
