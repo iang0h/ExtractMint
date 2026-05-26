@@ -20,7 +20,8 @@ Export Singapore statement data to XLSX, CSV, DOCX, PDF, QBO, review JSON, revie
 
 ## Related Pages
 
-- [Bank statement to Excel](https://extractmint.vercel.app/convert/bank-statement-to-excel/)
-- [PDF bank statement to Excel](https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/)
-- [Scanned bank statement to Excel](https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/)
-
+- [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
+- [Bank statement to Xero CSV](https://extractmint.iangoh.com/convert/bank-statement-to-xero-csv/)
+- [Bank statement to QBO](https://extractmint.iangoh.com/convert/bank-statement-to-qbo/)
+- [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
+- [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)

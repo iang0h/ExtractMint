@@ -24,7 +24,9 @@ Use the exported workbook as a review surface before importing statement data in
 
 ## Related Pages
 
-- [CIMB statement to Excel](https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/)
-- [Scanned bank statement to Excel](https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/)
-- [Singapore bank statement to Excel](https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/)
-
+- [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
+- [Bank statement to Xero CSV](https://extractmint.iangoh.com/convert/bank-statement-to-xero-csv/)
+- [Bank statement to QBO](https://extractmint.iangoh.com/convert/bank-statement-to-qbo/)
+- [CIMB statement to Excel](https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/)
+- [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)
+- [Singapore bank statement to Excel](https://extractmint.iangoh.com/convert/singapore-bank-statement-to-excel/)

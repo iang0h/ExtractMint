@@ -32,5 +32,4 @@ Use the in-app **Trust & privacy** panel and click **Clear all local caches**. T
 
 ## Contact
 
-Home: https://extractmint.vercel.app/
-
+Home: https://extractmint.iangoh.com/

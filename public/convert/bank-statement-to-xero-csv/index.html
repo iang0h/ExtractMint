@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Bank Statement to Xero CSV Converter | ExtractMint</title>
+    <meta
+      name="description"
+      content="Convert bank statement PDFs into Xero-ready bank statement CSV files, plus Excel and generic CSV exports, with import checks and optional date normalization."
+    />
+    <link rel="canonical" href="https://extractmint.iangoh.com/convert/bank-statement-to-xero-csv/" />
+    <link rel="stylesheet" href="/seo.css" />
+    <meta property="og:title" content="Bank Statement to Xero CSV Converter | ExtractMint" />
+    <meta
+      property="og:description"
+      content="Export a Xero-ready bank statement CSV from your statement PDF with checks for common import failures."
+    />
+    <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "ExtractMint",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://extractmint.iangoh.com/",
+        "description": "ExtractMint converts bank statements into Xero-ready CSV, Excel, and review-pack exports.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true">EM</span>
+          ExtractMint
+        </a>
+        <div class="nav-links">
+          <a href="/#converter">Converter</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/convert/bank-statement-to-excel/">Excel export</a>
+        </div>
+      </nav>
+
+      <main>
+        <section class="hero">
+          <div>
+            <span class="eyebrow">Bank statement to Xero CSV</span>
+            <h1>Convert statement PDFs into Xero bank statement CSV imports.</h1>
+            <p class="lede">
+              ExtractMint exports a Xero-ready bank statement CSV, with optional date normalization and
+              import checks for missing dates, missing amounts, and likely duplicate rows.
+            </p>
+            <div class="cta-row">
+              <a class="button" href="/#converter">Upload a statement</a>
+              <a class="button secondary" href="/convert/bank-statement-to-qbo/">Need QuickBooks instead?</a>
+            </div>
+          </div>
+          <aside class="demo-card" aria-label="Xero import checks preview">
+            <div class="drop">
+              <strong>Xero import checks</strong>
+              <div class="progress"><span></span></div>
+            </div>
+            <div class="sheet">
+              <div class="sheet-head"><span>Check</span><span>Why it matters</span><span>Status</span><span>Fix</span></div>
+              <div class="sheet-row"><span>Date format</span><span>Xero expects your org locale</span><span>Review</span><span>Normalize to ISO</span></div>
+              <div class="sheet-row highlight"><span>Missing amount</span><span>Rows get skipped on import</span><span>Review</span><span>Edit row</span></div>
+              <div class="sheet-row"><span>Reference duplicates</span><span>Can be silently deduped</span><span>Review</span><span>Make reference unique</span></div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="grid">
+          <article class="panel">
+            <h2>Xero-ready CSV format</h2>
+            <p>Download a bank statement CSV that matches Xero’s import expectations (date, amount, and description fields).</p>
+          </article>
+          <article class="panel">
+            <h2>Date normalization</h2>
+            <p>Optionally normalize ambiguous numeric dates to ISO YYYY-MM-DD before import.</p>
+          </article>
+          <article class="panel">
+            <h2>Import sanity checks</h2>
+            <p>Warnings help catch blank dates, blank amounts, and potential duplicates before you upload.</p>
+          </article>
+        </section>
+
+        <section class="panel">
+          <h2>Best fit</h2>
+          <ul>
+            <li>Accountants importing client bank statement rows into Xero.</li>
+            <li>Operators converting PDF statements into bookkeeping-ready imports.</li>
+            <li>Teams that want a browser-side workflow before adding a SaaS backend.</li>
+          </ul>
+        </section>
+
+        <section class="faq">
+          <details open>
+            <summary>Why do Xero imports fail or skip rows?</summary>
+            <p>Common causes include mismatched date formats for your Xero region, blank amounts, and duplicate references. ExtractMint surfaces these issues so you can fix them before import.</p>
+          </details>
+          <details>
+            <summary>Does the file leave my computer?</summary>
+            <p>The current static app processes files in the browser. A future SaaS backend should add explicit retention controls and audit logs.</p>
+          </details>
+        </section>
+
+        <section class="related" aria-label="Related converters">
+          <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
+          <a href="/convert/pdf-bank-statement-to-excel/">PDF bank statement guide</a>
+          <a href="/convert/scanned-bank-statement-to-excel/">Scanned statement OCR</a>
+          <a href="/convert/bank-statement-to-qbo/">Bank statement to QBO</a>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>ExtractMint</span>
+        <span>Bank statements, receipts, invoices, and scans to clean working files.</span>
+      </footer>
+    </div>
+  </body>
+</html>
+
