@@ -901,6 +901,34 @@ footer span {
   margin-top: 0;
 }
 
+.export-sanity-notes {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.export-sanity-note {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 10px 9px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.export-sanity-note strong {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.export-sanity-note span {
+  display: block;
+  margin-top: 3px;
+}
+
 .export-options label {
   display: inline-flex;
   align-items: center;

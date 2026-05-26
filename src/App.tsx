@@ -55,6 +55,16 @@ type ExportSanitySnapshot = {
   hasBalanceTrail: boolean
 }
 
+type XeroSanitySnapshot = {
+  missingDateCount: number
+  missingAmountCount: number
+  ambiguousDateCount: number
+  nonIsoDateCount: number
+  duplicateLineCount: number
+  warningCount: number
+  warnings: Array<{ label: string; detail: string }>
+}
+
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
   try {
@@ -102,6 +112,83 @@ const exportSanitySnapshot = (result: ConversionResult): ExportSanitySnapshot =>
     transactionNet: roundMoney(transactionNet),
     discrepancy: discrepancy !== undefined ? roundMoney(discrepancy) : undefined,
     hasBalanceTrail,
+  }
+}
+
+const xeroSanitySnapshot = (result: ConversionResult): XeroSanitySnapshot => {
+  const xeroAmountForRow = (row: ConversionResult['rows'][number]) => {
+    if (row.amount !== undefined && Number.isFinite(row.amount)) return row.amount
+    const deposit = row.deposit
+    const withdrawal = row.withdrawal
+    const hasDeposit = deposit !== undefined && Number.isFinite(deposit)
+    const hasWithdrawal = withdrawal !== undefined && Number.isFinite(withdrawal)
+    if (hasDeposit || hasWithdrawal) return (hasDeposit ? deposit ?? 0 : 0) - (hasWithdrawal ? withdrawal ?? 0 : 0)
+    return undefined
+  }
+
+  const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const numericDateMatch = (value: string) => value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+
+  let missingDateCount = 0
+  let missingAmountCount = 0
+  let ambiguousDateCount = 0
+  let nonIsoDateCount = 0
+  const duplicates = new Map<string, number>()
+
+  for (const row of result.rows) {
+    const date = (row.date ?? '').trim()
+    if (!date) {
+      missingDateCount += 1
+    } else if (!isIsoDate(date)) {
+      const match = numericDateMatch(date)
+      if (match) {
+        const first = Number.parseInt(match[1] ?? '', 10)
+        const second = Number.parseInt(match[2] ?? '', 10)
+        if (Number.isFinite(first) && Number.isFinite(second) && first >= 1 && first <= 12 && second >= 1 && second <= 12) {
+          ambiguousDateCount += 1
+        }
+      } else {
+        nonIsoDateCount += 1
+      }
+    }
+
+    const amount = xeroAmountForRow(row)
+    if (amount === undefined || !Number.isFinite(amount)) missingAmountCount += 1
+
+    const duplicateKey = [date, String(Math.round((amount ?? 0) * 100) / 100), row.description ?? '', row.reference ?? ''].join('|')
+    duplicates.set(duplicateKey, (duplicates.get(duplicateKey) ?? 0) + 1)
+  }
+
+  const duplicateLineCount = Array.from(duplicates.values()).reduce((sum, count) => sum + (count > 1 ? count - 1 : 0), 0)
+
+  const warnings: XeroSanitySnapshot['warnings'] = []
+  if (missingDateCount > 0) warnings.push({ label: 'Missing dates', detail: `${missingDateCount} row(s) have an empty Date.` })
+  if (missingAmountCount > 0)
+    warnings.push({ label: 'Missing amounts', detail: `${missingAmountCount} row(s) have no Amount (and no deposit/withdrawal to derive it).` })
+  if (ambiguousDateCount > 0)
+    warnings.push({
+      label: 'Ambiguous numeric dates',
+      detail: `${ambiguousDateCount} row(s) look like DD/MM/YYYY or MM/DD/YYYY (ambiguous). Xero applies one date format to the whole import.`,
+    })
+  if (nonIsoDateCount > 0)
+    warnings.push({
+      label: 'Non-ISO dates',
+      detail: `${nonIsoDateCount} row(s) are not YYYY-MM-DD and not a simple numeric date. Consider normalizing dates before importing.`,
+    })
+  if (duplicateLineCount > 0)
+    warnings.push({
+      label: 'Potential duplicates',
+      detail: `${duplicateLineCount} line(s) appear duplicated (same date/amount/description/reference). Xero may skip duplicates on import.`,
+    })
+
+  return {
+    missingDateCount,
+    missingAmountCount,
+    ambiguousDateCount,
+    nonIsoDateCount,
+    duplicateLineCount,
+    warningCount: warnings.length,
+    warnings,
   }
 }
 
@@ -2039,6 +2126,47 @@ function App() {
                           <strong>{formatAmount(snapshot.discrepancy, activeResult.currencyCode)}</strong>
                         </div>
                       </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            ) : null}
+
+            {activeResult ? (
+              <div className="export-sanity" aria-label="Xero import checks">
+                {(() => {
+                  const snapshot = xeroSanitySnapshot(activeResult)
+                  const status =
+                    snapshot.warningCount === 0
+                      ? { label: 'Ready for import', className: 'is-valid' }
+                      : snapshot.missingDateCount > 0 || snapshot.missingAmountCount > 0
+                        ? { label: 'Missing required fields', className: 'is-missing' }
+                        : { label: 'Warnings — review', className: 'is-review' }
+
+                  return (
+                    <div className={`export-sanity-card ${status.className}`}>
+                      <div className="export-sanity-header">
+                        <div>
+                          <strong>Xero CSV import checks</strong>
+                          <small>Flags common reasons Xero imports fail or skip lines.</small>
+                        </div>
+                        <span className="export-sanity-status">{status.label}</span>
+                      </div>
+
+                      {snapshot.warningCount === 0 ? (
+                        <div className="export-sanity-notes">
+                          <div className="export-sanity-note">Date and Amount are present for every row (based on extracted data).</div>
+                        </div>
+                      ) : (
+                        <div className="export-sanity-notes">
+                          {snapshot.warnings.map((warning) => (
+                            <div key={warning.label} className="export-sanity-note">
+                              <strong>{warning.label}</strong>
+                              <span>{warning.detail}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 })()}
