@@ -824,6 +824,10 @@ export function createQboBlob(result: ConversionResult) {
   return new Blob([parts.join('\n')], { type: 'application/x-ofx' })
 }
 
+export function createOfxBlob(result: ConversionResult) {
+  return createQboBlob(result)
+}
+
 export async function createDocxBlob(result: ConversionResult) {
   const {
     Document,
