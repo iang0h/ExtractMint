@@ -420,6 +420,7 @@ type TelemetryEvent = {
 }
 
 const TELEMETRY_STORAGE_KEY = 'extractmint.telemetry.v1'
+const TELEMETRY_EXPORT_SCHEMA = 'extractmint.telemetry-export.v1'
 
 type ParsingProfile = 'auto' | 'sg' | 'us' | 'eu' | 'custom'
 
@@ -1400,11 +1401,32 @@ function App() {
     })()
   }
 
+  const downloadTelemetryExport = () => {
+    if (telemetryEvents.length === 0) return
+    const payload = {
+      schema: TELEMETRY_EXPORT_SCHEMA,
+      createdAt: new Date().toISOString(),
+      origin: window.location.origin,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      userAgent: navigator.userAgent,
+      events: telemetryEvents,
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    const stamp = new Date().toISOString().slice(0, 10)
+    anchor.href = url
+    anchor.download = `extractmint-telemetry-${stamp}.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
   const copySupportRequest = () => {
     if (!activeResult) return
     void (async () => {
       const converter = await loadConverter()
       const diagnostic = converter.createPrivacySafeDiagnostic(activeResult)
+      const telemetrySample = telemetryEvents.slice(0, 12)
       const payload = {
         app: 'ExtractMint',
         origin: window.location.origin,
@@ -1417,6 +1439,11 @@ function App() {
           sha256Prefix: activeResult.fileMeta.sha256 ? activeResult.fileMeta.sha256.slice(0, 10) : undefined,
         },
         diagnostic,
+        telemetry: {
+          note: 'Local-only counts/signals (no statement text/rows/filenames).',
+          totalStored: telemetryEvents.length,
+          sample: telemetrySample,
+        },
       }
 
       const body = [
@@ -1982,6 +2009,10 @@ function App() {
                           Copies a pre-filled support request (JSON) to your clipboard. Paste into email and optionally attach the Diagnostic
                           export.
                         </small>
+                        <button type="button" onClick={downloadTelemetryExport} disabled={telemetryEvents.length === 0}>
+                          Download telemetry export (privacy-safe)
+                        </button>
+                        <small>Downloads local-only telemetry (counts/signals, no statement text/rows/filenames) as JSON.</small>
                         {supportMailtoHref ? (
                           <>
                             <button
