@@ -2164,46 +2164,57 @@ function App() {
                 <FileArchive size={16} />
                 Review pack (ZIP)
               </button>
-	              <button
-	                onClick={downloadDiagnostic}
-	                disabled={!activeResult}
-	                title="Downloads a privacy-safe diagnostic JSON (no transactions) to help support new bank formats."
-	              >
-	                <Tag size={16} />
-	                Diagnostic
-	              </button>
-	              <button
-	                onClick={copySupportRequest}
-	                disabled={!activeResult}
-	                title="Copies a pre-filled, privacy-safe support request to your clipboard (no statement text/rows/filename)."
-	              >
-	                <Copy size={16} />
-	                Support copy
-	              </button>
-	              <button onClick={() => void downloadBlob('docx')} disabled={!activeResult}>
-	                <FileText size={16} />
-	                Google Docs
-	              </button>
-              <button onClick={() => void downloadBlob('pdf')} disabled={!activeResult}>
-                <FileText size={16} />
-                PDF
-              </button>
-              <button onClick={() => void downloadBlob('csv')} disabled={!activeResult}>
-                <ArrowDownToLine size={16} />
-                CSV
-              </button>
-              <button onClick={() => void downloadBlob('qbo')} disabled={!activeResult}>
-                <ReceiptText size={16} />
-                QuickBooks (QBO)
-              </button>
-              <button
-                onClick={() => void downloadBlob('ofx')}
-                disabled={!activeResult}
-                title="Downloads an OFX file you can import into accounting software that supports Open Financial Exchange."
-              >
-                <ReceiptText size={16} />
-                OFX
-              </button>
+              <details className="export-menu">
+                <summary aria-label="Open export format menu">More exports</summary>
+                <div className="export-menu-panel" role="group" aria-label="Additional export formats">
+                  <button onClick={() => void downloadBlob('csv')} disabled={!activeResult}>
+                    <ArrowDownToLine size={16} />
+                    CSV
+                  </button>
+                  <button onClick={() => void downloadBlob('pdf')} disabled={!activeResult}>
+                    <FileText size={16} />
+                    PDF
+                  </button>
+                  <button onClick={() => void downloadBlob('docx')} disabled={!activeResult}>
+                    <FileText size={16} />
+                    Google Docs
+                  </button>
+                  <button onClick={() => void downloadBlob('qbo')} disabled={!activeResult}>
+                    <ReceiptText size={16} />
+                    QuickBooks (QBO)
+                  </button>
+                  <button
+                    onClick={() => void downloadBlob('ofx')}
+                    disabled={!activeResult}
+                    title="Downloads an OFX file you can import into accounting software that supports Open Financial Exchange."
+                  >
+                    <ReceiptText size={16} />
+                    OFX
+                  </button>
+                </div>
+              </details>
+
+              <details className="export-menu export-menu-support">
+                <summary aria-label="Open support tools menu">Support</summary>
+                <div className="export-menu-panel" role="group" aria-label="Support tools">
+                  <button
+                    onClick={downloadDiagnostic}
+                    disabled={!activeResult}
+                    title="Downloads a privacy-safe diagnostic JSON (no transactions) to help support new bank formats."
+                  >
+                    <Tag size={16} />
+                    Diagnostic
+                  </button>
+                  <button
+                    onClick={copySupportRequest}
+                    disabled={!activeResult}
+                    title="Copies a pre-filled, privacy-safe support request to your clipboard (no statement text/rows/filename)."
+                  >
+                    <Copy size={16} />
+                    Support copy
+                  </button>
+                </div>
+              </details>
             </div>
 
             {activeResult ? (
