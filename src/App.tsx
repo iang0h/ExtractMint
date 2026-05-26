@@ -67,6 +67,15 @@ type XeroSanitySnapshot = {
 
 type XeroAmbiguousDateFormat = 'dmy' | 'mdy'
 
+type XeroDateFormatDetection = {
+  format: XeroAmbiguousDateFormat | 'unknown'
+  totalNumericDates: number
+  dmySignals: number
+  mdySignals: number
+  ambiguousNumericDates: number
+  conflictingSignals: boolean
+}
+
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
   try {
@@ -201,6 +210,52 @@ const xeroSanitySnapshot = (
     warningCount: warnings.length,
     warnings,
   }
+}
+
+const detectXeroNumericDateFormat = (result: ConversionResult): XeroDateFormatDetection => {
+  const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const numericDateMatch = (value: string) => value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+
+  let totalNumericDates = 0
+  let dmySignals = 0
+  let mdySignals = 0
+  let ambiguousNumericDates = 0
+
+  for (const row of result.rows) {
+    const rawDate = (row.date ?? '').trim()
+    if (!rawDate || isIsoDate(rawDate)) continue
+    const match = numericDateMatch(rawDate)
+    if (!match) continue
+    const first = Number.parseInt(match[1] ?? '', 10)
+    const second = Number.parseInt(match[2] ?? '', 10)
+    if (!Number.isFinite(first) || !Number.isFinite(second)) continue
+    if (first < 1 || first > 31 || second < 1 || second > 31) continue
+
+    totalNumericDates += 1
+
+    const firstCanBeMonth = first >= 1 && first <= 12
+    const secondCanBeMonth = second >= 1 && second <= 12
+    if (firstCanBeMonth && secondCanBeMonth) {
+      ambiguousNumericDates += 1
+      continue
+    }
+
+    if (!firstCanBeMonth && secondCanBeMonth) {
+      dmySignals += 1
+      continue
+    }
+
+    if (firstCanBeMonth && !secondCanBeMonth) {
+      mdySignals += 1
+      continue
+    }
+  }
+
+  const conflictingSignals = dmySignals > 0 && mdySignals > 0
+  const format: XeroDateFormatDetection['format'] =
+    conflictingSignals || (dmySignals === 0 && mdySignals === 0) ? 'unknown' : dmySignals > 0 ? 'dmy' : 'mdy'
+
+  return { format, totalNumericDates, dmySignals, mdySignals, ambiguousNumericDates, conflictingSignals }
 }
 
 const supportItems = [
@@ -564,6 +619,10 @@ function App() {
     const raw = storedValue('extractmint.xeroAmbiguousDateFormat')
     return raw === 'mdy' ? 'mdy' : 'dmy'
   })
+  const xeroAmbiguousDateFormatExplicitRef = useRef<boolean>((() => {
+    const raw = storedValue('extractmint.xeroAmbiguousDateFormat')
+    return raw === 'dmy' || raw === 'mdy'
+  })())
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const [pdfPage, setPdfPage] = useState(1)
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null)
@@ -625,6 +684,20 @@ function App() {
   const activeResult = results[activeIndex] ?? results[0]
   const activeSha = activeResult?.fileMeta?.sha256
   const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
+  const xeroDateFormatDetection = useMemo(
+    () => (activeResult ? detectXeroNumericDateFormat(activeResult) : null),
+    [activeResult],
+  )
+
+  useEffect(() => {
+    if (!activeResult) return
+    if (!xeroNormalizeDates) return
+    if (xeroAmbiguousDateFormatExplicitRef.current) return
+    const detected = detectXeroNumericDateFormat(activeResult)
+    if (detected.format === 'dmy' || detected.format === 'mdy') {
+      setXeroAmbiguousDateFormat(detected.format)
+    }
+  }, [activeResult, xeroNormalizeDates])
   const supportMailtoHref = useMemo(() => {
     if (!supportEmail) return null
     const subject = 'ExtractMint support request'
@@ -2236,6 +2309,7 @@ function App() {
                         name="xeroAmbiguousDateFormat"
                         checked={xeroAmbiguousDateFormat === 'dmy'}
                         onChange={() => {
+                          xeroAmbiguousDateFormatExplicitRef.current = true
                           setXeroAmbiguousDateFormat('dmy')
                           storeValue('extractmint.xeroAmbiguousDateFormat', 'dmy')
                         }}
@@ -2248,12 +2322,31 @@ function App() {
                         name="xeroAmbiguousDateFormat"
                         checked={xeroAmbiguousDateFormat === 'mdy'}
                         onChange={() => {
+                          xeroAmbiguousDateFormatExplicitRef.current = true
                           setXeroAmbiguousDateFormat('mdy')
                           storeValue('extractmint.xeroAmbiguousDateFormat', 'mdy')
                         }}
                       />
                       Assume MM/DD/YYYY
                     </label>
+                    {xeroDateFormatDetection ? (
+                      <div className="export-options-hint" role="note">
+                        {xeroDateFormatDetection.format === 'unknown' ? (
+                          <span>
+                            Date format detection: no clear signal. If your statement uses numeric dates, pick the locale that matches your bank.
+                          </span>
+                        ) : (
+                          <span>
+                            Date format detection: looks like{' '}
+                            {xeroDateFormatDetection.format === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'} (based on{' '}
+                            {xeroDateFormatDetection.format === 'dmy'
+                              ? xeroDateFormatDetection.dmySignals
+                              : xeroDateFormatDetection.mdySignals}{' '}
+                            unambiguous numeric date(s)). You can override.
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
                   </>
                 ) : null}
               </div>

@@ -944,6 +944,14 @@ footer span {
   height: 14px;
 }
 
+.export-options-hint {
+  flex-basis: 100%;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .summary-band,
 .results-section,
 .workflow-section,
