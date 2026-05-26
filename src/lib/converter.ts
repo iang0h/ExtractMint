@@ -676,16 +676,40 @@ function xeroAmountForRow(row: ExtractedRow) {
 }
 
 export function createXeroCsvBlob(result: ConversionResult) {
+  return createXeroCsvBlobWithOptions(result, {})
+}
+
+export function createXeroCsvBlobWithOptions(
+  result: ConversionResult,
+  options: { makeReferenceUnique?: boolean } = {},
+) {
+  const makeReferenceUnique = options.makeReferenceUnique === true
+  const seenReferences = new Map<string, number>()
+
+  const uniqueReferenceForRow = (raw: string, rowIndex: number) => {
+    const base = (raw ?? '').trim()
+    const fallback = `EM-${rowIndex + 1}`
+    const candidate = base || fallback
+    const nextCount = (seenReferences.get(candidate) ?? 0) + 1
+    seenReferences.set(candidate, nextCount)
+    if (nextCount === 1) return candidate
+    const suffixed = `${candidate} ${nextCount}`
+    return suffixed.length > 80 ? suffixed.slice(0, 80).trim() : suffixed
+  }
+
   const rows = [
     ['Date', 'Amount', 'Payee', 'Description', 'Reference'],
-    ...result.rows.map((row) => {
+    ...result.rows.map((row, rowIndex) => {
       const amount = xeroAmountForRow(row)
+      const reference = makeReferenceUnique
+        ? uniqueReferenceForRow(row.reference ?? '', rowIndex)
+        : (row.reference ?? '')
       return [
         normalizeXeroDate(row.date ?? ''),
         amount === undefined ? '' : String(Math.round(amount * 100) / 100),
         '',
         row.description,
-        row.reference ?? '',
+        reference,
       ]
     }),
   ]

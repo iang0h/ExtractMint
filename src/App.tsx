@@ -178,7 +178,7 @@ const xeroSanitySnapshot = (result: ConversionResult): XeroSanitySnapshot => {
   if (duplicateLineCount > 0)
     warnings.push({
       label: 'Potential duplicates',
-      detail: `${duplicateLineCount} line(s) appear duplicated (same date/amount/description/reference). Xero may skip duplicates on import.`,
+      detail: `${duplicateLineCount} line(s) appear duplicated (same date/amount/description/reference). Xero may skip duplicates on import. Consider enabling “Make Xero Reference unique” before exporting.`,
     })
 
   return {
@@ -542,6 +542,9 @@ function App() {
   const [cacheClearStatus, setCacheClearStatus] = useState<'idle' | 'clearing' | 'done' | 'error'>('idle')
   const [includeSourcesInReviewPack, setIncludeSourcesInReviewPack] = useState(
     () => storedValue('extractmint.reviewPackIncludeSources') === '1',
+  )
+  const [xeroMakeReferenceUnique, setXeroMakeReferenceUnique] = useState(
+    () => storedValue('extractmint.xeroMakeReferenceUnique') === '1',
   )
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const [pdfPage, setPdfPage] = useState(1)
@@ -1300,7 +1303,10 @@ function App() {
     const creators = {
       xlsx: converter.createExcelBlob,
       csv: converter.createCsvBlob,
-      xero: converter.createXeroCsvBlob,
+      xero: (result: ConversionResult) =>
+        converter.createXeroCsvBlobWithOptions(result, {
+          makeReferenceUnique: xeroMakeReferenceUnique,
+        }),
       docx: converter.createDocxBlob,
       pdf: converter.createPdfBlob,
       qbo: converter.createQboBlob,
@@ -2170,6 +2176,23 @@ function App() {
                     </div>
                   )
                 })()}
+              </div>
+            ) : null}
+
+            {activeResult ? (
+              <div className="export-options" aria-label="Xero export options">
+                <label title="Ensures every Xero Reference is non-empty and unique so Xero is less likely to silently skip duplicates on import.">
+                  <input
+                    type="checkbox"
+                    checked={xeroMakeReferenceUnique}
+                    onChange={(event) => {
+                      const next = event.target.checked
+                      setXeroMakeReferenceUnique(next)
+                      storeValue('extractmint.xeroMakeReferenceUnique', next ? '1' : '0')
+                    }}
+                  />
+                  Make Xero Reference unique
+                </label>
               </div>
             ) : null}
 
