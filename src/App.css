@@ -786,6 +786,53 @@ footer span {
   opacity: 0.48;
 }
 
+.export-row details.export-menu {
+  display: contents;
+}
+
+.export-row details.export-menu summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 720;
+  cursor: pointer;
+  user-select: none;
+}
+
+.export-row details.export-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.export-row details.export-menu summary:hover {
+  border-color: #a8b5aa;
+  background: #f7fbf5;
+}
+
+.export-row details.export-menu[open] summary {
+  border-color: #a8b5aa;
+  background: #f0f7ec;
+}
+
+.export-row .export-menu-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 14px 30px rgba(44, 53, 44, 0.08);
+}
+
 .export-options {
   padding: 0 20px 20px;
   display: flex;
@@ -2284,6 +2331,10 @@ footer strong {
   }
 
   .export-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .export-row .export-menu-panel {
     grid-template-columns: repeat(2, 1fr);
   }
 
