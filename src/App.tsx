@@ -520,8 +520,6 @@ const TELEMETRY_EXPORT_SCHEMA = 'extractmint.telemetry-export.v1'
 
 type ParsingProfile = 'auto' | 'sg' | 'us' | 'eu' | 'custom'
 
-type StatementLayout = 'auto' | 'amount_balance' | 'debit_credit_balance'
-
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL ?? '').trim()
