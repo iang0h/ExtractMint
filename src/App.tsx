@@ -1222,8 +1222,10 @@ function App() {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
+    const extension = format === 'xero' ? 'csv' : format
+    const exportTag = format === 'xero' ? '.xero' : ''
     anchor.href = url
-    anchor.download = `${baseName}.${format}`
+    anchor.download = `${baseName}${exportTag}.${extension}`
     anchor.click()
     URL.revokeObjectURL(url)
   }
