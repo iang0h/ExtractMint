@@ -6,7 +6,7 @@ Elegant static SaaS prototype for converting bank statements, receipts, scans, P
 
 - Animated React/Vite landing app and conversion workspace.
 - Client-side extraction for PDFs, images via OCR, DOCX, XLSX/XLS, CSV, and TXT.
-- Export buttons for Excel `.xlsx`, Google Docs-ready `.docx`, `.pdf`, `.csv`, and QuickBooks-ready `.qbo` (OFX).
+- Export buttons for Excel `.xlsx`, Google Docs-ready `.docx`, `.pdf`, generic `.csv`, Xero-ready bank statement `.csv`, and QuickBooks-ready `.qbo` (OFX).
 - Accountant-oriented exports:
   - Per-file review JSON (`*.extractmint-review.json`) with validation flags and SHA-256 fingerprint.
   - Review pack ZIP export with one `.xlsx` + review JSON per uploaded file (and ZIP import by uploading the pack back into the app).

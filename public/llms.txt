@@ -1,6 +1,6 @@
 # ExtractMint
 
-> ExtractMint converts bank statements, receipts, invoices, scans, PDFs, DOCX files, spreadsheets, CSV, and plain text into clean Excel, CSV, DOCX, PDF, QBO, and review-pack exports.
+> ExtractMint converts bank statements, receipts, invoices, scans, PDFs, DOCX files, spreadsheets, CSV, and plain text into clean Excel, CSV, Xero-ready CSV, DOCX, PDF, QBO, and review-pack exports.
 
 Website: https://extractmint.vercel.app/
 
@@ -13,7 +13,7 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 ## What ExtractMint Does
 
 - Converts bank statement PDFs into spreadsheet-friendly rows.
-- Exports Excel XLSX, CSV, Google Docs-ready DOCX, PDF summaries, QuickBooks-ready QBO, review JSON, review-pack ZIP, and combined workbooks.
+- Exports Excel XLSX, CSV, Xero-ready CSV, Google Docs-ready DOCX, PDF summaries, QuickBooks-ready QBO, review JSON, review-pack ZIP, and combined workbooks.
 - Handles text PDFs, DOCX files, spreadsheets, CSV, plain text, receipts, invoices, and images.
 - Uses browser-side parsing and OCR in the current static implementation.
 - Preserves transaction fields such as date, description, reference, withdrawal, deposit, tax, amount, category, and balance where available.

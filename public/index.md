@@ -19,6 +19,7 @@ ExtractMint is a browser-based financial document extraction product for operato
 - Excel XLSX
 - Combined XLSX workbooks
 - CSV
+- Xero-ready CSV
 - Google Docs-ready DOCX
 - PDF summaries
 - QuickBooks-ready QBO
@@ -40,6 +41,7 @@ ExtractMint is a browser-based financial document extraction product for operato
 - Balance-trail checks for bank statement reconciliation.
 - Review JSON import and export for resume-later workflows.
 - QuickBooks QBO export for accountant handoff.
+- Xero-ready CSV export for manual statement imports.
 - FreeLLMAPI-ready Ask ExtractMint agent for conversion questions.
 
 ## Key Pages

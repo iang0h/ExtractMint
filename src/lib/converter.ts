@@ -641,6 +641,66 @@ export function createCsvBlob(result: ConversionResult) {
   return new Blob([csv], { type: 'text/csv;charset=utf-8' })
 }
 
+function normalizeXeroDate(raw: string) {
+  const value = (raw ?? '').trim()
+  if (!value) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const match = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+  if (!match) return value
+  const first = Number.parseInt(match[1] ?? '', 10)
+  const second = Number.parseInt(match[2] ?? '', 10)
+  const year = Number.parseInt(match[3] ?? '', 10)
+  if (!Number.isFinite(first) || !Number.isFinite(second) || !Number.isFinite(year)) return value
+
+  const inferDayMonth = () => {
+    if (first > 12 && second <= 12) return { day: first, month: second }
+    if (second > 12 && first <= 12) return { day: second, month: first }
+    return null
+  }
+
+  const inferred = inferDayMonth()
+  if (!inferred) return value
+  const day = String(inferred.day).padStart(2, '0')
+  const month = String(inferred.month).padStart(2, '0')
+  return `${String(year).padStart(4, '0')}-${month}-${day}`
+}
+
+function xeroAmountForRow(row: ExtractedRow) {
+  if (row.amount !== undefined && Number.isFinite(row.amount)) return row.amount
+  const deposit = row.deposit
+  const withdrawal = row.withdrawal
+  const hasDeposit = deposit !== undefined && Number.isFinite(deposit)
+  const hasWithdrawal = withdrawal !== undefined && Number.isFinite(withdrawal)
+  if (hasDeposit || hasWithdrawal) return (hasDeposit ? deposit ?? 0 : 0) - (hasWithdrawal ? withdrawal ?? 0 : 0)
+  return undefined
+}
+
+export function createXeroCsvBlob(result: ConversionResult) {
+  const rows = [
+    ['Date', 'Amount', 'Payee', 'Description', 'Reference'],
+    ...result.rows.map((row) => {
+      const amount = xeroAmountForRow(row)
+      return [
+        normalizeXeroDate(row.date ?? ''),
+        amount === undefined ? '' : String(Math.round(amount * 100) / 100),
+        '',
+        row.description,
+        row.reference ?? '',
+      ]
+    }),
+  ]
+
+  const csv = rows
+    .map((row) =>
+      row
+        .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
+        .join(','),
+    )
+    .join('\n')
+
+  return new Blob([csv], { type: 'text/csv;charset=utf-8' })
+}
+
 function totalsForResult(result: ConversionResult) {
   return {
     amount: result.rows.reduce((sum, row) => sum + (row.amount ?? 0), 0),

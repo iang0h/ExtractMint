@@ -127,7 +127,7 @@ const workflow = [
   },
   {
     title: 'Download the file',
-    copy: 'Export Excel, CSV, DOCX, PDF, or QuickBooks-ready QBO so you can reconcile immediately.',
+    copy: 'Export Excel, CSV, DOCX, PDF, Xero-ready CSV, or QuickBooks-ready QBO so you can reconcile immediately.',
   },
 ]
 
@@ -156,7 +156,7 @@ const faqItems = [
   {
     question: 'What files can I download?',
     answer:
-      'You can download Excel XLSX, CSV, Google Docs-ready DOCX, PDF summaries, and a QuickBooks-ready QBO (OFX) file from the same extracted data.',
+      'You can download Excel XLSX, CSV, Xero-ready CSV, Google Docs-ready DOCX, PDF summaries, and a QuickBooks-ready QBO (OFX) file from the same extracted data.',
   },
   {
     question: 'Will scanned statements always work?',
@@ -1206,13 +1206,14 @@ function App() {
     void processFiles(event.dataTransfer.files)
   }
 
-  const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo') => {
+  const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo' | 'xero') => {
     if (!activeResult) return
 
     const converter = await loadConverter()
     const creators = {
       xlsx: converter.createExcelBlob,
       csv: converter.createCsvBlob,
+      xero: converter.createXeroCsvBlob,
       docx: converter.createDocxBlob,
       pdf: converter.createPdfBlob,
       qbo: converter.createQboBlob,
@@ -1970,6 +1971,14 @@ function App() {
               <button onClick={() => void downloadBlob('csv')} disabled={!activeResult}>
                 <ArrowDownToLine size={16} />
                 CSV
+              </button>
+              <button
+                onClick={() => void downloadBlob('xero')}
+                disabled={!activeResult}
+                title="Exports a Xero-friendly bank statement CSV (Date, Amount, Payee, Description, Reference)."
+              >
+                <ArrowDownToLine size={16} />
+                Xero (CSV)
               </button>
               <button onClick={() => void downloadBlob('qbo')} disabled={!activeResult}>
                 <ReceiptText size={16} />
