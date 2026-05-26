@@ -536,6 +536,7 @@ function App() {
     return Number.isFinite(parsed) ? Math.max(1, Math.min(99, parsed)) : 70
   })
   const [editRows, setEditRows] = useState(false)
+  const [editedResultKeys, setEditedResultKeys] = useState<Record<string, true>>({})
   const [showSourcePreview, setShowSourcePreview] = useState(
     () => storedValue('extractmint.showSourcePreview') === '1',
   )
@@ -1106,6 +1107,12 @@ function App() {
     return isNegative ? -numeric : numeric
   }
 
+  const resultKey = (result: ConversionResult) => {
+    const sha = result.fileMeta.sha256
+    if (sha) return `sha:${sha}`
+    return `sig:${fileSignatureParts(result.fileName, result.fileMeta.size, result.fileMeta.lastModified)}`
+  }
+
   const updateRow = (
     resultIndex: number,
     rowIndex: number,
@@ -1176,6 +1183,12 @@ function App() {
       }
       return nextResults
     })
+
+    const target = results[resultIndex]
+    if (target) {
+      const key = resultKey(target)
+      setEditedResultKeys((previous) => (previous[key] ? previous : { ...previous, [key]: true }))
+    }
   }
 
   const visibleRows = useMemo(() => {
@@ -1449,6 +1462,13 @@ function App() {
   const reparseActiveResult = async () => {
     const target = activeResult
     if (!target) return
+    const key = resultKey(target)
+    if (editedResultKeys[key]) {
+      const confirmed = window.confirm(
+        'Re-parsing will overwrite any manual row edits you made for this statement.\n\nTip: click “Export review JSON” first if you want a backup.\n\nContinue?',
+      )
+      if (!confirmed) return
+    }
     setIsReparsingActive(true)
     try {
       const converter = await loadConverter()
@@ -1475,6 +1495,12 @@ function App() {
       setPdfMatchInfo(null)
       setPdfRowMatches([])
       setPdfRowMatchStatus('idle')
+      setEditedResultKeys((previous) => {
+        if (!previous[key]) return previous
+        const next = { ...previous }
+        delete next[key]
+        return next
+      })
     } catch (error) {
       console.warn('Re-parse failed', error)
       alert(error instanceof Error ? error.message : 'Re-parse failed')
@@ -2692,6 +2718,15 @@ function App() {
                       title="Re-run extraction for this statement using the settings above (saved into review exports)."
                     >
                       {isReparsingActive ? 'Re-parsing…' : 'Re-parse'}
+                    </button>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => downloadReviewJson()}
+                      disabled={!activeResult || isProcessing || isReparsingActive}
+                      title="Download a review JSON backup for this statement before experimenting with re-parse."
+                    >
+                      Export review JSON
                     </button>
                     <button
                       type="button"
