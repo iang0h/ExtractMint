@@ -804,12 +804,22 @@ function uniqueSheetName(fileName: string, usedNames: Set<string>) {
 }
 
 export function createQboBlob(result: ConversionResult) {
+  return createQboBlobWithOptions(result, {})
+}
+
+export function createQboBlobWithOptions(
+  result: ConversionResult,
+  options: {
+    ambiguousDateFormat?: 'infer' | 'dmy' | 'mdy'
+  } = {},
+) {
   const { startDate, endDate } = qboDateRange(result.rows, result.statementPeriod)
   const openingBalance = result.validation.openingBalance
   const closingBalance = result.validation.closingBalance ?? qboLastBalance(result.rows)
 
+  const mode = options.ambiguousDateFormat ?? 'infer'
   const transactions = result.rows
-    .map((row, index) => qboTransaction(row, index))
+    .map((row, index) => qboTransaction(row, index, { mode }))
     .filter((entry): entry is string => Boolean(entry))
     .join('\n')
 
@@ -2316,7 +2326,7 @@ function qboText(value: string) {
   return qboToAscii(value).replace(/[<>\r\n]/g, ' ').replace(/&/g, 'and').trim()
 }
 
-function qboGuessPostedDate(value?: string) {
+function qboGuessPostedDate(value?: string, options: { mode?: 'infer' | 'dmy' | 'mdy' } = {}) {
   if (!value) return undefined
   const trimmed = value.trim()
   const iso = trimmed.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
@@ -2327,21 +2337,31 @@ function qboGuessPostedDate(value?: string) {
   const first = Number(slash[1])
   const second = Number(slash[2])
   const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
-  const [month, day] = first > 12 ? [second, first] : [first, second]
+  const mode = options.mode ?? 'infer'
+  const [month, day] =
+    mode === 'dmy' ? [second, first] : mode === 'mdy' ? [first, second] : first > 12 ? [second, first] : [first, second]
   if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
   return `${year}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`
 }
 
 function qboAmount(row: ExtractedRow) {
   if (row.amount !== undefined && Number.isFinite(row.amount)) return row.amount
-  const deposit = row.deposit ?? 0
-  const withdrawal = row.withdrawal ?? 0
-  const tax = row.tax ?? 0
-  return deposit - withdrawal - tax
+  const deposit = row.deposit
+  const withdrawal = row.withdrawal
+  const tax = row.tax
+  const hasDeposit = deposit !== undefined && Number.isFinite(deposit)
+  const hasWithdrawal = withdrawal !== undefined && Number.isFinite(withdrawal)
+  const hasTax = tax !== undefined && Number.isFinite(tax)
+  if (!hasDeposit && !hasWithdrawal && !hasTax) return Number.NaN
+  return (hasDeposit ? deposit ?? 0 : 0) - (hasWithdrawal ? withdrawal ?? 0 : 0) - (hasTax ? tax ?? 0 : 0)
 }
 
-function qboTransaction(row: ExtractedRow, index: number) {
-  const posted = qboGuessPostedDate(row.date)
+function qboTransaction(
+  row: ExtractedRow,
+  index: number,
+  options: { mode: 'infer' | 'dmy' | 'mdy' },
+) {
+  const posted = qboGuessPostedDate(row.date, { mode: options.mode })
   if (!posted) return ''
   const amount = qboAmount(row)
   if (!Number.isFinite(amount) || amount === 0) return ''

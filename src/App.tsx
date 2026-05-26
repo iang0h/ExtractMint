@@ -76,6 +76,27 @@ type XeroDateFormatDetection = {
   conflictingSignals: boolean
 }
 
+type QboAmbiguousDateFormat = 'infer' | 'dmy' | 'mdy'
+
+type QboDateFormatDetection = {
+  format: Exclude<QboAmbiguousDateFormat, 'infer'> | 'unknown'
+  totalNumericDates: number
+  dmySignals: number
+  mdySignals: number
+  ambiguousNumericDates: number
+  conflictingSignals: boolean
+}
+
+type QboSanitySnapshot = {
+  droppedRowCount: number
+  missingDateCount: number
+  missingAmountCount: number
+  ambiguousDateCount: number
+  nonIsoDateCount: number
+  warningCount: number
+  warnings: Array<{ label: string; detail: string }>
+}
+
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
   try {
@@ -256,6 +277,160 @@ const detectXeroNumericDateFormat = (result: ConversionResult): XeroDateFormatDe
     conflictingSignals || (dmySignals === 0 && mdySignals === 0) ? 'unknown' : dmySignals > 0 ? 'dmy' : 'mdy'
 
   return { format, totalNumericDates, dmySignals, mdySignals, ambiguousNumericDates, conflictingSignals }
+}
+
+const detectQboNumericDateFormat = (result: ConversionResult): QboDateFormatDetection => {
+  const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const numericDateMatch = (value: string) => value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
+
+  let totalNumericDates = 0
+  let dmySignals = 0
+  let mdySignals = 0
+  let ambiguousNumericDates = 0
+
+  for (const row of result.rows) {
+    const rawDate = (row.date ?? '').trim()
+    if (!rawDate || isIsoDate(rawDate)) continue
+    const match = numericDateMatch(rawDate)
+    if (!match) continue
+    const first = Number.parseInt(match[1] ?? '', 10)
+    const second = Number.parseInt(match[2] ?? '', 10)
+    if (!Number.isFinite(first) || !Number.isFinite(second)) continue
+    if (first < 1 || first > 31 || second < 1 || second > 31) continue
+
+    totalNumericDates += 1
+
+    const firstCanBeMonth = first >= 1 && first <= 12
+    const secondCanBeMonth = second >= 1 && second <= 12
+    if (firstCanBeMonth && secondCanBeMonth) {
+      ambiguousNumericDates += 1
+      continue
+    }
+
+    if (!firstCanBeMonth && secondCanBeMonth) dmySignals += 1
+    if (!secondCanBeMonth && firstCanBeMonth) mdySignals += 1
+  }
+
+  const conflictingSignals = dmySignals > 0 && mdySignals > 0
+  const format: QboDateFormatDetection['format'] =
+    conflictingSignals || (dmySignals === 0 && mdySignals === 0) ? 'unknown' : dmySignals > mdySignals ? 'dmy' : 'mdy'
+
+  return {
+    format,
+    totalNumericDates,
+    dmySignals,
+    mdySignals,
+    ambiguousNumericDates,
+    conflictingSignals,
+  }
+}
+
+const qboSanitySnapshot = (
+  result: ConversionResult,
+  options: { ambiguousDateFormat?: QboAmbiguousDateFormat } = {},
+): QboSanitySnapshot => {
+  const ambiguousDateFormat = options.ambiguousDateFormat ?? 'infer'
+
+  const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const numericDateMatch = (value: string) => value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
+
+  const hasQboAmount = (row: ConversionResult['rows'][number]) => {
+    if (row.amount !== undefined && Number.isFinite(row.amount) && row.amount !== 0) return true
+    const deposit = row.deposit
+    const withdrawal = row.withdrawal
+    const tax = row.tax
+    const hasDeposit = deposit !== undefined && Number.isFinite(deposit) && deposit !== 0
+    const hasWithdrawal = withdrawal !== undefined && Number.isFinite(withdrawal) && withdrawal !== 0
+    const hasTax = tax !== undefined && Number.isFinite(tax) && tax !== 0
+    if (!hasDeposit && !hasWithdrawal && !hasTax) return false
+    const net = (hasDeposit ? deposit ?? 0 : 0) - (hasWithdrawal ? withdrawal ?? 0 : 0) - (hasTax ? tax ?? 0 : 0)
+    return Number.isFinite(net) && net !== 0
+  }
+
+  const isQboDateParseable = (raw: string) => {
+    const trimmed = raw.trim()
+    if (!trimmed) return false
+    if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(trimmed)) return true
+    const match = numericDateMatch(trimmed)
+    if (!match) return false
+    const first = Number.parseInt(match[1] ?? '', 10)
+    const second = Number.parseInt(match[2] ?? '', 10)
+    if (!Number.isFinite(first) || !Number.isFinite(second)) return false
+    if (first < 1 || first > 31 || second < 1 || second > 31) return false
+    const mode = ambiguousDateFormat
+    const [month, day] =
+      mode === 'dmy'
+        ? [second, first]
+        : mode === 'mdy'
+          ? [first, second]
+          : first > 12
+            ? [second, first]
+            : [first, second]
+    return month >= 1 && month <= 12 && day >= 1 && day <= 31
+  }
+
+  let droppedRowCount = 0
+  let missingDateCount = 0
+  let missingAmountCount = 0
+  let ambiguousDateCount = 0
+  let nonIsoDateCount = 0
+
+  for (const row of result.rows) {
+    const rawDate = (row.date ?? '').trim()
+    const hasDate = Boolean(rawDate)
+    const dateOk = hasDate ? isQboDateParseable(rawDate) : false
+    const amountOk = hasQboAmount(row)
+
+    if (!hasDate) missingDateCount += 1
+    if (!amountOk) missingAmountCount += 1
+
+    if (rawDate && !isIsoDate(rawDate)) {
+      const match = numericDateMatch(rawDate)
+      if (match) {
+        const first = Number.parseInt(match[1] ?? '', 10)
+        const second = Number.parseInt(match[2] ?? '', 10)
+        if (Number.isFinite(first) && Number.isFinite(second) && first >= 1 && first <= 12 && second >= 1 && second <= 12) {
+          ambiguousDateCount += 1
+        }
+      } else if (!/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(rawDate)) {
+        nonIsoDateCount += 1
+      }
+    }
+
+    if (!dateOk || !amountOk) droppedRowCount += 1
+  }
+
+  const warnings: QboSanitySnapshot['warnings'] = []
+  if (droppedRowCount > 0)
+    warnings.push({
+      label: 'Rows will be omitted',
+      detail: `${droppedRowCount} row(s) will be skipped in the QBO export because QuickBooks requires a valid date and a non-zero amount for each transaction.`,
+    })
+  if (ambiguousDateCount > 0)
+    warnings.push({
+      label: 'Ambiguous numeric dates',
+      detail: `${ambiguousDateCount} row(s) look like DD/MM/YYYY or MM/DD/YYYY (ambiguous). If dates import shifted by a month/day, switch the QBO date assumption.`,
+    })
+  if (nonIsoDateCount > 0)
+    warnings.push({
+      label: 'Non-standard dates',
+      detail: `${nonIsoDateCount} row(s) are not YYYY-MM-DD and not a simple numeric date. Consider normalizing those dates before exporting to QBO.`,
+    })
+  if (missingAmountCount > 0)
+    warnings.push({
+      label: 'Missing amounts',
+      detail: `${missingAmountCount} row(s) have no Amount (and no deposit/withdrawal/tax to derive a net amount).`,
+    })
+
+  return {
+    droppedRowCount,
+    missingDateCount,
+    missingAmountCount,
+    ambiguousDateCount,
+    nonIsoDateCount,
+    warningCount: warnings.length,
+    warnings,
+  }
 }
 
 const supportItems = [
@@ -688,6 +863,18 @@ function App() {
     () => (activeResult ? detectXeroNumericDateFormat(activeResult) : null),
     [activeResult],
   )
+  const [qboAmbiguousDateFormat, setQboAmbiguousDateFormat] = useState<QboAmbiguousDateFormat>(() => {
+    const raw = storedValue('extractmint.qboAmbiguousDateFormat')
+    return raw === 'dmy' || raw === 'mdy' || raw === 'infer' ? raw : 'infer'
+  })
+  const qboAmbiguousDateFormatExplicitRef = useRef<boolean>((() => {
+    const raw = storedValue('extractmint.qboAmbiguousDateFormat')
+    return raw === 'dmy' || raw === 'mdy'
+  })())
+  const qboDateFormatDetection = useMemo(
+    () => (activeResult ? detectQboNumericDateFormat(activeResult) : null),
+    [activeResult],
+  )
 
   useEffect(() => {
     if (!activeResult) return
@@ -698,6 +885,16 @@ function App() {
       setXeroAmbiguousDateFormat(detected.format)
     }
   }, [activeResult, xeroNormalizeDates])
+
+  useEffect(() => {
+    if (!activeResult) return
+    if (qboAmbiguousDateFormatExplicitRef.current) return
+    if (qboAmbiguousDateFormat !== 'infer') return
+    const detected = detectQboNumericDateFormat(activeResult)
+    if (detected.format === 'dmy' || detected.format === 'mdy') {
+      setQboAmbiguousDateFormat(detected.format)
+    }
+  }, [activeResult, qboAmbiguousDateFormat])
   const supportMailtoHref = useMemo(() => {
     if (!supportEmail) return null
     const subject = 'ExtractMint support request'
@@ -1402,7 +1599,10 @@ function App() {
         }),
       docx: converter.createDocxBlob,
       pdf: converter.createPdfBlob,
-      qbo: converter.createQboBlob,
+      qbo: (result: ConversionResult) =>
+        converter.createQboBlobWithOptions(result, {
+          ambiguousDateFormat: qboAmbiguousDateFormat,
+        }),
     }
     const blob = await creators[format](activeResult)
     const url = URL.createObjectURL(blob)
@@ -2348,6 +2548,105 @@ function App() {
                       </div>
                     ) : null}
                   </>
+                ) : null}
+              </div>
+            ) : null}
+
+            {activeResult ? (
+              <div className="export-sanity" aria-label="QuickBooks import checks">
+                {(() => {
+                  const snapshot = qboSanitySnapshot(activeResult, {
+                    ambiguousDateFormat: qboAmbiguousDateFormat,
+                  })
+                  const status =
+                    snapshot.warningCount === 0
+                      ? { label: 'Looks good', className: 'is-valid' }
+                      : { label: 'Review warnings', className: 'is-review' }
+
+                  return (
+                    <div className={`export-sanity-card ${status.className}`}>
+                      <div className="export-sanity-header">
+                        <div>
+                          <strong>QuickBooks QBO import checks</strong>
+                          <small>Flags common reasons QBO exports skip transactions or import with shifted dates.</small>
+                        </div>
+                        <span className="export-sanity-status">{status.label}</span>
+                      </div>
+                      <div className="export-sanity-notes">
+                        <div className="export-sanity-note">QuickBooks requires a parseable date and a non-zero amount per transaction.</div>
+                        {snapshot.warningCount > 0 ? (
+                          snapshot.warnings.map((warning) => (
+                            <div key={warning.label} className="export-sanity-note">
+                              <strong>{warning.label}:</strong> <span>{warning.detail}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="export-sanity-note">No obvious issues detected for QBO export.</div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            ) : null}
+
+            {activeResult ? (
+              <div className="export-options" aria-label="QuickBooks export options">
+                <label title="Controls how ExtractMint interprets numeric dates like 03/05/2026 when building the QuickBooks QBO (OFX) export.">
+                  <input
+                    type="radio"
+                    name="qboAmbiguousDateFormat"
+                    checked={qboAmbiguousDateFormat === 'infer'}
+                    onChange={() => {
+                      qboAmbiguousDateFormatExplicitRef.current = false
+                      setQboAmbiguousDateFormat('infer')
+                      storeValue('extractmint.qboAmbiguousDateFormat', 'infer')
+                    }}
+                  />
+                  Auto (infer)
+                </label>
+                <label title="Treat ambiguous numeric dates like 03/05/2026 as DD/MM/YYYY when exporting QBO.">
+                  <input
+                    type="radio"
+                    name="qboAmbiguousDateFormat"
+                    checked={qboAmbiguousDateFormat === 'dmy'}
+                    onChange={() => {
+                      qboAmbiguousDateFormatExplicitRef.current = true
+                      setQboAmbiguousDateFormat('dmy')
+                      storeValue('extractmint.qboAmbiguousDateFormat', 'dmy')
+                    }}
+                  />
+                  Assume DD/MM/YYYY
+                </label>
+                <label title="Treat ambiguous numeric dates like 03/05/2026 as MM/DD/YYYY when exporting QBO.">
+                  <input
+                    type="radio"
+                    name="qboAmbiguousDateFormat"
+                    checked={qboAmbiguousDateFormat === 'mdy'}
+                    onChange={() => {
+                      qboAmbiguousDateFormatExplicitRef.current = true
+                      setQboAmbiguousDateFormat('mdy')
+                      storeValue('extractmint.qboAmbiguousDateFormat', 'mdy')
+                    }}
+                  />
+                  Assume MM/DD/YYYY
+                </label>
+                {qboDateFormatDetection ? (
+                  <div className="export-options-hint" role="note">
+                    {qboDateFormatDetection.format === 'unknown' ? (
+                      <span>
+                        QBO date-format detection: no clear signal. If your statement uses numeric dates, pick the locale that matches your bank.
+                      </span>
+                    ) : (
+                      <span>
+                        QBO date-format detection: looks like {qboDateFormatDetection.format === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'} (based on{' '}
+                        {qboDateFormatDetection.format === 'dmy'
+                          ? qboDateFormatDetection.dmySignals
+                          : qboDateFormatDetection.mdySignals}{' '}
+                        unambiguous numeric date(s)). You can override.
+                      </span>
+                    )}
+                  </div>
                 ) : null}
               </div>
             ) : null}
