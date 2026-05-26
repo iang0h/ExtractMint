@@ -184,6 +184,7 @@ const createSampleResultLite = (): ConversionResult => ({
   fileName: 'sample-bank-statement.pdf',
   fileType: 'application/pdf',
   currencyCode: 'USD',
+  currencyDetected: 'USD',
   statementPeriod: {
     start: '2026-04-01',
     end: '2026-04-30',
@@ -447,6 +448,7 @@ function App() {
   const [persistPdfTextIndex, setPersistPdfTextIndex] = useState(
     () => storedValue('extractmint.persistPdfTextIndex') !== '0',
   )
+  const [currencyOverride, setCurrencyOverride] = useState(() => storedValue('extractmint.currencyOverride') || 'auto')
   const [ocrCacheStats, setOcrCacheStats] = useState<{ entries: number; bytes: number }>({ entries: 0, bytes: 0 })
   const [pdfTextIndexStats, setPdfTextIndexStats] = useState<{ entries: number; bytes: number }>({
     entries: 0,
@@ -1122,10 +1124,28 @@ function App() {
               persistOcrCache,
             })
 
-      if (converted.length > 0) {
+      const convertedWithCurrency = converted.map((result) => {
+        const detected = result.currencyDetected ?? result.currencyCode
+        if (currencyOverride === 'auto') {
+          return {
+            ...result,
+            currencyDetected: detected,
+            currencyCode: detected,
+            validation: converter.revalidateRows(result.rows, detected),
+          }
+        }
+        return {
+          ...result,
+          currencyDetected: detected,
+          currencyCode: currencyOverride,
+          validation: converter.revalidateRows(result.rows, currencyOverride),
+        }
+      })
+
+      if (convertedWithCurrency.length > 0) {
         setPdfUrlsBySha((previous) => {
           const next: Record<string, string> = { ...previous }
-          for (const result of converted) {
+          for (const result of convertedWithCurrency) {
             const sha = result.fileMeta.sha256
             if (!sha) continue
             const sig = fileSignatureParts(result.fileName, result.fileMeta.size, result.fileMeta.lastModified)
@@ -1146,12 +1166,12 @@ function App() {
         })
       }
 
-      const combined = [...imported, ...converted]
+      const combined = [...imported, ...convertedWithCurrency]
       if (combined.length === 0) return
-      if (converted.length > 0) {
+      if (convertedWithCurrency.length > 0) {
         const usedOcr = forceOcr || conversionSawOcrRef.current
         appendTelemetry(
-          converted.map((result) => {
+          convertedWithCurrency.map((result) => {
             const snapshot = exportSanitySnapshot(result)
             return {
               at: new Date().toISOString(),
@@ -1703,6 +1723,25 @@ function App() {
             </label>
 
             <div className="ocr-settings" aria-label="OCR settings">
+              <label>
+                Currency
+                <select
+                  value={currencyOverride}
+                  onChange={(event) => {
+                    const next = event.target.value
+                    setCurrencyOverride(next)
+                    storeValue('extractmint.currencyOverride', next)
+                  }}
+                >
+                  <option value="auto">Auto (detect)</option>
+                  <option value="USD">USD</option>
+                  <option value="SGD">SGD</option>
+                  <option value="MYR">MYR</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                  <option value="JPY">JPY</option>
+                </select>
+              </label>
               <label>
                 <input
                   type="checkbox"
