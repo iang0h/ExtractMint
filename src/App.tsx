@@ -78,6 +78,8 @@ type XeroDateFormatDetection = {
 
 type QboAmbiguousDateFormat = 'infer' | 'dmy' | 'mdy'
 
+type QboAccountType = 'CHECKING' | 'SAVINGS' | 'CREDITLINE' | 'CREDITCARD'
+
 type QboDateFormatDetection = {
   format: Exclude<QboAmbiguousDateFormat, 'infer'> | 'unknown'
   totalNumericDates: number
@@ -867,6 +869,11 @@ function App() {
     const raw = storedValue('extractmint.qboAmbiguousDateFormat')
     return raw === 'dmy' || raw === 'mdy' || raw === 'infer' ? raw : 'infer'
   })
+  const [qboAccountType, setQboAccountType] = useState<QboAccountType>(() => {
+    const raw = storedValue('extractmint.qboAccountType')
+    return raw === 'SAVINGS' || raw === 'CREDITLINE' || raw === 'CREDITCARD' || raw === 'CHECKING' ? raw : 'CHECKING'
+  })
+  const [qboAccountId, setQboAccountId] = useState<string>(() => storedValue('extractmint.qboAccountId') ?? '')
   const qboAmbiguousDateFormatExplicitRef = useRef<boolean>((() => {
     const raw = storedValue('extractmint.qboAmbiguousDateFormat')
     return raw === 'dmy' || raw === 'mdy'
@@ -1602,6 +1609,8 @@ function App() {
       qbo: (result: ConversionResult) =>
         converter.createQboBlobWithOptions(result, {
           ambiguousDateFormat: qboAmbiguousDateFormat,
+          accountType: qboAccountType,
+          accountId: qboAccountId,
         }),
     }
     const blob = await creators[format](activeResult)
@@ -2648,6 +2657,37 @@ function App() {
                     )}
                   </div>
                 ) : null}
+                <label title="Sets the OFX account type used in the QBO export. If QuickBooks imports into the wrong register, try switching this (e.g. Checking vs Credit Card).">
+                  Account type
+                  <select
+                    value={qboAccountType}
+                    onChange={(event) => {
+                      const next = event.target.value as QboAccountType
+                      setQboAccountType(next)
+                      storeValue('extractmint.qboAccountType', next)
+                    }}
+                  >
+                    <option value="CHECKING">Checking</option>
+                    <option value="SAVINGS">Savings</option>
+                    <option value="CREDITCARD">Credit Card</option>
+                    <option value="CREDITLINE">Credit Line</option>
+                  </select>
+                </label>
+                <label title="Optional. Put the last 4–10 digits of the bank account number (or any stable ID). QuickBooks may use this to match an existing account during import.">
+                  Account ID (optional)
+                  <input
+                    inputMode="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={qboAccountId}
+                    onChange={(event) => {
+                      const next = event.target.value
+                      setQboAccountId(next)
+                      storeValue('extractmint.qboAccountId', next)
+                    }}
+                    placeholder="e.g. 1234567890"
+                  />
+                </label>
               </div>
             ) : null}
 

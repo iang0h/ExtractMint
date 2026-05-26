@@ -811,6 +811,9 @@ export function createQboBlobWithOptions(
   result: ConversionResult,
   options: {
     ambiguousDateFormat?: 'infer' | 'dmy' | 'mdy'
+    accountId?: string
+    accountType?: 'CHECKING' | 'SAVINGS' | 'CREDITLINE' | 'CREDITCARD'
+    bankId?: string
   } = {},
 ) {
   const { startDate, endDate } = qboDateRange(result.rows, result.statementPeriod)
@@ -818,6 +821,22 @@ export function createQboBlobWithOptions(
   const closingBalance = result.validation.closingBalance ?? qboLastBalance(result.rows)
 
   const mode = options.ambiguousDateFormat ?? 'infer'
+  const accountType = options.accountType ?? 'CHECKING'
+  const sanitizeDigits = (value: string) => (value ?? '').replace(/[^\d]/g, '')
+  const sanitizeAccountId = (value: string) => {
+    const trimmed = (value ?? '').trim()
+    if (!trimmed) return '0000000000'
+    const digits = sanitizeDigits(trimmed)
+    if (digits.length >= 4) return digits.slice(0, 22)
+    const compact = trimmed
+      .replace(/[^\x20-\x7E]/g, '')
+      .replace(/[<>\r\n]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return compact.slice(0, 22) || '0000000000'
+  }
+  const accountId = sanitizeAccountId(options.accountId ?? '')
+  const bankId = sanitizeDigits(options.bankId ?? '').slice(0, 12) || '0000'
   const transactions = result.rows
     .map((row, index) => qboTransaction(row, index, { mode }))
     .filter((entry): entry is string => Boolean(entry))
@@ -861,9 +880,9 @@ export function createQboBlobWithOptions(
       '<STMTRS>',
       `<CURDEF>${result.currencyCode || 'USD'}`,
       '<BANKACCTFROM>',
-      '<BANKID>0000',
-      '<ACCTID>0000000000',
-      '<ACCTTYPE>CHECKING',
+      `<BANKID>${bankId}`,
+      `<ACCTID>${qboText(accountId)}`,
+      `<ACCTTYPE>${accountType}`,
       '</BANKACCTFROM>',
       '<BANKTRANLIST>',
       startDate ? `<DTSTART>${startDate}` : '',
