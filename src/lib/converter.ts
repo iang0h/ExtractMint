@@ -93,6 +93,12 @@ export type ExtractionOptions = {
   persistOcrCache?: boolean
   statementLayout?: StatementLayout
   dateFormatPreference?: DateFormatPreference
+  requestPdfPassword?: (payload: {
+    fileName: string
+    size: number
+    lastModified: number
+    reason: 'need_password' | 'incorrect_password'
+  }) => Promise<string | undefined>
 }
 
 export type ReviewPackSource = {
@@ -1376,6 +1382,7 @@ async function createPdfBlobAsync(result: ConversionResult) {
 }
 
 const ocrTextCache = new Map<string, string>()
+const pdfPasswordCache = new Map<string, string>()
 
 export function clearInMemoryOcrCache() {
   ocrTextCache.clear()
@@ -1419,7 +1426,7 @@ async function extractPdfText(file: File, onProgress: ProgressCallback, options:
   ])
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
   const buffer = await file.arrayBuffer()
-  const pdf = await pdfjs.getDocument({ data: buffer }).promise
+  const pdf = await openPdfDocument(pdfjs, buffer, file, options)
   const chunks: string[] = []
   const signature = fileSignature(file)
   const ocrLanguage = normalizeOcrLanguage(options.ocrLanguage)
@@ -1467,6 +1474,46 @@ async function extractPdfText(file: File, onProgress: ProgressCallback, options:
 }
 
 type PdfDocumentLike = { getPage: (pageNumber: number) => Promise<unknown>; numPages: number }
+
+function isPdfPasswordError(error: unknown) {
+  if (!error || typeof error !== 'object') return false
+  const maybe = error as { name?: unknown; message?: unknown; code?: unknown }
+  if (maybe.name === 'PasswordException') return true
+  if (typeof maybe.code === 'number' && maybe.code === 1) return true
+  if (typeof maybe.message === 'string' && maybe.message.toLowerCase().includes('password')) return true
+  return false
+}
+
+async function openPdfDocument(
+  pdfjs: typeof import('pdfjs-dist'),
+  buffer: ArrayBuffer,
+  file: File,
+  options: ExtractionOptions,
+) {
+  const meta = { fileName: file.name, size: file.size, lastModified: file.lastModified }
+  const signature = fileSignature(file)
+  let password = pdfPasswordCache.get(signature)
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const pdf = await pdfjs.getDocument({ data: buffer, password }).promise
+      if (password) pdfPasswordCache.set(signature, password)
+      return pdf
+    } catch (error) {
+      if (!isPdfPasswordError(error)) throw error
+      if (!options.requestPdfPassword) {
+        throw new Error('This PDF is password-protected. Please remove the password and try again.', { cause: error })
+      }
+      const reason = attempt === 0 ? 'need_password' : 'incorrect_password'
+      const next = await options.requestPdfPassword({ ...meta, reason })
+      if (!next) {
+        throw new Error('PDF password required (cancelled).', { cause: error })
+      }
+      password = next
+    }
+  }
+
+  throw new Error('Incorrect PDF password.', { cause: new Error('PasswordException') })
+}
 
 async function extractPdfPageWithOcr(
   pdf: PdfDocumentLike,

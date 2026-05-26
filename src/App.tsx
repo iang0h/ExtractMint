@@ -513,6 +513,30 @@ function App() {
     detail: 'Sample conversion loaded',
   })
   const conversionSawOcrRef = useRef(false)
+  const pdfPasswordCacheRef = useRef<Map<string, string>>(new Map())
+
+  const requestPdfPassword = async (payload: {
+    fileName: string
+    size: number
+    lastModified: number
+    reason: 'need_password' | 'incorrect_password'
+  }) => {
+    const signature = fileSignatureParts(payload.fileName, payload.size, payload.lastModified)
+    const cached = pdfPasswordCacheRef.current.get(signature)
+    const label = payload.reason === 'incorrect_password' ? 'Incorrect password.' : 'Password required.'
+    const promptText = [
+      `${label} This PDF appears to be password-protected.`,
+      '',
+      `File: ${payload.fileName}`,
+      '',
+      'Enter the PDF password to continue (leave blank to cancel).',
+    ].join('\n')
+    const next = window.prompt(promptText, cached ?? '')
+    const trimmed = (next ?? '').trim()
+    if (!trimmed) return undefined
+    pdfPasswordCacheRef.current.set(signature, trimmed)
+    return trimmed
+  }
 
   const parsingProfile: ParsingProfile = useMemo(() => {
     if (statementLayout === 'auto' && dateFormatPreference === 'auto') return 'auto'
@@ -689,10 +713,38 @@ function App() {
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default
         const response = await fetch(activePdfUrl)
         const buffer = await response.arrayBuffer()
-        const pdf = await pdfjs.getDocument({ data: buffer }).promise
+        const meta = activeResult
+          ? { fileName: activeResult.fileName, size: activeResult.fileMeta.size, lastModified: activeResult.fileMeta.lastModified }
+          : null
+        let password = meta
+          ? pdfPasswordCacheRef.current.get(fileSignatureParts(meta.fileName, meta.size, meta.lastModified))
+          : undefined
+        let pdf: PdfDocumentProxy | null = null
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            pdf = (await pdfjs.getDocument({ data: buffer, password }).promise) as unknown as PdfDocumentProxy
+            break
+          } catch (error) {
+            const isPasswordError =
+              typeof error === 'object' &&
+              error !== null &&
+              (('name' in error && (error as { name?: unknown }).name === 'PasswordException') ||
+                ('message' in error &&
+                  typeof (error as { message?: unknown }).message === 'string' &&
+                  (error as { message: string }).message.toLowerCase().includes('password')))
+            if (!isPasswordError || !meta) throw error
+            const next = await requestPdfPassword({
+              ...meta,
+              reason: attempt === 0 ? 'need_password' : 'incorrect_password',
+            })
+            if (!next) throw error
+            password = next
+          }
+        }
+        if (!pdf) throw new Error('Failed to open PDF for preview.')
         if (cancelled) return
         pdfDocRef.current = pdf
-        setPdfDoc(pdf as unknown as PdfDocumentProxy)
+        setPdfDoc(pdf)
         setPdfPageCount(pdf.numPages)
         setPdfPage((current) => clampPage(current, pdf.numPages))
         setPdfThumbStatus('ready')
@@ -711,7 +763,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activePdfUrl, showSourcePreview])
+  }, [activePdfUrl, activeResult, showSourcePreview])
 
   useEffect(() => {
     if (!showSourcePreview || !activeSha || !selectedRow || selectedRowIndex === null) {
@@ -1167,13 +1219,14 @@ function App() {
       const converted =
         normalFiles.length === 0
           ? []
-	          : await converter.convertFiles(normalFiles, onConversionProgress, {
-	              forceOcr,
-	              ocrLanguage,
-	              persistOcrCache,
-	              statementLayout,
-	              dateFormatPreference,
-	            })
+          : await converter.convertFiles(normalFiles, onConversionProgress, {
+              forceOcr,
+              ocrLanguage,
+              persistOcrCache,
+              statementLayout,
+              dateFormatPreference,
+              requestPdfPassword,
+            })
 
       const convertedWithCurrency = converted.map((result) => {
         const detected = result.currencyDetected ?? result.currencyCode
