@@ -26,7 +26,7 @@ import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
-import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
+import type { ConversionResult, DateFormatPreference, ProgressEvent, StatementLayout, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
   clearPersistentPdfTextIndex,
@@ -421,6 +421,8 @@ type TelemetryEvent = {
 
 const TELEMETRY_STORAGE_KEY = 'extractmint.telemetry.v1'
 
+type ParsingProfile = 'auto' | 'sg' | 'us' | 'eu' | 'custom'
+
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL ?? '').trim()
@@ -445,6 +447,15 @@ function App() {
   const [forceOcr, setForceOcr] = useState(() => storedValue('extractmint.forceOcr') === '1')
   const [ocrLanguage, setOcrLanguage] = useState(() => storedValue('extractmint.ocrLanguage') || 'eng')
   const [persistOcrCache, setPersistOcrCache] = useState(() => storedValue('extractmint.persistOcrCache') !== '0')
+  const [statementLayout, setStatementLayout] = useState<StatementLayout>(() => {
+    const raw = storedValue('extractmint.statementLayout')
+    if (raw === 'amount_balance' || raw === 'debit_credit_balance') return raw
+    return 'auto'
+  })
+  const [dateFormatPreference, setDateFormatPreference] = useState<DateFormatPreference>(() => {
+    const raw = (storedValue('extractmint.dateFormatPreference') || '').toLowerCase()
+    return raw === 'dmy' || raw === 'mdy' ? raw : 'auto'
+  })
   const [persistPdfTextIndex, setPersistPdfTextIndex] = useState(
     () => storedValue('extractmint.persistPdfTextIndex') !== '0',
   )
@@ -501,6 +512,33 @@ function App() {
     detail: 'Sample conversion loaded',
   })
   const conversionSawOcrRef = useRef(false)
+
+  const parsingProfile: ParsingProfile = useMemo(() => {
+    if (statementLayout === 'auto' && dateFormatPreference === 'auto') return 'auto'
+    if (statementLayout === 'debit_credit_balance' && dateFormatPreference === 'dmy') return 'sg'
+    if (statementLayout === 'amount_balance' && dateFormatPreference === 'mdy') return 'us'
+    if (statementLayout === 'amount_balance' && dateFormatPreference === 'dmy') return 'eu'
+    return 'custom'
+  }, [dateFormatPreference, statementLayout])
+
+  const applyParsingPreferences = (next: { statementLayout?: StatementLayout; dateFormatPreference?: DateFormatPreference }) => {
+    if (next.statementLayout) {
+      setStatementLayout(next.statementLayout)
+      storeValue('extractmint.statementLayout', next.statementLayout)
+    }
+    if (next.dateFormatPreference) {
+      setDateFormatPreference(next.dateFormatPreference)
+      storeValue('extractmint.dateFormatPreference', next.dateFormatPreference)
+    }
+  }
+
+  const applyParsingProfile = (profile: ParsingProfile) => {
+    if (profile === 'auto') return applyParsingPreferences({ statementLayout: 'auto', dateFormatPreference: 'auto' })
+    if (profile === 'sg') return applyParsingPreferences({ statementLayout: 'debit_credit_balance', dateFormatPreference: 'dmy' })
+    if (profile === 'us') return applyParsingPreferences({ statementLayout: 'amount_balance', dateFormatPreference: 'mdy' })
+    if (profile === 'eu') return applyParsingPreferences({ statementLayout: 'amount_balance', dateFormatPreference: 'dmy' })
+    return
+  }
 
   const appendTelemetry = (events: TelemetryEvent[]) => {
     if (events.length === 0) return
@@ -1047,17 +1085,17 @@ function App() {
     setActiveIndex(0)
     try {
       const imported: ConversionResult[] = []
-      for (let index = 0; index < reviewPackZipFiles.length; index += 1) {
-        const file = reviewPackZipFiles[index]
+	      for (let index = 0; index < reviewPackZipFiles.length; index += 1) {
+	        const file = reviewPackZipFiles[index]
         setProgress({
           fileName: file.name,
           stage: 'reading',
           percent: Math.round((index / Math.max(1, reviewPackZipFiles.length)) * 100),
           detail: 'Importing ExtractMint review pack ZIP',
         })
-        try {
-          const bundle = await converter.importReviewPackZip(file)
-          imported.push(...bundle.results)
+	        try {
+	          const bundle = await converter.importReviewPackZip(file, { dateFormatPreference, statementLayout })
+	          imported.push(...bundle.results)
           const sources = bundle.sourcesBySha
           const sourceShas = Object.keys(sources)
           if (sourceShas.length > 0) {
@@ -1091,38 +1129,50 @@ function App() {
           )
         }
       }
-      for (let index = 0; index < reviewJsonFiles.length; index += 1) {
-        const file = reviewJsonFiles[index]
+	      for (let index = 0; index < reviewJsonFiles.length; index += 1) {
+	        const file = reviewJsonFiles[index]
         setProgress({
           fileName: file.name,
           stage: 'reading',
           percent: Math.round((index / Math.max(1, reviewJsonFiles.length)) * 100),
           detail: 'Importing ExtractMint review JSON',
         })
-        try {
-          imported.push(await converter.importReviewJson(file))
-        } catch (error) {
-          throw new Error(
-            `Failed to import ${file.name}: ${error instanceof Error ? error.message : 'Invalid JSON'}`,
-            { cause: error },
-          )
-        }
-      }
+	        try {
+	          imported.push(await converter.importReviewJson(file, { dateFormatPreference, statementLayout }))
+	        } catch (error) {
+	          throw new Error(
+	            `Failed to import ${file.name}: ${error instanceof Error ? error.message : 'Invalid JSON'}`,
+	            { cause: error },
+	          )
+	        }
+	      }
 
-      conversionSawOcrRef.current = false
-      const onConversionProgress = (event: ProgressEvent) => {
-        if (event.stage === 'ocr') conversionSawOcrRef.current = true
-        setProgress(event)
-      }
+	      if (normalFiles.length === 0) {
+	        const importedPrefs = imported[0]?.parsingPreferences
+	        if (importedPrefs?.statementLayout || importedPrefs?.dateFormatPreference) {
+	          applyParsingPreferences({
+	            statementLayout: importedPrefs.statementLayout,
+	            dateFormatPreference: importedPrefs.dateFormatPreference,
+	          })
+	        }
+	      }
+
+	      conversionSawOcrRef.current = false
+	      const onConversionProgress = (event: ProgressEvent) => {
+	        if (event.stage === 'ocr') conversionSawOcrRef.current = true
+	        setProgress(event)
+	      }
 
       const converted =
         normalFiles.length === 0
           ? []
-          : await converter.convertFiles(normalFiles, onConversionProgress, {
-              forceOcr,
-              ocrLanguage,
-              persistOcrCache,
-            })
+	          : await converter.convertFiles(normalFiles, onConversionProgress, {
+	              forceOcr,
+	              ocrLanguage,
+	              persistOcrCache,
+	              statementLayout,
+	              dateFormatPreference,
+	            })
 
       const convertedWithCurrency = converted.map((result) => {
         const detected = result.currencyDetected ?? result.currencyCode
@@ -1754,26 +1804,73 @@ function App() {
                 />
                 Force OCR (scanned PDFs)
               </label>
-              <label>
-                OCR language
-                <select
-                  value={ocrLanguage}
-                  onChange={(event) => {
-                    const next = event.target.value
-                    setOcrLanguage(next)
-                    storeValue('extractmint.ocrLanguage', next)
-                  }}
-                >
-                  <option value="eng">English</option>
-                  <option value="msa">Malay</option>
-                  <option value="ind">Indonesian</option>
-                  <option value="chi_sim">Chinese (Simplified)</option>
-                </select>
-              </label>
-	              <label className="ocr-cache-row">
-                <input
-                  type="checkbox"
-                  checked={persistOcrCache}
+	              <label>
+	                OCR language
+	                <select
+	                  value={ocrLanguage}
+	                  onChange={(event) => {
+	                    const next = event.target.value
+	                    setOcrLanguage(next)
+	                    storeValue('extractmint.ocrLanguage', next)
+	                  }}
+	                >
+	                  <option value="eng">English</option>
+	                  <option value="msa">Malay</option>
+	                  <option value="ind">Indonesian</option>
+	                  <option value="chi_sim">Chinese (Simplified)</option>
+	                </select>
+	              </label>
+	              <label>
+	                Parsing profile
+	                <select
+	                  value={parsingProfile}
+	                  onChange={(event) => {
+	                    const next = (event.target.value || 'custom') as ParsingProfile
+	                    applyParsingProfile(next)
+	                  }}
+	                >
+	                  <option value="auto">Auto</option>
+	                  <option value="sg">Singapore / Malaysia (DD/MM + debit/credit)</option>
+	                  <option value="us">US (MM/DD + amount)</option>
+	                  <option value="eu">EU (DD/MM + amount)</option>
+	                  <option value="custom">Custom</option>
+	                </select>
+	              </label>
+	              <label>
+	                Statement layout
+	                <select
+	                  value={statementLayout}
+	                  onChange={(event) => {
+	                    const next = (event.target.value as StatementLayout) || 'auto'
+	                    setStatementLayout(next)
+	                    storeValue('extractmint.statementLayout', next)
+	                  }}
+	                >
+	                  <option value="auto">Auto</option>
+	                  <option value="amount_balance">Amount + balance</option>
+	                  <option value="debit_credit_balance">Debit + credit + balance</option>
+	                </select>
+	              </label>
+	              <label>
+	                Date format (ambiguous 01/02/2026)
+	                <select
+	                  value={dateFormatPreference}
+	                  onChange={(event) => {
+	                    const raw = (event.target.value || '').toLowerCase()
+	                    const next = raw === 'dmy' || raw === 'mdy' ? (raw as DateFormatPreference) : 'auto'
+	                    setDateFormatPreference(next)
+	                    storeValue('extractmint.dateFormatPreference', next)
+	                  }}
+	                >
+	                  <option value="auto">Auto</option>
+	                  <option value="mdy">MM/DD/YYYY</option>
+	                  <option value="dmy">DD/MM/YYYY</option>
+	                </select>
+	              </label>
+		              <label className="ocr-cache-row">
+	                <input
+	                  type="checkbox"
+	                  checked={persistOcrCache}
                   onChange={(event) => {
                     const next = event.target.checked
                     setPersistOcrCache(next)
