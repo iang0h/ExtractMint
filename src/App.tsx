@@ -1330,7 +1330,7 @@ function App() {
     void processFiles(event.dataTransfer.files)
   }
 
-  const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo') => {
+  const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo' | 'ofx') => {
     if (!activeResult) return
 
     const converter = await loadConverter()
@@ -1340,6 +1340,7 @@ function App() {
       docx: converter.createDocxBlob,
       pdf: converter.createPdfBlob,
       qbo: converter.createQboBlob,
+      ofx: converter.createOfxBlob,
     }
     const blob = await creators[format](activeResult)
     const url = URL.createObjectURL(blob)
@@ -2194,6 +2195,14 @@ function App() {
               <button onClick={() => void downloadBlob('qbo')} disabled={!activeResult}>
                 <ReceiptText size={16} />
                 QuickBooks (QBO)
+              </button>
+              <button
+                onClick={() => void downloadBlob('ofx')}
+                disabled={!activeResult}
+                title="Downloads an OFX file you can import into accounting software that supports Open Financial Exchange."
+              >
+                <ReceiptText size={16} />
+                OFX
               </button>
             </div>
 
