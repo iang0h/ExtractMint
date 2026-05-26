@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test:agent": "node tests/agent-core.test.mjs",
+    "test:cursor": "node tests/cursor-bot.test.mjs",
     "test:seo": "node tests/seo-artifacts.test.mjs",
     "preview": "vite preview",
     "deploy:static": "npm run build",

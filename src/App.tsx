@@ -1648,6 +1648,8 @@ function App() {
 
   return (
     <main>
+      <CursorMintBot />
+
       <header className="site-header">
         <a className="brand" href="#top" aria-label="ExtractMint home">
           <span className="brand-mark">
@@ -3009,6 +3011,84 @@ function App() {
         </div>
       )}
     </main>
+  )
+}
+
+function CursorMintBot() {
+  const botRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<number | null>(null)
+  const currentRef = useRef({ x: 0, y: 0 })
+  const targetRef = useRef({ x: 0, y: 0 })
+  const [isEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches && !window.matchMedia('(pointer: coarse)').matches
+  })
+  const [isAwake, setIsAwake] = useState(false)
+
+  useEffect(() => {
+    if (!isEnabled) return undefined
+
+    const startX = Math.max(84, window.innerWidth - 132)
+    const startY = Math.max(120, window.innerHeight * 0.56)
+    currentRef.current = { x: startX, y: startY }
+    targetRef.current = { x: startX, y: startY }
+
+    const animate = () => {
+      const current = currentRef.current
+      const target = targetRef.current
+      current.x += (target.x - current.x) * 0.13
+      current.y += (target.y - current.y) * 0.13
+
+      if (botRef.current) {
+        const lean = Math.max(-10, Math.min(10, (target.x - current.x) / 14))
+        botRef.current.style.transform = `translate3d(${current.x}px, ${current.y}px, 0) rotate(${lean}deg)`
+      }
+
+      frameRef.current = window.requestAnimationFrame(animate)
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      targetRef.current = {
+        x: Math.min(window.innerWidth - 84, Math.max(22, event.clientX + 28)),
+        y: Math.min(window.innerHeight - 92, Math.max(78, event.clientY + 24)),
+      }
+      setIsAwake(true)
+    }
+
+    const handlePointerLeave = () => setIsAwake(false)
+
+    frameRef.current = window.requestAnimationFrame(animate)
+    window.addEventListener('pointermove', handlePointerMove, { passive: true })
+    document.documentElement.addEventListener('mouseleave', handlePointerLeave)
+
+    return () => {
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
+      window.removeEventListener('pointermove', handlePointerMove)
+      document.documentElement.removeEventListener('mouseleave', handlePointerLeave)
+    }
+  }, [isEnabled])
+
+  if (!isEnabled) return null
+
+  return (
+    <div ref={botRef} className={`cursor-mint-bot${isAwake ? ' is-awake' : ''}`} aria-hidden="true">
+      <span className="cursor-mint-bot__shadow" />
+      <span className="cursor-mint-bot__trail" />
+      <span className="cursor-mint-bot__body">
+        <span className="cursor-mint-bot__antenna" />
+        <span className="cursor-mint-bot__screen">
+          <span className="cursor-mint-bot__eye" />
+          <span className="cursor-mint-bot__eye" />
+          <span className="cursor-mint-bot__scan" />
+        </span>
+        <span className="cursor-mint-bot__doc">
+          <span />
+          <span />
+          <span />
+        </span>
+        <Sparkles size={15} strokeWidth={2.4} />
+      </span>
+    </div>
   )
 }
 
