@@ -65,6 +65,8 @@ type XeroSanitySnapshot = {
   warnings: Array<{ label: string; detail: string }>
 }
 
+type XeroAmbiguousDateFormat = 'dmy' | 'mdy'
+
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
   try {
@@ -115,7 +117,12 @@ const exportSanitySnapshot = (result: ConversionResult): ExportSanitySnapshot =>
   }
 }
 
-const xeroSanitySnapshot = (result: ConversionResult): XeroSanitySnapshot => {
+const xeroSanitySnapshot = (
+  result: ConversionResult,
+  options: { normalizeDates?: boolean; ambiguousDateFormat?: XeroAmbiguousDateFormat } = {},
+): XeroSanitySnapshot => {
+  const normalizeDates = options.normalizeDates === true
+  const ambiguousDateFormat = options.ambiguousDateFormat ?? 'dmy'
   const xeroAmountForRow = (row: ConversionResult['rows'][number]) => {
     if (row.amount !== undefined && Number.isFinite(row.amount)) return row.amount
     const deposit = row.deposit
@@ -168,12 +175,16 @@ const xeroSanitySnapshot = (result: ConversionResult): XeroSanitySnapshot => {
   if (ambiguousDateCount > 0)
     warnings.push({
       label: 'Ambiguous numeric dates',
-      detail: `${ambiguousDateCount} row(s) look like DD/MM/YYYY or MM/DD/YYYY (ambiguous). Xero applies one date format to the whole import.`,
+      detail: normalizeDates
+        ? `${ambiguousDateCount} row(s) look like DD/MM/YYYY or MM/DD/YYYY (ambiguous). Export will normalize using ${ambiguousDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}.`
+        : `${ambiguousDateCount} row(s) look like DD/MM/YYYY or MM/DD/YYYY (ambiguous). Xero applies one date format to the whole import.`,
     })
   if (nonIsoDateCount > 0)
     warnings.push({
       label: 'Non-ISO dates',
-      detail: `${nonIsoDateCount} row(s) are not YYYY-MM-DD and not a simple numeric date. Consider normalizing dates before importing.`,
+      detail: normalizeDates
+        ? `${nonIsoDateCount} row(s) are not YYYY-MM-DD and not a simple numeric date. Consider editing/normalizing those dates before importing.`
+        : `${nonIsoDateCount} row(s) are not YYYY-MM-DD and not a simple numeric date. Consider normalizing dates before importing.`,
     })
   if (duplicateLineCount > 0)
     warnings.push({
@@ -546,6 +557,13 @@ function App() {
   const [xeroMakeReferenceUnique, setXeroMakeReferenceUnique] = useState(
     () => storedValue('extractmint.xeroMakeReferenceUnique') === '1',
   )
+  const [xeroNormalizeDates, setXeroNormalizeDates] = useState(
+    () => storedValue('extractmint.xeroNormalizeDates') === '1',
+  )
+  const [xeroAmbiguousDateFormat, setXeroAmbiguousDateFormat] = useState<XeroAmbiguousDateFormat>(() => {
+    const raw = storedValue('extractmint.xeroAmbiguousDateFormat')
+    return raw === 'mdy' ? 'mdy' : 'dmy'
+  })
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null)
   const [pdfPage, setPdfPage] = useState(1)
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null)
@@ -1306,6 +1324,8 @@ function App() {
       xero: (result: ConversionResult) =>
         converter.createXeroCsvBlobWithOptions(result, {
           makeReferenceUnique: xeroMakeReferenceUnique,
+          normalizeDates: xeroNormalizeDates,
+          ambiguousDateFormat: xeroAmbiguousDateFormat,
         }),
       docx: converter.createDocxBlob,
       pdf: converter.createPdfBlob,
@@ -2141,7 +2161,10 @@ function App() {
             {activeResult ? (
               <div className="export-sanity" aria-label="Xero import checks">
                 {(() => {
-                  const snapshot = xeroSanitySnapshot(activeResult)
+                  const snapshot = xeroSanitySnapshot(activeResult, {
+                    normalizeDates: xeroNormalizeDates,
+                    ambiguousDateFormat: xeroAmbiguousDateFormat,
+                  })
                   const status =
                     snapshot.warningCount === 0
                       ? { label: 'Ready for import', className: 'is-valid' }
@@ -2193,6 +2216,46 @@ function App() {
                   />
                   Make Xero Reference unique
                 </label>
+                <label title="Exports numeric dates like 03/05/2026 as YYYY-MM-DD. Useful when Xero rejects or misreads dates.">
+                  <input
+                    type="checkbox"
+                    checked={xeroNormalizeDates}
+                    onChange={(event) => {
+                      const next = event.target.checked
+                      setXeroNormalizeDates(next)
+                      storeValue('extractmint.xeroNormalizeDates', next ? '1' : '0')
+                    }}
+                  />
+                  Normalize Xero dates to ISO (YYYY-MM-DD)
+                </label>
+                {xeroNormalizeDates ? (
+                  <>
+                    <label title="Treat ambiguous numeric dates like 03/05/2026 as DD/MM/YYYY during export normalization.">
+                      <input
+                        type="radio"
+                        name="xeroAmbiguousDateFormat"
+                        checked={xeroAmbiguousDateFormat === 'dmy'}
+                        onChange={() => {
+                          setXeroAmbiguousDateFormat('dmy')
+                          storeValue('extractmint.xeroAmbiguousDateFormat', 'dmy')
+                        }}
+                      />
+                      Assume DD/MM/YYYY
+                    </label>
+                    <label title="Treat ambiguous numeric dates like 03/05/2026 as MM/DD/YYYY during export normalization.">
+                      <input
+                        type="radio"
+                        name="xeroAmbiguousDateFormat"
+                        checked={xeroAmbiguousDateFormat === 'mdy'}
+                        onChange={() => {
+                          setXeroAmbiguousDateFormat('mdy')
+                          storeValue('extractmint.xeroAmbiguousDateFormat', 'mdy')
+                        }}
+                      />
+                      Assume MM/DD/YYYY
+                    </label>
+                  </>
+                ) : null}
               </div>
             ) : null}
 

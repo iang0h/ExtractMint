@@ -641,7 +641,10 @@ export function createCsvBlob(result: ConversionResult) {
   return new Blob([csv], { type: 'text/csv;charset=utf-8' })
 }
 
-function normalizeXeroDate(raw: string) {
+function normalizeXeroDate(
+  raw: string,
+  options: { mode?: 'infer' | 'dmy' | 'mdy' } = {},
+) {
   const value = (raw ?? '').trim()
   if (!value) return ''
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
@@ -652,17 +655,20 @@ function normalizeXeroDate(raw: string) {
   const year = Number.parseInt(match[3] ?? '', 10)
   if (!Number.isFinite(first) || !Number.isFinite(second) || !Number.isFinite(year)) return value
 
-  const inferDayMonth = () => {
-    if (first > 12 && second <= 12) return { day: first, month: second }
-    if (second > 12 && first <= 12) return { day: second, month: first }
-    return null
+  const mode = options.mode ?? 'infer'
+  const asIso = (day: number, month: number) => {
+    if (day < 1 || day > 31 || month < 1 || month > 12) return value
+    const dayText = String(day).padStart(2, '0')
+    const monthText = String(month).padStart(2, '0')
+    return `${String(year).padStart(4, '0')}-${monthText}-${dayText}`
   }
 
-  const inferred = inferDayMonth()
-  if (!inferred) return value
-  const day = String(inferred.day).padStart(2, '0')
-  const month = String(inferred.month).padStart(2, '0')
-  return `${String(year).padStart(4, '0')}-${month}-${day}`
+  if (mode === 'dmy') return asIso(first, second)
+  if (mode === 'mdy') return asIso(second, first)
+
+  if (first > 12 && second <= 12) return asIso(first, second)
+  if (second > 12 && first <= 12) return asIso(second, first)
+  return value
 }
 
 function xeroAmountForRow(row: ExtractedRow) {
@@ -681,9 +687,15 @@ export function createXeroCsvBlob(result: ConversionResult) {
 
 export function createXeroCsvBlobWithOptions(
   result: ConversionResult,
-  options: { makeReferenceUnique?: boolean } = {},
+  options: {
+    makeReferenceUnique?: boolean
+    normalizeDates?: boolean
+    ambiguousDateFormat?: 'dmy' | 'mdy'
+  } = {},
 ) {
   const makeReferenceUnique = options.makeReferenceUnique === true
+  const normalizeDates = options.normalizeDates === true
+  const ambiguousDateFormat = options.ambiguousDateFormat ?? 'dmy'
   const seenReferences = new Map<string, number>()
 
   const uniqueReferenceForRow = (raw: string, rowIndex: number) => {
@@ -705,7 +717,9 @@ export function createXeroCsvBlobWithOptions(
         ? uniqueReferenceForRow(row.reference ?? '', rowIndex)
         : (row.reference ?? '')
       return [
-        normalizeXeroDate(row.date ?? ''),
+        normalizeXeroDate(row.date ?? '', {
+          mode: normalizeDates ? ambiguousDateFormat : 'infer',
+        }),
         amount === undefined ? '' : String(Math.round(amount * 100) / 100),
         '',
         row.description,
