@@ -557,6 +557,10 @@ function App() {
     () => storedValue('extractmint.persistPdfTextIndex') !== '0',
   )
   const [currencyOverride, setCurrencyOverride] = useState(() => storedValue('extractmint.currencyOverride') || 'auto')
+  const [mixedImportParsingPreferences, setMixedImportParsingPreferences] = useState(false)
+  const [activeFileStatementLayout, setActiveFileStatementLayout] = useState<StatementLayout>('auto')
+  const [activeFileDateFormatPreference, setActiveFileDateFormatPreference] = useState<DateFormatPreference>('auto')
+  const [isReparsingActive, setIsReparsingActive] = useState(false)
   const [ocrCacheStats, setOcrCacheStats] = useState<{ entries: number; bytes: number }>({ entries: 0, bytes: 0 })
   const [pdfTextIndexStats, setPdfTextIndexStats] = useState<{ entries: number; bytes: number }>({
     entries: 0,
@@ -678,6 +682,7 @@ function App() {
   const activeResult = results[activeIndex] ?? results[0]
   const activeSha = activeResult?.fileMeta?.sha256
   const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
+  const activeParsingPreferences = activeResult?.parsingPreferences
   const supportMailtoHref = useMemo(() => {
     if (!supportEmail) return null
     const subject = 'ExtractMint support request'
@@ -768,6 +773,14 @@ function App() {
   useEffect(() => {
     pdfUrlRef.current = pdfUrlsBySha
   }, [pdfUrlsBySha])
+
+  useEffect(() => {
+    if (!activeResult) return
+    const nextLayout = activeResult.parsingPreferences?.statementLayout ?? statementLayout
+    const nextDate = activeResult.parsingPreferences?.dateFormatPreference ?? dateFormatPreference
+    setActiveFileStatementLayout(nextLayout)
+    setActiveFileDateFormatPreference(nextDate)
+  }, [activeIndex, activeResult, dateFormatPreference, statementLayout])
 
   useEffect(() => {
     return () => {
@@ -1297,14 +1310,26 @@ function App() {
       }
 
       if (normalFiles.length === 0) {
-        const importedPrefs = imported[0]?.parsingPreferences
-        if (importedPrefs?.statementLayout || importedPrefs?.dateFormatPreference) {
-	          applyParsingPreferences({
-	            statementLayout: importedPrefs.statementLayout,
-	            dateFormatPreference: importedPrefs.dateFormatPreference,
-	          })
-	        }
-	      }
+        const keys = imported
+          .map((result) => result.parsingPreferences)
+          .filter(Boolean)
+          .map((prefs) => `${prefs?.statementLayout ?? ''}:${prefs?.dateFormatPreference ?? ''}`)
+        const unique = Array.from(new Set(keys))
+        if (unique.length === 1) {
+          const importedPrefs = imported[0]?.parsingPreferences
+          if (importedPrefs?.statementLayout || importedPrefs?.dateFormatPreference) {
+            applyParsingPreferences({
+              statementLayout: importedPrefs.statementLayout,
+              dateFormatPreference: importedPrefs.dateFormatPreference,
+            })
+          }
+          setMixedImportParsingPreferences(false)
+        } else if (unique.length > 1) {
+          setMixedImportParsingPreferences(true)
+        }
+      } else {
+        setMixedImportParsingPreferences(false)
+      }
 
 	      conversionSawOcrRef.current = false
 	      const onConversionProgress = (event: ProgressEvent) => {
@@ -1418,6 +1443,43 @@ function App() {
       })
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  const reparseActiveResult = async () => {
+    const target = activeResult
+    if (!target) return
+    setIsReparsingActive(true)
+    try {
+      const converter = await loadConverter()
+      const reparsed = converter.reparseConversionResult(target, {
+        statementLayout: activeFileStatementLayout,
+        dateFormatPreference: activeFileDateFormatPreference,
+      })
+
+      const detected = reparsed.currencyDetected ?? reparsed.currencyCode
+      const currencyCode = currencyOverride === 'auto' ? detected : currencyOverride
+      const nextResult: ConversionResult = {
+        ...reparsed,
+        currencyDetected: detected,
+        currencyCode,
+        validation: converter.revalidateRows(reparsed.rows, currencyCode),
+      }
+
+      setResults((previous) => {
+        const next = [...previous]
+        next[activeIndex] = nextResult
+        return next
+      })
+      setSelectedRowIndex(null)
+      setPdfMatchInfo(null)
+      setPdfRowMatches([])
+      setPdfRowMatchStatus('idle')
+    } catch (error) {
+      console.warn('Re-parse failed', error)
+      alert(error instanceof Error ? error.message : 'Re-parse failed')
+    } finally {
+      setIsReparsingActive(false)
     }
   }
 
@@ -2084,6 +2146,12 @@ function App() {
                   <option value="dmy">DD/MM/YYYY</option>
                 </select>
               </label>
+              {mixedImportParsingPreferences ? (
+                <span className="mixed-parsing-note">
+                  Imported review files use different parsing settings per statement. These selectors apply to new
+                  conversions; use the per-file “Re-parse” controls in the workspace to adjust one statement at a time.
+                </span>
+              ) : null}
               <label className="ocr-cache-row">
                 <input
                   type="checkbox"
@@ -2586,6 +2654,63 @@ function App() {
                     <small>{validationDescription(activeResult?.validation)}</small>
                   </div>
                 </div>
+
+                {activeResult ? (
+                  <div className="file-parsing-overrides" aria-label="Per-file parsing overrides">
+                    <span className="file-overrides-title">This statement</span>
+                    <label>
+                      Layout
+                      <select
+                        value={activeFileStatementLayout}
+                        onChange={(event) => setActiveFileStatementLayout((event.target.value as StatementLayout) || 'auto')}
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="amount_balance">Amount + balance</option>
+                        <option value="debit_credit_balance">Debit + credit + balance</option>
+                      </select>
+                    </label>
+                    <label>
+                      Date format
+                      <select
+                        value={activeFileDateFormatPreference}
+                        onChange={(event) => {
+                          const raw = (event.target.value || '').toLowerCase()
+                          const next = raw === 'dmy' || raw === 'mdy' ? (raw as DateFormatPreference) : 'auto'
+                          setActiveFileDateFormatPreference(next)
+                        }}
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="mdy">MM/DD/YYYY</option>
+                        <option value="dmy">DD/MM/YYYY</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="table-action"
+                      onClick={() => void reparseActiveResult()}
+                      disabled={!activeResult || isProcessing || isReparsingActive}
+                      title="Re-run extraction for this statement using the settings above (saved into review exports)."
+                    >
+                      {isReparsingActive ? 'Re-parsing…' : 'Re-parse'}
+                    </button>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => {
+                        setActiveFileStatementLayout(statementLayout)
+                        setActiveFileDateFormatPreference(dateFormatPreference)
+                      }}
+                      disabled={isProcessing || isReparsingActive}
+                      title="Reset this statement's overrides back to your global settings."
+                    >
+                      Use global
+                    </button>
+                    <small>
+                      Saved per file: {activeParsingPreferences?.statementLayout ?? statementLayout} ·{' '}
+                      {activeParsingPreferences?.dateFormatPreference ?? dateFormatPreference}
+                    </small>
+                  </div>
+                ) : null}
 
                 <div
                   className={

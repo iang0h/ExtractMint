@@ -192,6 +192,21 @@ export async function convertFiles(
   return results
 }
 
+export function reparseConversionResult(result: ConversionResult, options: ExtractionOptions = {}): ConversionResult {
+  if (!result.rawText) {
+    throw new Error('This file cannot be re-parsed because the extracted text is missing.')
+  }
+
+  const nextLayout = options.statementLayout ?? result.parsingPreferences?.statementLayout ?? 'auto'
+  const nextDate = options.dateFormatPreference ?? result.parsingPreferences?.dateFormatPreference ?? 'auto'
+
+  return parseRawText(result.rawText, result.fileName, result.fileType, result.fileMeta, {
+    ...options,
+    statementLayout: nextLayout,
+    dateFormatPreference: nextDate,
+  })
+}
+
 export function createSampleResult(): ConversionResult {
   const sample = `
 ExtractMint Business Checking

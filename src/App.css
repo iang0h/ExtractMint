@@ -591,6 +591,14 @@ h3 {
   font-size: 13px;
 }
 
+.mixed-parsing-note {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
 .ocr-cache-row {
   flex: 1 1 100%;
   justify-content: space-between;
@@ -1178,6 +1186,48 @@ footer {
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin-bottom: 18px;
+}
+
+.file-parsing-overrides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.8);
+  margin-bottom: 14px;
+}
+
+.file-overrides-title {
+  font-weight: 760;
+  color: var(--ink);
+  margin-right: 6px;
+}
+
+.file-parsing-overrides label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.file-parsing-overrides select {
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 32, 41, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.file-parsing-overrides small {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .summary-cards div {
