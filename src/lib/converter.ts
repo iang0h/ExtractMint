@@ -53,6 +53,10 @@ export type ConversionResult = {
   fileType: string
   currencyCode: string
   currencyDetected?: string
+  parsingPreferences?: {
+    statementLayout?: StatementLayout
+    dateFormatPreference?: DateFormatPreference
+  }
   statementPeriod?: {
     start?: string
     end?: string
@@ -79,10 +83,16 @@ export type ConversionResult = {
 
 type ProgressCallback = (event: ProgressEvent) => void
 
+export type DateFormatPreference = 'auto' | 'dmy' | 'mdy'
+
+export type StatementLayout = 'auto' | 'amount_balance' | 'debit_credit_balance'
+
 export type ExtractionOptions = {
   forceOcr?: boolean
   ocrLanguage?: string
   persistOcrCache?: boolean
+  statementLayout?: StatementLayout
+  dateFormatPreference?: DateFormatPreference
 }
 
 export type ReviewPackSource = {
@@ -108,9 +118,10 @@ export function revalidateRows(rows: ExtractedRow[], currencyCode: string) {
 export function refreshStatementPeriod(
   rows: ExtractedRow[],
   previous?: ConversionResult['statementPeriod'],
+  dateFormatPreference: DateFormatPreference = 'auto',
 ): ConversionResult['statementPeriod'] | undefined {
   if (previous?.source === 'explicit') return previous
-  const inferred = inferStatementPeriodFromRows(rows)
+  const inferred = inferStatementPeriodFromRows(rows, dateFormatPreference)
   return inferred ? { ...inferred, source: 'inferred' } : undefined
 }
 
@@ -158,14 +169,20 @@ export async function convertFiles(
       detail: 'Finding rows, totals, and document signals',
     })
 
-    results.push(
-      parseRawText(rawText, file.name, file.type || extensionOf(file.name), {
-        size: file.size,
-        lastModified: file.lastModified,
-        sha256,
-      }),
-    )
-  }
+	    results.push(
+	      parseRawText(
+	        rawText,
+	        file.name,
+	        file.type || extensionOf(file.name),
+	        {
+	          size: file.size,
+	          lastModified: file.lastModified,
+	          sha256,
+	        },
+	        options,
+	      ),
+	    )
+	  }
 
   return results
 }
@@ -184,11 +201,17 @@ Statement period Apr 01 2026 - Apr 30 2026
 Ending balance 38,268.10
 `
 
-  return parseRawText(sample, 'sample-bank-statement.pdf', 'application/pdf', {
-    size: sample.length,
-    lastModified: Date.now(),
-    sha256: 'sample',
-  })
+  return parseRawText(
+    sample,
+    'sample-bank-statement.pdf',
+    'application/pdf',
+    {
+      size: sample.length,
+      lastModified: Date.now(),
+      sha256: 'sample',
+    },
+    { dateFormatPreference: 'mdy' },
+  )
 }
 
 export async function createExcelBlob(result: ConversionResult) {
@@ -895,6 +918,7 @@ export function createReviewJsonBlob(result: ConversionResult) {
     fileType: result.fileType,
     currencyCode: result.currencyCode,
     currencyDetected: result.currencyDetected ?? result.currencyCode,
+    parsingPreferences: result.parsingPreferences,
     statementPeriod: result.statementPeriod,
     fileMeta: result.fileMeta,
     processedAt: result.processedAt,
@@ -1069,7 +1093,7 @@ const asFiniteNumber = (value: unknown) => {
 const asString = (value: unknown) =>
   typeof value === 'string' ? value : value === undefined || value === null ? undefined : String(value)
 
-export async function importReviewJson(file: File): Promise<ConversionResult> {
+export async function importReviewJson(file: File, options: ExtractionOptions = {}): Promise<ConversionResult> {
   const text = await file.text()
   const payload = JSON.parse(text) as Record<string, unknown>
 
@@ -1090,6 +1114,23 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   const currencyCode = asString(payload.currencyCode) ?? 'USD'
   const currencyDetected = asString(payload.currencyDetected) ?? currencyCode
   const processedAt = asString(payload.processedAt) ?? asString(payload.createdAt) ?? new Date().toISOString()
+  const parsingPreferences = (() => {
+    const value = payload.parsingPreferences
+    if (!value || typeof value !== 'object') return undefined
+    const record = value as Record<string, unknown>
+    const statementLayout = asString(record.statementLayout)
+    const dateFormatPreference = asString(record.dateFormatPreference)
+    const resolvedLayout =
+      statementLayout === 'auto' || statementLayout === 'amount_balance' || statementLayout === 'debit_credit_balance'
+        ? (statementLayout as StatementLayout)
+        : undefined
+    const resolvedDate =
+      dateFormatPreference === 'auto' || dateFormatPreference === 'dmy' || dateFormatPreference === 'mdy'
+        ? (dateFormatPreference as DateFormatPreference)
+        : undefined
+    if (!resolvedLayout && !resolvedDate) return undefined
+    return { statementLayout: resolvedLayout, dateFormatPreference: resolvedDate }
+  })()
 
   const summary =
     typeof payload.summary === 'object' && payload.summary
@@ -1140,14 +1181,19 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   const validation = revalidateRows(rows, currencyCode)
   const statementPeriod =
     typeof payload.statementPeriod === 'object' && payload.statementPeriod
-      ? refreshStatementPeriod(rows, payload.statementPeriod as ConversionResult['statementPeriod'])
-      : refreshStatementPeriod(rows)
+      ? refreshStatementPeriod(
+          rows,
+          payload.statementPeriod as ConversionResult['statementPeriod'],
+          parsingPreferences?.dateFormatPreference ?? options.dateFormatPreference ?? 'auto',
+        )
+      : refreshStatementPeriod(rows, undefined, parsingPreferences?.dateFormatPreference ?? options.dateFormatPreference ?? 'auto')
 
   return {
     fileName,
     fileType,
     currencyCode,
     currencyDetected,
+    parsingPreferences,
     statementPeriod,
     fileMeta,
     rawText: '',
@@ -1159,7 +1205,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   }
 }
 
-export async function importReviewPackZip(file: File): Promise<ReviewPackImport> {
+export async function importReviewPackZip(file: File, options: ExtractionOptions = {}): Promise<ReviewPackImport> {
   const JSZip = (await import('jszip')).default
   const buffer = await file.arrayBuffer()
   const zip = await JSZip.loadAsync(buffer)
@@ -1180,7 +1226,7 @@ export async function importReviewPackZip(file: File): Promise<ReviewPackImport>
       type: 'application/json;charset=utf-8',
       lastModified: file.lastModified || Date.now(),
     })
-    results.push(await importReviewJson(importedFile))
+    results.push(await importReviewJson(importedFile, options))
   }
 
   const manifestEntry = Object.keys(zip.files)
@@ -1641,6 +1687,7 @@ function parseRawText(
   fileName: string,
   fileType: string,
   fileMeta: ConversionResult['fileMeta'],
+  options: ExtractionOptions = {},
 ): ConversionResult {
   const normalized = rawText
     .replace(/\u00a0/g, ' ')
@@ -1654,12 +1701,14 @@ function parseRawText(
     .filter((line) => line.replace(/\t/g, '').trim())
 
   const structuredRows = parseStatementTable(lines)
+  const statementLayout = options.statementLayout ?? 'auto'
+  const dateFormatPreference = options.dateFormatPreference ?? 'auto'
   const rows =
     structuredRows.length > 0
       ? structuredRows
-      : lines.flatMap((line, index) => parseLine(line, index + 1))
+      : lines.flatMap((line, index) => parseLine(line, index + 1, statementLayout))
   const fallbackRows = rows.length > 0 ? rows : buildFallbackRows(lines)
-  const statementPeriod = detectStatementPeriod(lines, fallbackRows)
+  const statementPeriod = detectStatementPeriod(lines, fallbackRows, dateFormatPreference)
   const currencyCode = detectCurrencyCode(normalized, fileName)
   const validation = validateBalances(fallbackRows, currencyCode)
   const summary = summarize(lines, fallbackRows, fileName, validation)
@@ -1670,6 +1719,7 @@ function parseRawText(
     fileType,
     currencyCode,
     currencyDetected: currencyCode,
+    parsingPreferences: { statementLayout, dateFormatPreference },
     statementPeriod,
     fileMeta,
     rawText: normalized,
@@ -1689,7 +1739,7 @@ async function sha256Hex(file: File) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function parseLine(line: string, lineNumber: number): ExtractedRow[] {
+function parseLine(line: string, lineNumber: number, statementLayout: StatementLayout): ExtractedRow[] {
   const flatLine = line.replace(/\t/g, ' ')
   const date = flatLine.match(datePattern)?.[0]
   const amountMatches = flatLine.match(amountPattern) ?? []
@@ -1698,8 +1748,31 @@ function parseLine(line: string, lineNumber: number): ExtractedRow[] {
   if (!date && !looksLikeReceiptTotal(flatLine)) return []
   if (parsedAmounts.length === 0) return []
 
-  const amount = parsedAmounts.length > 1 ? parsedAmounts.at(-2) : parsedAmounts.at(-1)
-  const balance = parsedAmounts.length > 1 ? parsedAmounts.at(-1) : undefined
+  const layout = statementLayout === 'auto' ? (parsedAmounts.length >= 3 ? 'debit_credit_balance' : 'amount_balance') : statementLayout
+
+  let withdrawal: number | undefined
+  let deposit: number | undefined
+  let amount: number | undefined
+  let balance: number | undefined
+
+  if (layout === 'debit_credit_balance' && parsedAmounts.length >= 3) {
+    const [debitCandidate, creditCandidate, balanceCandidate] = parsedAmounts.slice(-3)
+    balance = balanceCandidate
+
+    const debit = debitCandidate !== undefined ? Math.abs(debitCandidate) : undefined
+    const credit = creditCandidate !== undefined ? Math.abs(creditCandidate) : undefined
+    withdrawal = debit && debit > 0 ? debit : undefined
+    deposit = credit && credit > 0 ? credit : undefined
+
+    if (deposit !== undefined && withdrawal !== undefined) amount = deposit - withdrawal
+    else if (deposit !== undefined) amount = deposit
+    else if (withdrawal !== undefined) amount = -withdrawal
+  } else if (layout === 'amount_balance' && parsedAmounts.length >= 2) {
+    amount = parsedAmounts.at(-2)
+    balance = parsedAmounts.at(-1)
+  } else {
+    amount = parsedAmounts.at(-1)
+  }
   const description = cleanDescription(flatLine, date, amountMatches)
 
   return [
@@ -1707,9 +1780,18 @@ function parseLine(line: string, lineNumber: number): ExtractedRow[] {
       date,
       description: description || line.slice(0, 90),
       amount,
+      withdrawal,
+      deposit,
       balance,
       category: classifyLine(flatLine),
-      confidence: date ? 92 : 78,
+      confidence:
+        layout === 'debit_credit_balance'
+          ? date
+            ? 94
+            : 80
+          : date
+            ? 92
+            : 78,
       source: `Line ${lineNumber}`,
     },
   ]
@@ -1858,7 +1940,7 @@ function extractDatesFromLine(line: string) {
   return Array.from(new Set(matches.map((value) => value.trim()))).slice(0, 6)
 }
 
-function parseDateToIso(input: string) {
+function parseDateToIso(input: string, dateFormatPreference: DateFormatPreference = 'auto') {
   const value = input.trim()
   if (!value) return undefined
 
@@ -1876,7 +1958,21 @@ function parseDateToIso(input: string) {
     const first = Number(slash[1])
     const second = Number(slash[2])
     const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
-    const [month, day] = first > 12 ? [second, first] : [first, second]
+    let month: number
+    let day: number
+    if (dateFormatPreference === 'dmy') {
+      month = second
+      day = first
+    } else if (dateFormatPreference === 'mdy') {
+      month = first
+      day = second
+    } else if (first > 12) {
+      month = second
+      day = first
+    } else {
+      month = first
+      day = second
+    }
     if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
@@ -1905,7 +2001,11 @@ function normalizeIsoRange(start?: string, end?: string) {
   return { start, end }
 }
 
-function detectStatementPeriod(lines: string[], rows: ExtractedRow[]): ConversionResult['statementPeriod'] | undefined {
+function detectStatementPeriod(
+  lines: string[],
+  rows: ExtractedRow[],
+  dateFormatPreference: DateFormatPreference = 'auto',
+): ConversionResult['statementPeriod'] | undefined {
   for (const line of lines) {
     const text = line.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim()
     if (!text) continue
@@ -1913,21 +2013,21 @@ function detectStatementPeriod(lines: string[], rows: ExtractedRow[]): Conversio
 
     const dates = extractDatesFromLine(text)
     if (dates.length < 2) continue
-    const first = parseDateToIso(dates[0] ?? '')
-    const second = parseDateToIso(dates[1] ?? '')
+    const first = parseDateToIso(dates[0] ?? '', dateFormatPreference)
+    const second = parseDateToIso(dates[1] ?? '', dateFormatPreference)
     const normalized = normalizeIsoRange(first, second)
     if (normalized?.start || normalized?.end) {
       return { ...normalized, source: 'explicit' }
     }
   }
 
-  const inferred = inferStatementPeriodFromRows(rows)
+  const inferred = inferStatementPeriodFromRows(rows, dateFormatPreference)
   return inferred ? { ...inferred, source: 'inferred' } : undefined
 }
 
-function inferStatementPeriodFromRows(rows: ExtractedRow[]) {
+function inferStatementPeriodFromRows(rows: ExtractedRow[], dateFormatPreference: DateFormatPreference = 'auto') {
   const parsed = rows
-    .map((row) => parseDateToIso(row.date ?? ''))
+    .map((row) => parseDateToIso(row.date ?? '', dateFormatPreference))
     .filter((value): value is string => Boolean(value))
     .sort()
   if (parsed.length === 0) return undefined
