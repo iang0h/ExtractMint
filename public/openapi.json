@@ -7,8 +7,12 @@
   },
   "servers": [
     {
+      "url": "https://extractmint.iangoh.com",
+      "description": "Canonical domain"
+    },
+    {
       "url": "https://extractmint.vercel.app",
-      "description": "Production"
+      "description": "Fallback domain"
     }
   ],
   "paths": {

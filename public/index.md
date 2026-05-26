@@ -46,13 +46,13 @@ ExtractMint is a browser-based financial document extraction product for operato
 
 ## Key Pages
 
-- [Home and converter](https://extractmint.vercel.app/)
-- [Bank statement to Excel](https://extractmint.vercel.app/convert/bank-statement-to-excel/)
-- [PDF bank statement to Excel](https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/)
-- [Scanned bank statement to Excel](https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/)
-- [CIMB bank statement to Excel](https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/)
-- [Maybank statement to Excel](https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/)
-- [Singapore bank statement to Excel](https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/)
+- [Home and converter](/)
+- [Bank statement to Excel](/convert/bank-statement-to-excel/)
+- [PDF bank statement to Excel](/convert/pdf-bank-statement-to-excel/)
+- [Scanned bank statement to Excel](/convert/scanned-bank-statement-to-excel/)
+- [CIMB bank statement to Excel](/convert/cimb-bank-statement-to-excel/)
+- [Maybank statement to Excel](/convert/maybank-bank-statement-to-excel/)
+- [Singapore bank statement to Excel](/convert/singapore-bank-statement-to-excel/)
 
 ## FAQ
 

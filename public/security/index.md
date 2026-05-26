@@ -18,11 +18,11 @@ This page describes the current security posture and what to do when using Extra
 ## Accountant workflow checklist
 
 - Use a private browser profile with minimal extensions.
-- Confirm you are on `extractmint.vercel.app` before processing client documents.
+- Confirm you are on `extractmint.iangoh.com` (or the fallback `extractmint.vercel.app`) before processing client documents.
 - After export, validate opening/closing balances and review any low-confidence rows.
 - Clear all local caches after completing a client batch if required.
 
 ## Contact
 
-Home: https://extractmint.vercel.app/
-
+Home (canonical): https://extractmint.iangoh.com/
+Fallback: https://extractmint.vercel.app/

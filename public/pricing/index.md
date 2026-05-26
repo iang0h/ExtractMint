@@ -39,7 +39,6 @@ For accounting firms that need shared controls.
 
 ## Links
 
-- Home: https://extractmint.vercel.app/
-- Privacy: https://extractmint.vercel.app/privacy/
-- Security: https://extractmint.vercel.app/security/
-
+- Home: https://extractmint.iangoh.com/
+- Privacy: https://extractmint.iangoh.com/privacy/
+- Security: https://extractmint.iangoh.com/security/

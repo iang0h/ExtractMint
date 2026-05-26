@@ -27,8 +27,7 @@ ExtractMint can export PDF statement data as XLSX, CSV, DOCX, PDF, QBO, review J
 
 ## Related Pages
 
-- [Bank statement to Excel](https://extractmint.vercel.app/convert/bank-statement-to-excel/)
-- [Scanned bank statement to Excel](https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/)
-- [CIMB statement to Excel](https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/)
-- [Singapore bank statement to Excel](https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/)
-
+- [Bank statement to Excel](/convert/bank-statement-to-excel/)
+- [Scanned bank statement to Excel](/convert/scanned-bank-statement-to-excel/)
+- [CIMB statement to Excel](/convert/cimb-bank-statement-to-excel/)
+- [Singapore bank statement to Excel](/convert/singapore-bank-statement-to-excel/)
