@@ -78,6 +78,8 @@ type XeroDateFormatDetection = {
 
 type QboAmbiguousDateFormat = 'infer' | 'dmy' | 'mdy'
 
+type QboAccountType = 'CHECKING' | 'SAVINGS' | 'CREDITLINE'
+
 type QboDateFormatDetection = {
   format: Exclude<QboAmbiguousDateFormat, 'infer'> | 'unknown'
   totalNumericDates: number
@@ -867,6 +869,10 @@ function App() {
     const raw = storedValue('extractmint.qboAmbiguousDateFormat')
     return raw === 'dmy' || raw === 'mdy' || raw === 'infer' ? raw : 'infer'
   })
+  const [qboAccountType, setQboAccountType] = useState<QboAccountType>(() => {
+    const raw = storedValue('extractmint.qboAccountType')
+    return raw === 'CHECKING' || raw === 'SAVINGS' || raw === 'CREDITLINE' ? raw : 'CHECKING'
+  })
   const qboAmbiguousDateFormatExplicitRef = useRef<boolean>((() => {
     const raw = storedValue('extractmint.qboAmbiguousDateFormat')
     return raw === 'dmy' || raw === 'mdy'
@@ -1602,6 +1608,7 @@ function App() {
       qbo: (result: ConversionResult) =>
         converter.createQboBlobWithOptions(result, {
           ambiguousDateFormat: qboAmbiguousDateFormat,
+          accountType: qboAccountType,
         }),
     }
     const blob = await creators[format](activeResult)
@@ -2592,6 +2599,42 @@ function App() {
 
             {activeResult ? (
               <div className="export-options" aria-label="QuickBooks export options">
+                <label title="Sets the OFX account type used inside the QBO export. For credit card statements, CREDITLINE tends to import more cleanly in some QuickBooks setups.">
+                  <input
+                    type="radio"
+                    name="qboAccountType"
+                    checked={qboAccountType === 'CHECKING'}
+                    onChange={() => {
+                      setQboAccountType('CHECKING')
+                      storeValue('extractmint.qboAccountType', 'CHECKING')
+                    }}
+                  />
+                  QBO account: Checking
+                </label>
+                <label title="Sets the OFX account type used inside the QBO export. Use SAVINGS when importing savings-account statements into QuickBooks.">
+                  <input
+                    type="radio"
+                    name="qboAccountType"
+                    checked={qboAccountType === 'SAVINGS'}
+                    onChange={() => {
+                      setQboAccountType('SAVINGS')
+                      storeValue('extractmint.qboAccountType', 'SAVINGS')
+                    }}
+                  />
+                  QBO account: Savings
+                </label>
+                <label title="Sets the OFX account type used inside the QBO export. Helpful when your statement is a credit card statement (QuickBooks may treat it as a credit/loan account).">
+                  <input
+                    type="radio"
+                    name="qboAccountType"
+                    checked={qboAccountType === 'CREDITLINE'}
+                    onChange={() => {
+                      setQboAccountType('CREDITLINE')
+                      storeValue('extractmint.qboAccountType', 'CREDITLINE')
+                    }}
+                  />
+                  QBO account: Credit card (CREDITLINE)
+                </label>
                 <label title="Controls how ExtractMint interprets numeric dates like 03/05/2026 when building the QuickBooks QBO (OFX) export.">
                   <input
                     type="radio"

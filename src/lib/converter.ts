@@ -811,6 +811,7 @@ export function createQboBlobWithOptions(
   result: ConversionResult,
   options: {
     ambiguousDateFormat?: 'infer' | 'dmy' | 'mdy'
+    accountType?: 'CHECKING' | 'SAVINGS' | 'CREDITLINE'
   } = {},
 ) {
   const { startDate, endDate } = qboDateRange(result.rows, result.statementPeriod)
@@ -818,6 +819,7 @@ export function createQboBlobWithOptions(
   const closingBalance = result.validation.closingBalance ?? qboLastBalance(result.rows)
 
   const mode = options.ambiguousDateFormat ?? 'infer'
+  const accountType = options.accountType ?? 'CHECKING'
   const transactions = result.rows
     .map((row, index) => qboTransaction(row, index, { mode }))
     .filter((entry): entry is string => Boolean(entry))
@@ -863,7 +865,7 @@ export function createQboBlobWithOptions(
       '<BANKACCTFROM>',
       '<BANKID>0000',
       '<ACCTID>0000000000',
-      '<ACCTTYPE>CHECKING',
+      `<ACCTTYPE>${accountType}`,
       '</BANKACCTFROM>',
       '<BANKTRANLIST>',
       startDate ? `<DTSTART>${startDate}` : '',
