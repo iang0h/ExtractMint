@@ -22,11 +22,10 @@ import {
   Table2,
   UploadCloud,
 } from 'lucide-react'
-import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { BankCsvCleaner } from './components/BankCsvCleaner'
-import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
-import { PdfRedactionTool } from './components/PdfRedactionTool'
+import type { PdfDocumentProxy, PdfMatchInfo } from './components/PdfCanvasViewer'
 import type { ConversionResult, ProgressEvent, QuickBooksCsvSplitRange, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
@@ -36,6 +35,16 @@ import {
   setPersistentPdfPageText,
 } from './lib/pdfTextIndexCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
+
+const PdfCanvasViewer = lazy(async () => {
+  const module = await import('./components/PdfCanvasViewer')
+  return { default: module.PdfCanvasViewer }
+})
+
+const PdfRedactionTool = lazy(async () => {
+  const module = await import('./components/PdfRedactionTool')
+  return { default: module.PdfRedactionTool }
+})
 
 type ParsedPage = { pageNumber: number; text: string }
 type AgentMessage = {
@@ -2615,12 +2624,14 @@ function App() {
                           Need to share a sample page? Use the redaction helper to blackout account numbers and names before emailing support.
                         </p>
                         {activeResult?.fileType === 'application/pdf' && activePdfUrl && pdfDoc ? (
-                          <PdfRedactionTool
-                            key={`${activeSha ?? activeResult.fileName}:${pdfPage}`}
-                            pdf={pdfDoc}
-                            pageNumber={pdfPage}
-                            fileName={activeResult.fileName}
-                          />
+                          <Suspense fallback={<div className="pdf-canvas-fallback">Loading redaction tools…</div>}>
+                            <PdfRedactionTool
+                              key={`${activeSha ?? activeResult.fileName}:${pdfPage}`}
+                              pdf={pdfDoc}
+                              pageNumber={pdfPage}
+                              fileName={activeResult.fileName}
+                            />
+                          </Suspense>
                         ) : (
                           <div className="support-redaction-empty">
                             Attach the original PDF (via the Source PDF preview panel) to enable redaction downloads.
@@ -3708,15 +3719,17 @@ function App() {
 
 	                      {activePdfUrl ? (
 	                        pdfDoc ? (
-	                          <PdfCanvasViewer
-	                            pdf={pdfDoc}
-	                            pageNumber={pdfPage}
-	                            highlightQueries={pdfHighlightQueries}
-	                            onMatchInfo={setPdfMatchInfo}
-	                            scrollToMatchKey={
-	                              selectedRowIndex !== null ? `${activeSha ?? 'unknown'}:${selectedRowIndex}:${pdfPage}` : undefined
-	                            }
-	                          />
+                            <Suspense fallback={<div className="pdf-canvas-fallback" aria-label="Loading PDF">Loading PDF viewer…</div>}>
+  	                          <PdfCanvasViewer
+  	                            pdf={pdfDoc}
+  	                            pageNumber={pdfPage}
+  	                            highlightQueries={pdfHighlightQueries}
+  	                            onMatchInfo={setPdfMatchInfo}
+  	                            scrollToMatchKey={
+  	                              selectedRowIndex !== null ? `${activeSha ?? 'unknown'}:${selectedRowIndex}:${pdfPage}` : undefined
+  	                            }
+  	                          />
+                            </Suspense>
 	                        ) : (
 	                          <div className="pdf-canvas-fallback" aria-label="Loading PDF">
 	                            Loading PDF…
