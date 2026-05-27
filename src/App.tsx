@@ -2057,6 +2057,11 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
+  const resolvedQuickBooksBankCsvDateFormat = useMemo(() => {
+    if (qboAmbiguousDateFormat !== 'infer') return qboAmbiguousDateFormat
+    return qboDateFormatDetection?.format === 'dmy' ? 'dmy' : 'mdy'
+  }, [qboAmbiguousDateFormat, qboDateFormatDetection])
+
   const applyQuickbooksCsvDateRange = (range: { start: string; end: string }) => {
     const iso = /^\d{4}-\d{2}-\d{2}$/
     const nextStart = iso.test(range.start) ? range.start : ''
@@ -2734,6 +2739,7 @@ function App() {
                     onConvertCleanedFile={(cleaned) => {
                       void processFiles([cleaned])
                     }}
+                    quickBooksDateFormat={resolvedQuickBooksBankCsvDateFormat}
                   />
 
                   <details className="privacy-panel" id="support">

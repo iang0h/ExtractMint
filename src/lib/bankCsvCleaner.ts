@@ -25,6 +25,8 @@ export type BankSpreadsheetPreview = {
   stats: { rowsRead: number; truncated: boolean }
 }
 
+export type QuickBooksBankCsvDateFormat = 'dmy' | 'mdy'
+
 const datePattern =
   /(?:\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{2,4}\b)/i
 
@@ -154,9 +156,43 @@ function formatDateForTable(raw: string) {
   return `${Number(iso[3])}/${Number(iso[2])}/${iso[1]}`
 }
 
+function normalizeQuickBooksBankDate(raw: string, dateFormat: QuickBooksBankCsvDateFormat) {
+  const value = (raw ?? '').trim()
+  if (!value) return ''
+
+  const numeric = value.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
+  if (numeric) {
+    const first = Number.parseInt(numeric[1], 10)
+    const second = Number.parseInt(numeric[2], 10)
+    const year = numeric[3]?.length === 2 ? Number.parseInt(`20${numeric[3]}`, 10) : Number.parseInt(numeric[3], 10)
+    if (!Number.isFinite(first) || !Number.isFinite(second) || !Number.isFinite(year)) return value
+    const mm = dateFormat === 'mdy' ? first : second
+    const dd = dateFormat === 'mdy' ? second : first
+    return `${String(mm).padStart(2, '0')}/${String(dd).padStart(2, '0')}/${String(year).padStart(4, '0')}`
+  }
+
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (iso) {
+    const year = iso[1]
+    const month = iso[2]
+    const day = iso[3]
+    return dateFormat === 'mdy' ? `${month}/${day}/${year}` : `${day}/${month}/${year}`
+  }
+
+  return value
+}
+
 function numberOrBlank(value: number | undefined) {
   if (value === undefined || !Number.isFinite(value)) return ''
   return String(Math.round(value * 100) / 100)
+}
+
+function escapeCsvCell(value: string) {
+  const text = (value ?? '').trim()
+  if (text.includes('"') || text.includes(',') || text.includes('\n') || text.includes('\r')) {
+    return `"${text.replaceAll('"', '""')}"`
+  }
+  return text
 }
 
 export function parseBankDelimitedText(raw: string, options: { headerIndex?: number } = {}): BankDelimitedPreview | null {
@@ -271,5 +307,57 @@ export function buildExtractMintCleanedTable(preview: BankDelimitedPreview, mapp
   return {
     text: output.join('\n'),
     stats: { written, skippedNoDate },
+  }
+}
+
+export function buildQuickBooksBankCsv(preview: BankDelimitedPreview, mapping: BankCsvCleanerMapping, options: { dateFormat: QuickBooksBankCsvDateFormat }) {
+  const output: string[] = []
+  output.push('Date,Description,Amount')
+
+  let written = 0
+  let skippedNoDate = 0
+  let skippedNoAmount = 0
+  let skippedZeroAmount = 0
+
+  for (const row of preview.dataRows) {
+    const dateRaw = row[mapping.date] ?? ''
+    const date = normalizeQuickBooksBankDate(dateRaw, options.dateFormat)
+    if (!date) {
+      skippedNoDate += 1
+      continue
+    }
+
+    const description = clampText(mapping.description !== undefined ? (row[mapping.description] ?? '') : '', 220) || 'Transaction'
+
+    const amountRaw = mapping.amount !== undefined ? parseMoney(row[mapping.amount] ?? '') : undefined
+    const withdrawalRaw = mapping.withdrawal !== undefined ? parseMoney(row[mapping.withdrawal] ?? '') : undefined
+    const depositRaw = mapping.deposit !== undefined ? parseMoney(row[mapping.deposit] ?? '') : undefined
+
+    const withdrawal = withdrawalRaw !== undefined ? Math.abs(withdrawalRaw) : undefined
+    const deposit = depositRaw !== undefined ? Math.abs(depositRaw) : undefined
+    const derivedAmount =
+      amountRaw !== undefined
+        ? amountRaw
+        : deposit !== undefined || withdrawal !== undefined
+          ? (deposit ?? 0) - (withdrawal ?? 0)
+          : undefined
+
+    if (derivedAmount === undefined || !Number.isFinite(derivedAmount)) {
+      skippedNoAmount += 1
+      continue
+    }
+    const rounded = Math.round(derivedAmount * 100) / 100
+    if (Math.abs(rounded) < 0.0001) {
+      skippedZeroAmount += 1
+      continue
+    }
+
+    output.push(`${escapeCsvCell(date)},${escapeCsvCell(description)},${rounded}`)
+    written += 1
+  }
+
+  return {
+    text: output.join('\n') + '\n',
+    stats: { written, skippedNoDate, skippedNoAmount, skippedZeroAmount },
   }
 }

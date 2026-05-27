@@ -1,10 +1,17 @@
 import { FileSpreadsheet, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { BankCsvCleanerMapping } from '../lib/bankCsvCleaner'
-import { buildExtractMintCleanedTable, parseBankDelimitedText, parseBankSpreadsheetFile } from '../lib/bankCsvCleaner'
+import {
+  buildExtractMintCleanedTable,
+  buildQuickBooksBankCsv,
+  type QuickBooksBankCsvDateFormat,
+  parseBankDelimitedText,
+  parseBankSpreadsheetFile,
+} from '../lib/bankCsvCleaner'
 
 type Props = {
   onConvertCleanedFile: (file: File) => void
+  quickBooksDateFormat: QuickBooksBankCsvDateFormat
 }
 
 const defaultHeaderIndices = Array.from({ length: 12 }, (_, index) => index)
@@ -100,6 +107,26 @@ export function BankCsvCleaner(props: Props) {
     const built = buildExtractMintCleanedTable(preview, mapping as BankCsvCleanerMapping)
     return built.text.split('\n').slice(0, 7)
   }, [preview, mapping])
+
+  const canBuild = Boolean(preview && file && mapping.date !== undefined)
+
+  const downloadQuickBooksCsv = () => {
+    if (!preview || !file || mapping.date === undefined) return
+    setError('')
+    try {
+      const built = buildQuickBooksBankCsv(preview, mapping as BankCsvCleanerMapping, { dateFormat: props.quickBooksDateFormat })
+      setLastStats({ written: built.stats.written, skippedNoDate: built.stats.skippedNoDate })
+      const blob = new Blob([built.text], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.${props.quickBooksDateFormat}.csv`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (buildError) {
+      setError(buildError instanceof Error ? buildError.message : 'Failed to build QuickBooks CSV')
+    }
+  }
 
   return (
     <details className="csv-cleaner-panel">
@@ -334,7 +361,7 @@ export function BankCsvCleaner(props: Props) {
           <button
             type="button"
             className="secondary-button"
-            disabled={!preview || mapping.date === undefined || !file}
+            disabled={!canBuild}
             onClick={() => {
               if (!preview || mapping.date === undefined || !file) return
               setError('')
@@ -355,8 +382,19 @@ export function BankCsvCleaner(props: Props) {
             <FileSpreadsheet size={16} />
             Convert cleaned file
           </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canBuild}
+            onClick={downloadQuickBooksCsv}
+            title="Downloads a QuickBooks-friendly 3-column bank CSV (Date, Description, Amount). Amount uses negatives for withdrawals."
+          >
+            <FileSpreadsheet size={16} />
+            Download QuickBooks (CSV)
+          </button>
           <small>
-            Tip: pick <strong>Amount</strong> if you only have one column (negative = withdrawal, positive = deposit).
+            Tip: pick <strong>Amount</strong> if you only have one column (negative = withdrawal, positive = deposit). Date format uses your QuickBooks export
+            setting ({props.quickBooksDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}).
           </small>
         </div>
 
