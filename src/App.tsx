@@ -3157,6 +3157,20 @@ function App() {
                               <div key={warning.label} className="export-sanity-note">
                                 <strong>{warning.label}</strong>
                                 <span>{warning.detail}</span>
+                                {warning.label === 'Amounts may be inverted' ? (
+                                  <button
+                                    type="button"
+                                    className="link-button"
+                                    onClick={() => {
+                                      const next = !quickbooksCsvInvertAmounts
+                                      setQuickbooksCsvInvertAmounts(next)
+                                      storeValue('extractmint.quickbooksCsvInvertAmounts', next ? '1' : '0')
+                                    }}
+                                    aria-label={quickbooksCsvInvertAmounts ? 'Disable invert amounts' : 'Enable invert amounts'}
+                                  >
+                                    {quickbooksCsvInvertAmounts ? 'Disable “Invert amounts”' : 'Enable “Invert amounts”'}
+                                  </button>
+                                ) : null}
                               </div>
                             ))
                           ) : (
