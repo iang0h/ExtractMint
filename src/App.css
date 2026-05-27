@@ -794,6 +794,28 @@ h3 {
   font-weight: 650;
 }
 
+.error-banner,
+.warning-banner {
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  border: 1px solid rgba(16, 32, 41, 0.12);
+}
+
+.error-banner {
+  color: #7a1e1e;
+  background: rgba(255, 232, 232, 0.9);
+  border-color: rgba(170, 60, 60, 0.25);
+}
+
+.warning-banner {
+  color: #5b3b00;
+  background: rgba(255, 245, 220, 0.92);
+  border-color: rgba(170, 120, 30, 0.25);
+}
+
 @media (max-width: 720px) {
   .csv-cleaner-grid {
     grid-template-columns: 1fr;

@@ -1,7 +1,7 @@
 import { FileSpreadsheet, Wand2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { BankCsvCleanerMapping } from '../lib/bankCsvCleaner'
-import { buildExtractMintCleanedTable, parseBankDelimitedText } from '../lib/bankCsvCleaner'
+import { buildExtractMintCleanedTable, parseBankDelimitedText, parseBankSpreadsheetFile } from '../lib/bankCsvCleaner'
 
 type Props = {
   onConvertCleanedFile: (file: File) => void
@@ -9,13 +9,80 @@ type Props = {
 
 const defaultHeaderIndices = Array.from({ length: 12 }, (_, index) => index)
 
+function extensionOf(name: string) {
+  return name.split('.').pop()?.toLowerCase() ?? ''
+}
+
 export function BankCsvCleaner(props: Props) {
   const [file, setFile] = useState<File | null>(null)
   const [rawText, setRawText] = useState<string>('')
+  const [sheetNames, setSheetNames] = useState<string[]>([])
+  const [sheetName, setSheetName] = useState<string>('')
+  const [loadedSheetName, setLoadedSheetName] = useState<string>('')
+  const [sheetStats, setSheetStats] = useState<{ rowsRead: number; truncated: boolean } | null>(null)
   const [headerIndex, setHeaderIndex] = useState<number>(0)
   const [mapping, setMapping] = useState<Partial<BankCsvCleanerMapping>>({})
   const [error, setError] = useState<string>('')
   const [lastStats, setLastStats] = useState<{ written: number; skippedNoDate: number } | null>(null)
+
+  const isWorkbook = file ? ['xlsx', 'xls'].includes(extensionOf(file.name)) : false
+
+  useEffect(() => {
+    if (!file) return
+    if (!isWorkbook) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const parsed = await parseBankSpreadsheetFile(file, { maxRows: 5000 })
+        if (cancelled) return
+        setSheetNames(parsed.sheetNames)
+        setSheetName(parsed.activeSheet)
+        setLoadedSheetName(parsed.activeSheet)
+        setSheetStats(parsed.stats)
+        setRawText(parsed.text)
+      } catch (readError) {
+        if (cancelled) return
+        setError(readError instanceof Error ? readError.message : 'Failed to read spreadsheet')
+        setSheetNames([])
+        setSheetName('')
+        setLoadedSheetName('')
+        setSheetStats(null)
+        setRawText('')
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [file, isWorkbook])
+
+  useEffect(() => {
+    if (!file) return
+    if (!isWorkbook) return
+    if (!sheetName) return
+    if (sheetName === loadedSheetName) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const parsed = await parseBankSpreadsheetFile(file, { sheetName, maxRows: 5000 })
+        if (cancelled) return
+        setSheetStats(parsed.stats)
+        setLoadedSheetName(parsed.activeSheet)
+        setRawText(parsed.text)
+      } catch (readError) {
+        if (cancelled) return
+        setError(readError instanceof Error ? readError.message : 'Failed to read spreadsheet')
+        setSheetStats(null)
+        setRawText('')
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [file, isWorkbook, sheetName, loadedSheetName])
 
   const preview = useMemo(() => {
     if (!rawText) return null
@@ -45,16 +112,16 @@ export function BankCsvCleaner(props: Props) {
       </summary>
       <div className="csv-cleaner-body">
         <p>
-          Upload a bank-export <strong>.csv</strong>, map columns, and generate a cleaned ExtractMint table (local-only). Then click “Convert
-          cleaned file”.
+          Upload a bank-export <strong>.csv</strong> or <strong>.xlsx</strong>, map columns, and generate a cleaned ExtractMint table (local-only).
+          Then click “Convert cleaned file”.
         </p>
 
         <div className="csv-cleaner-grid">
           <label className="csv-cleaner-file">
-            <span>Bank CSV</span>
+            <span>Bank export</span>
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,application/vnd.ms-excel"
               onChange={(event) => {
                 const next = event.target.files?.[0] ?? null
                 setError('')
@@ -62,10 +129,16 @@ export function BankCsvCleaner(props: Props) {
                 setMapping({})
                 setHeaderIndex(0)
                 setFile(next)
+                setSheetNames([])
+                setSheetName('')
+                setLoadedSheetName('')
+                setSheetStats(null)
                 if (!next) {
                   setRawText('')
                   return
                 }
+                const extension = extensionOf(next.name)
+                if (['xlsx', 'xls'].includes(extension)) return
                 void (async () => {
                   try {
                     const text = await next.text()
@@ -78,6 +151,24 @@ export function BankCsvCleaner(props: Props) {
               }}
             />
           </label>
+
+          {isWorkbook && sheetNames.length > 1 ? (
+            <label>
+              <span>Sheet</span>
+              <select
+                value={sheetName}
+                onChange={(event) => {
+                  setSheetName(event.target.value)
+                }}
+              >
+                {sheetNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label>
             <span>Header row</span>
@@ -269,6 +360,12 @@ export function BankCsvCleaner(props: Props) {
           </small>
         </div>
 
+        {sheetStats?.truncated ? (
+          <div className="warning-banner">
+            Spreadsheet is large — showing the first <strong>{sheetStats.rowsRead}</strong> rows only. Export a smaller date range for best results.
+          </div>
+        ) : null}
+
         {error ? <div className="error-banner">{error}</div> : null}
         {lastStats ? (
           <div className="csv-cleaner-stats">
@@ -286,4 +383,3 @@ export function BankCsvCleaner(props: Props) {
     </details>
   )
 }
-

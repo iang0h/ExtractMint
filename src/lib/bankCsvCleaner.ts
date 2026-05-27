@@ -18,6 +18,16 @@ export type BankCsvCleanerMapping = {
   balance?: number
 }
 
+export type BankSpreadsheetPreview = {
+  sheetNames: string[]
+  activeSheet: string
+  text: string
+  stats: { rowsRead: number; truncated: boolean }
+}
+
+const datePattern =
+  /(?:\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{2,4}\b)/i
+
 function countUnquotedDelimiters(line: string, delimiter: Delimiter) {
   let inQuotes = false
   let count = 0
@@ -93,6 +103,18 @@ function clampText(value: string, maxLength: number) {
   return text.slice(0, maxLength).trim()
 }
 
+function cellToText(value: unknown) {
+  if (value === null || value === undefined) return ''
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  if (typeof value === 'object' && value && 'text' in value) {
+    return String((value as { text: unknown }).text)
+  }
+  if (typeof value === 'object' && value && 'result' in value) {
+    return String((value as { result: unknown }).result)
+  }
+  return String(value)
+}
+
 function parseMoney(value: string) {
   const raw = (value ?? '').trim()
   if (!raw) return undefined
@@ -140,8 +162,8 @@ function numberOrBlank(value: number | undefined) {
 export function parseBankDelimitedText(raw: string, options: { headerIndex?: number } = {}): BankDelimitedPreview | null {
   const lines = raw
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
+    .map((line) => line.replace(/\r$/, ''))
+    .filter((line) => line.trim().length > 0)
 
   if (lines.length === 0) return null
 
@@ -159,6 +181,48 @@ export function parseBankDelimitedText(raw: string, options: { headerIndex?: num
     headerIndex,
     headers,
     dataRows: rows.slice(headerIndex + 1),
+  }
+}
+
+export async function parseBankSpreadsheetFile(
+  file: File,
+  options: { sheetName?: string; maxRows?: number } = {},
+): Promise<BankSpreadsheetPreview> {
+  const maxRows = Math.max(1, options.maxRows ?? 5000)
+  const ExcelJS = await import('exceljs')
+  const buffer = await file.arrayBuffer()
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer)
+
+  const sheetNames = workbook.worksheets.map((sheet) => sheet.name).filter(Boolean)
+  const activeSheet = options.sheetName && sheetNames.includes(options.sheetName) ? options.sheetName : (sheetNames[0] ?? 'Sheet1')
+  const sheet = workbook.getWorksheet(activeSheet) ?? workbook.worksheets[0]
+
+  const lines: string[] = []
+  let rowsRead = 0
+  let truncated = false
+
+  sheet?.eachRow((row) => {
+    if (rowsRead >= maxRows) {
+      truncated = true
+      return
+    }
+    rowsRead += 1
+    const values = Array.isArray(row.values) ? row.values.slice(1) : []
+    const cells = values.map(cellToText).map((cell) => {
+      const trimmed = (cell ?? '').trim()
+      if (!trimmed) return ''
+      if (trimmed.match(datePattern)) return formatDateForTable(trimmed)
+      return trimmed
+    })
+    lines.push(cells.join('\t'))
+  })
+
+  return {
+    sheetNames,
+    activeSheet,
+    text: lines.join('\n'),
+    stats: { rowsRead, truncated },
   }
 }
 
