@@ -2952,6 +2952,104 @@ function App() {
               </div>
             ) : null}
 
+            {activeResult ? (
+              <div className="export-preflight" aria-label="Export preflight">
+                {(() => {
+                  const balance = exportSanitySnapshot(activeResult)
+                  const okThreshold = 0.02
+                  const balanceStatus =
+                    balance.discrepancy === undefined
+                      ? { label: 'Missing balance trail', className: 'is-missing' }
+                      : Math.abs(balance.discrepancy) <= okThreshold
+                        ? { label: 'Balances match', className: 'is-valid' }
+                        : { label: 'Balance mismatch', className: 'is-review' }
+
+                  const qbo = qboSanitySnapshot(activeResult, { ambiguousDateFormat: qboAmbiguousDateFormat })
+                  const qbCsv = quickBooksCsvSanitySnapshot(activeResult, {
+                    ambiguousDateFormat: qboAmbiguousDateFormat,
+                    dateRange:
+                      quickbooksCsvDateStart || quickbooksCsvDateEnd
+                        ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
+                        : undefined,
+                  })
+                  const xero = xeroSanitySnapshot(activeResult, {
+                    normalizeDates: xeroNormalizeDates,
+                    ambiguousDateFormat: xeroAmbiguousDateFormat,
+                  })
+
+                  const actions: string[] = []
+                  if (balanceStatus.className === 'is-review')
+                    actions.push('Balance check shows a discrepancy. Spot-check the opening/closing balances and scan for missing/duplicated lines.')
+                  if (qbCsv.overLimit)
+                    actions.push('QuickBooks CSV is near/over the ~1,000 line import limit. Use the date-range filter to split the export.')
+                  if (qbo.droppedRowCount > 0)
+                    actions.push('QuickBooks QBO will drop some rows (missing date/amount). Fix those rows before exporting QBO for reconciliation.')
+                  if (xero.warningCount > 0)
+                    actions.push('Xero CSV has warnings (missing/ambiguous dates or duplicates). Review the import checks before sending to an accountant.')
+                  if (xero.ambiguousDateCount > 0 && !xeroNormalizeDates)
+                    actions.push('Xero sees ambiguous numeric dates. Enable “Normalize Xero dates” (and pick DD/MM vs MM/DD) if Xero shifts dates on import.')
+
+                  return (
+                    <div className={`export-preflight-card ${balanceStatus.className}`}>
+                      <div className="export-preflight-header">
+                        <div>
+                          <strong>Export preflight</strong>
+                          <small>Quick summary of Xero/QuickBooks import risks before you download.</small>
+                        </div>
+                        <span className="export-preflight-status">{balanceStatus.label}</span>
+                      </div>
+
+                      <div className="export-preflight-grid">
+                        <div>
+                          <span>Extracted rows</span>
+                          <strong>{activeResult.rows.length}</strong>
+                        </div>
+                        <div>
+                          <span>Statement period</span>
+                          <strong>{statementPeriodLabel(activeResult.statementPeriod)}</strong>
+                        </div>
+                        <div>
+                          <span>QuickBooks CSV lines</span>
+                          <strong>
+                            {qbCsv.exportRowCount}
+                            {qbCsv.overLimit ? ' (split recommended)' : ''}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>QuickBooks QBO drops</span>
+                          <strong>{qbo.droppedRowCount}</strong>
+                        </div>
+                        <div>
+                          <span>Xero warnings</span>
+                          <strong>{xero.warningCount}</strong>
+                        </div>
+                        <div>
+                          <span>QuickBooks date assumption</span>
+                          <strong>{qboAmbiguousDateFormat === 'infer' ? 'Auto (infer)' : qboAmbiguousDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}</strong>
+                        </div>
+                      </div>
+
+                      {actions.length > 0 ? (
+                        <div className="export-preflight-actions" role="note">
+                          <strong>Recommended next step</strong>
+                          <ul>
+                            {actions.slice(0, 3).map((action) => (
+                              <li key={action}>{action}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : (
+                        <div className="export-preflight-actions" role="note">
+                          <strong>Recommended next step</strong>
+                          <div className="export-preflight-ok">No obvious import blockers detected. Download your export and reconcile.</div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            ) : null}
+
             <div className="export-options" aria-label="Review pack options">
               <label title="Include the original statement PDFs inside the review pack ZIP so PDF previews work when you import later (larger download).">
                 <input

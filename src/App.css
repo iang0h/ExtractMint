@@ -800,6 +800,130 @@ footer span {
   padding: 0 20px 20px;
 }
 
+.export-preflight {
+  padding: 0 20px 20px;
+}
+
+.export-preflight-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 14px 14px 12px;
+  box-shadow: 0 14px 30px rgba(44, 53, 44, 0.08);
+}
+
+.export-preflight-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.export-preflight-header strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.export-preflight-header small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.export-preflight-status {
+  align-self: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 720;
+  color: var(--ink);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.export-preflight-card.is-valid .export-preflight-status {
+  border-color: rgba(26, 167, 94, 0.26);
+  background: rgba(26, 167, 94, 0.1);
+}
+
+.export-preflight-card.is-review .export-preflight-status {
+  border-color: rgba(211, 138, 16, 0.26);
+  background: rgba(211, 138, 16, 0.12);
+}
+
+.export-preflight-card.is-missing .export-preflight-status {
+  border-color: rgba(90, 97, 92, 0.26);
+  background: rgba(90, 97, 92, 0.1);
+}
+
+.export-preflight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.export-preflight-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 10px 9px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.export-preflight-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.export-preflight-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.export-preflight-actions {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.export-preflight-actions strong {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: 0;
+  margin-bottom: 6px;
+}
+
+.export-preflight-actions ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.export-preflight-ok {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 10px 9px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
 .export-sanity-card {
   border: 1px solid var(--line);
   border-radius: 18px;
