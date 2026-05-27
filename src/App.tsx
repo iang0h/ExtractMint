@@ -3060,6 +3060,13 @@ function App() {
                     <span>Balance check</span>
                     <strong>{validationTitle(activeResult?.validation)}</strong>
                     <small>{validationDescription(activeResult?.validation)}</small>
+                    {activeResult?.validation ? (
+                      <ul className="validation-details">
+                        {validationAccuracyLines(activeResult.validation, activeResult.currencyCode).map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                 </div>
 
@@ -3739,6 +3746,36 @@ function validationDescription(validation?: ValidationSummary) {
     return `${validation.issueCount} issue${validation.issueCount === 1 ? '' : 's'} flagged.`
   }
   return 'Balances or amounts were missing from the extracted rows.'
+}
+
+function validationAccuracyLines(validation: ValidationSummary, currencyCode?: string) {
+  const lines: string[] = []
+  const opening = formatAmount(validation.openingBalance, currencyCode)
+  const closing = formatAmount(validation.closingBalance, currencyCode)
+  if (opening !== '-' || closing !== '-') {
+    lines.push(`Opening ${opening} · Closing ${closing}`)
+  }
+
+  if (validation.dateRange?.start || validation.dateRange?.end) {
+    const range =
+      validation.dateRange?.start && validation.dateRange?.end
+        ? `${validation.dateRange.start} → ${validation.dateRange.end}`
+        : validation.dateRange?.start
+          ? `From ${validation.dateRange.start}`
+          : `To ${validation.dateRange?.end}`
+
+    const counts: string[] = []
+    if (validation.distinctDateCount) counts.push(`${validation.distinctDateCount} day${validation.distinctDateCount === 1 ? '' : 's'}`)
+    if (validation.missingDateCount) counts.push(`${validation.missingDateCount} missing`)
+    lines.push(`Dates ${range}${counts.length > 0 ? ` (${counts.join(', ')})` : ''}`)
+  }
+
+  if (validation.duplicateTransactionCount) {
+    const count = validation.duplicateTransactionCount
+    lines.push(`${count} possible duplicate transaction${count === 1 ? '' : 's'}`)
+  }
+
+  return lines
 }
 
 function validationClass(status?: ValidationSummary['status']) {

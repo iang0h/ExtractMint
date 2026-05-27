@@ -45,6 +45,13 @@ export type ValidationSummary = {
   issueCount: number
   openingBalance?: number
   closingBalance?: number
+  dateRange?: {
+    start?: string
+    end?: string
+  }
+  distinctDateCount?: number
+  missingDateCount?: number
+  duplicateTransactionCount?: number
   issues: ValidationIssue[]
 }
 
@@ -2577,12 +2584,32 @@ function validateBalances(rows: ExtractedRow[], currencyCode: string): Validatio
   const status: ValidationSummary['status'] =
     checkedRows === 0 ? 'missing' : issues.length > 0 ? 'review' : 'valid'
 
+  const isoDates = rows
+    .map((row) => (row.date ? parseDateToIso(row.date) : undefined))
+    .filter((value): value is string => Boolean(value))
+  const distinctIsoDates = Array.from(new Set(isoDates)).sort()
+  const dateRange = normalizeIsoRange(distinctIsoDates.at(0), distinctIsoDates.at(-1))
+  const distinctDateCount = distinctIsoDates.length > 0 ? distinctIsoDates.length : undefined
+  const missingDateCount =
+    dateRange?.start && dateRange?.end && distinctIsoDates.length > 0
+      ? Math.max(
+          0,
+          daysBetweenInclusive(dateRange.start, dateRange.end) - distinctIsoDates.length,
+        )
+      : undefined
+
+  const duplicateTransactionCount = countDuplicateTransactions(rows)
+
   return {
     status,
     checkedRows,
     issueCount: issues.length,
     openingBalance: openingRow?.balance ?? rowsWithBalances.at(0)?.row.balance,
     closingBalance: closingRow?.balance ?? rowsWithBalances.at(-1)?.row.balance,
+    dateRange,
+    distinctDateCount,
+    missingDateCount,
+    duplicateTransactionCount,
     issues,
   }
 }
@@ -2595,6 +2622,41 @@ function amountForBalanceCheck(row: ExtractedRow) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100
+}
+
+function daysBetweenInclusive(startIso: string, endIso: string) {
+  const start = new Date(`${startIso}T00:00:00Z`)
+  const end = new Date(`${endIso}T00:00:00Z`)
+  const diff = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
+  return diff >= 0 ? diff + 1 : 1
+}
+
+function countDuplicateTransactions(rows: ExtractedRow[]) {
+  const counts = new Map<string, number>()
+
+  for (const row of rows) {
+    if (!row.date) continue
+    const iso = parseDateToIso(row.date)
+    if (!iso) continue
+    if (row.amount === undefined && row.deposit === undefined && row.withdrawal === undefined) continue
+
+    const normalizedDescription = row.description
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/[^\p{L}\p{N}\s]/gu, '')
+      .trim()
+      .slice(0, 80)
+
+    const amount = row.amount ?? (row.deposit ?? 0) - (row.withdrawal ?? 0)
+    const key = `${iso}|${roundMoney(amount)}|${normalizedDescription}`
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+
+  let duplicates = 0
+  for (const count of counts.values()) {
+    if (count > 1) duplicates += count - 1
+  }
+  return duplicates > 0 ? duplicates : undefined
 }
 
 function validationLabel(status: ValidationSummary['status']) {

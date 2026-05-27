@@ -1187,6 +1187,18 @@ footer {
   background: #eef8ee !important;
 }
 
+.validation-details {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.validation-details li + li {
+  margin-top: 4px;
+}
+
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
