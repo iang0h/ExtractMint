@@ -763,11 +763,28 @@ export function createQuickBooksCsvBlob(result: ConversionResult) {
 
 export function createQuickBooksCsvBlobWithOptions(
   result: ConversionResult,
-  options: { ambiguousDateFormat?: 'infer' | 'dmy' | 'mdy' } = {},
+  options: {
+    ambiguousDateFormat?: 'infer' | 'dmy' | 'mdy'
+    dateRange?: {
+      start?: string
+      end?: string
+    }
+  } = {},
 ) {
   const mode = options.ambiguousDateFormat ?? 'infer'
   const header = ['Date', 'Description', 'Amount']
-  const rows = result.rows
+  const normalizedRange = normalizeIsoRange(options.dateRange?.start, options.dateRange?.end)
+  const sourceRows = normalizedRange
+    ? result.rows.filter((row) => {
+        const iso = parseDateToIso(row.date ?? '')
+        if (!iso) return false
+        if (normalizedRange.start && iso < normalizedRange.start) return false
+        if (normalizedRange.end && iso > normalizedRange.end) return false
+        return true
+      })
+    : result.rows
+
+  const rows = sourceRows
     .map((row) => {
       const date = quickbooksCsvDate(row.date ?? '', { mode })
       const amount = quickbooksCsvAmountForRow(row)

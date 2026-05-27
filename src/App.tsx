@@ -446,12 +446,48 @@ const qboSanitySnapshot = (
 
 const quickBooksCsvSanitySnapshot = (
   result: ConversionResult,
-  options: { ambiguousDateFormat?: QboAmbiguousDateFormat } = {},
+  options: {
+    ambiguousDateFormat?: QboAmbiguousDateFormat
+    dateRange?: {
+      start?: string
+      end?: string
+    }
+  } = {},
 ): QuickBooksCsvSanitySnapshot => {
   const ambiguousDateFormat = options.ambiguousDateFormat ?? 'infer'
+  const normalizedRange = (() => {
+    const start = options.dateRange?.start?.trim() || undefined
+    const end = options.dateRange?.end?.trim() || undefined
+    if (!start && !end) return undefined
+    if (start && end && start > end) return { start: end, end: start }
+    return { start, end }
+  })()
 
   const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
   const numericDateMatch = (value: string) => value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
+
+  const parseDateToIso = (input: string) => {
+    const value = input.trim()
+    if (!value) return undefined
+    const iso = value.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+    if (iso) {
+      const year = iso[1]
+      const month = Number(iso[2])
+      const day = Number(iso[3])
+      if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
+    const slash = value.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
+    if (slash) {
+      const first = Number(slash[1])
+      const second = Number(slash[2])
+      const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
+      const [month, day] = first > 12 ? [second, first] : [first, second]
+      if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
+    return undefined
+  }
 
   const hasAmount = (row: ConversionResult['rows'][number]) => {
     if (row.amount !== undefined && Number.isFinite(row.amount) && row.amount !== 0) return true
@@ -493,8 +529,28 @@ const quickBooksCsvSanitySnapshot = (
   let missingAmountCount = 0
   let ambiguousDateCount = 0
   let nonIsoDateCount = 0
+  let rangeExcludedCount = 0
 
-  for (const row of result.rows) {
+  const filteredRows = normalizedRange
+    ? result.rows.filter((row) => {
+        const iso = parseDateToIso(row.date ?? '')
+        if (!iso) {
+          rangeExcludedCount += 1
+          return false
+        }
+        if (normalizedRange.start && iso < normalizedRange.start) {
+          rangeExcludedCount += 1
+          return false
+        }
+        if (normalizedRange.end && iso > normalizedRange.end) {
+          rangeExcludedCount += 1
+          return false
+        }
+        return true
+      })
+    : result.rows
+
+  for (const row of filteredRows) {
     const rawDate = (row.date ?? '').trim()
     const amountOk = hasAmount(row)
     const dateOk = rawDate ? isDateParseable(rawDate) : false
@@ -522,6 +578,11 @@ const quickBooksCsvSanitySnapshot = (
   const overLimit = exportRowCount > 999
   const warnings: QuickBooksCsvSanitySnapshot['warnings'] = []
 
+  if (normalizedRange && rangeExcludedCount > 0)
+    warnings.push({
+      label: 'Date range filtered rows',
+      detail: `${rangeExcludedCount} row(s) are outside the chosen date range (or have unparseable dates) and will be excluded from the QuickBooks CSV export.`,
+    })
   if (overLimit)
     warnings.push({
       label: 'Row limit risk',
@@ -997,6 +1058,14 @@ function App() {
     () => (activeResult ? detectQboNumericDateFormat(activeResult) : null),
     [activeResult],
   )
+  const [quickbooksCsvDateStart, setQuickbooksCsvDateStart] = useState<string>(() => {
+    const raw = storedValue('extractmint.quickbooksCsvDateStart')
+    return typeof raw === 'string' ? raw : ''
+  })
+  const [quickbooksCsvDateEnd, setQuickbooksCsvDateEnd] = useState<string>(() => {
+    const raw = storedValue('extractmint.quickbooksCsvDateEnd')
+    return typeof raw === 'string' ? raw : ''
+  })
 
   useEffect(() => {
     if (!activeResult) return
@@ -1722,6 +1791,13 @@ function App() {
       quickbooksCsv: (result: ConversionResult) =>
         converter.createQuickBooksCsvBlobWithOptions(result, {
           ambiguousDateFormat: qboAmbiguousDateFormat,
+          dateRange:
+            quickbooksCsvDateStart || quickbooksCsvDateEnd
+              ? {
+                  start: quickbooksCsvDateStart || undefined,
+                  end: quickbooksCsvDateEnd || undefined,
+                }
+              : undefined,
         }),
       docx: converter.createDocxBlob,
       pdf: converter.createPdfBlob,
@@ -1736,8 +1812,12 @@ function App() {
     const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
     const extension = format === 'xero' || format === 'quickbooksCsv' ? 'csv' : format
     const exportTag = format === 'xero' ? '.xero' : format === 'quickbooksCsv' ? '.quickbooks' : ''
+    const rangeTag =
+      format === 'quickbooksCsv' && (quickbooksCsvDateStart || quickbooksCsvDateEnd)
+        ? `.range-${(quickbooksCsvDateStart || 'start').replaceAll(/[^0-9-]/g, '')}-${(quickbooksCsvDateEnd || 'end').replaceAll(/[^0-9-]/g, '')}`
+        : ''
     anchor.href = url
-    anchor.download = `${baseName}${exportTag}.${extension}`
+    anchor.download = `${baseName}${exportTag}${rangeTag}.${extension}`
     anchor.click()
     URL.revokeObjectURL(url)
   }
@@ -2729,6 +2809,10 @@ function App() {
                 {(() => {
                   const snapshot = quickBooksCsvSanitySnapshot(activeResult, {
                     ambiguousDateFormat: qboAmbiguousDateFormat,
+                    dateRange:
+                      quickbooksCsvDateStart || quickbooksCsvDateEnd
+                        ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
+                        : undefined,
                   })
                   if (snapshot.warningCount === 0) return null
                   return (
@@ -2748,6 +2832,66 @@ function App() {
                     </div>
                   )
                 })()}
+
+                <div className="export-date-range" aria-label="QuickBooks CSV date range">
+                  <label title="Optional: restrict the QuickBooks CSV export to a date range to avoid QuickBooks import limits.">
+                    From
+                    <input
+                      type="date"
+                      value={quickbooksCsvDateStart}
+                      onChange={(event) => {
+                        const next = event.target.value
+                        setQuickbooksCsvDateStart(next)
+                        storeValue('extractmint.quickbooksCsvDateStart', next)
+                      }}
+                    />
+                  </label>
+                  <label title="Optional: restrict the QuickBooks CSV export to a date range to avoid QuickBooks import limits.">
+                    To
+                    <input
+                      type="date"
+                      value={quickbooksCsvDateEnd}
+                      onChange={(event) => {
+                        const next = event.target.value
+                        setQuickbooksCsvDateEnd(next)
+                        storeValue('extractmint.quickbooksCsvDateEnd', next)
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="export-date-range-button"
+                    onClick={() => {
+                      setQuickbooksCsvDateStart('')
+                      setQuickbooksCsvDateEnd('')
+                      storeValue('extractmint.quickbooksCsvDateStart', '')
+                      storeValue('extractmint.quickbooksCsvDateEnd', '')
+                    }}
+                    disabled={!quickbooksCsvDateStart && !quickbooksCsvDateEnd}
+                    title="Clear the QuickBooks CSV date range filter."
+                  >
+                    Clear range
+                  </button>
+                  <button
+                    type="button"
+                    className="export-date-range-button"
+                    onClick={() => {
+                      const start = activeResult.statementPeriod?.start ?? ''
+                      const end = activeResult.statementPeriod?.end ?? ''
+                      const iso = /^\d{4}-\d{2}-\d{2}$/
+                      const nextStart = iso.test(start) ? start : ''
+                      const nextEnd = iso.test(end) ? end : ''
+                      setQuickbooksCsvDateStart(nextStart)
+                      setQuickbooksCsvDateEnd(nextEnd)
+                      storeValue('extractmint.quickbooksCsvDateStart', nextStart)
+                      storeValue('extractmint.quickbooksCsvDateEnd', nextEnd)
+                    }}
+                    disabled={!activeResult.statementPeriod?.start && !activeResult.statementPeriod?.end}
+                    title="Set the QuickBooks CSV date range to the detected statement period (when available)."
+                  >
+                    Use statement period
+                  </button>
+                </div>
 
                 <label title="Controls how ExtractMint interprets numeric dates like 03/05/2026 when building QuickBooks exports (QBO and QuickBooks CSV).">
                   <input

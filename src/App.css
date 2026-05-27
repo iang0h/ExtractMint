@@ -944,6 +944,39 @@ footer span {
   height: 14px;
 }
 
+.export-options input[type='date'] {
+  width: auto;
+  height: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.export-date-range {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.export-date-range-button {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.export-date-range-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .export-options-hint {
   flex-basis: 100%;
   padding: 0 2px;
