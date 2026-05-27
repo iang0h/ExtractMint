@@ -834,6 +834,130 @@ h3 {
   text-underline-offset: 3px;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(12, 18, 15, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  width: min(720px, 100%);
+  max-height: min(82vh, 720px);
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.22);
+  color: var(--muted);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-header strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.modal-header small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.modal-close {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 740;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.modal-body {
+  padding: 14px 16px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.modal-section {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 12px 10px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.modal-section strong {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.modal-section span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.modal-section ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.modal-section code {
+  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.modal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.modal-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 10px 9px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.modal-grid span {
+  margin-top: 0;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.modal-grid strong {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
 .progress-panel {
   display: grid;
   grid-template-columns: 1fr auto;

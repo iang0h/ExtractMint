@@ -1089,6 +1089,7 @@ function App() {
     const raw = storedValue('extractmint.quickbooksCsvDateEnd')
     return typeof raw === 'string' ? raw : ''
   })
+  const [isQuickbooksCsvChecklistOpen, setIsQuickbooksCsvChecklistOpen] = useState(false)
   const [quickbooksSplitSuggestion, setQuickbooksSplitSuggestion] = useState<QuickBooksSplitSuggestion | null>(null)
   const [quickbooksSplitStatus, setQuickbooksSplitStatus] = useState<string | null>(null)
   const quickbooksSplitBusyRef = useRef(false)
@@ -1103,6 +1104,15 @@ function App() {
           : undefined,
     })
   }, [activeResult, qboAmbiguousDateFormat, quickbooksCsvDateStart, quickbooksCsvDateEnd])
+
+  useEffect(() => {
+    if (!isQuickbooksCsvChecklistOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsQuickbooksCsvChecklistOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isQuickbooksCsvChecklistOpen])
 
   const computeQuickbooksSplitSuggestion = useCallback(async () => {
     if (!activeResult) return
@@ -3037,6 +3047,14 @@ function App() {
                               Use the 3-column mapping in QuickBooks (Date, Description, Amount). Amount should be numeric (no currency symbols) and uses negatives for
                               expenses. If your import shifts day/month, change the date assumption before exporting.
                             </span>
+                            <button
+                              type="button"
+                              className="link-button"
+                              onClick={() => setIsQuickbooksCsvChecklistOpen(true)}
+                              aria-label="Open QuickBooks CSV mapping checklist"
+                            >
+                              Open mapping checklist
+                            </button>
                           </div>
                           <div className="export-sanity-note">
                             <strong>Official guide</strong>
@@ -4124,6 +4142,92 @@ function App() {
           <a href="/llms.txt">LLMs.txt</a>
         </div>
       </footer>
+
+      {isQuickbooksCsvChecklistOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setIsQuickbooksCsvChecklistOpen(false)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="QuickBooks CSV mapping checklist"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <strong>QuickBooks CSV mapping checklist</strong>
+                <small>Fast setup for the 3-column bank transaction import (Date, Description, Amount).</small>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setIsQuickbooksCsvChecklistOpen(false)}
+                aria-label="Close QuickBooks checklist"
+                title="Close (Esc)"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="modal-section">
+                <strong>1) Choose the 3-column format</strong>
+                <span>
+                  In QuickBooks, upload the CSV using the <em>3-column</em> template and map:
+                </span>
+                <div className="modal-grid" aria-label="QuickBooks CSV 3-column mapping">
+                  <div>
+                    <span>CSV column</span>
+                    <strong>Date</strong>
+                  </div>
+                  <div>
+                    <span>CSV column</span>
+                    <strong>Description</strong>
+                  </div>
+                  <div>
+                    <span>CSV column</span>
+                    <strong>Amount</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-section">
+                <strong>2) Amount sign rules (common failure)</strong>
+                <ul>
+                  <li>
+                    For bank accounts: deposits are typically <strong>positive</strong>, withdrawals/spend are typically <strong>negative</strong>.
+                  </li>
+                  <li>
+                    For credit cards, some exports invert signs. If the import swaps “money in/out”, try flipping the sign before re-importing.
+                  </li>
+                  <li>
+                    Keep amounts strictly numeric (e.g. <code>-12.34</code>). Remove currency symbols and parentheses negatives like <code>(12.34)</code>.
+                  </li>
+                </ul>
+              </div>
+
+              <div className="modal-section">
+                <strong>3) Date format</strong>
+                <span>
+                  Use a consistent date format. If your import shifts day/month, change ExtractMint’s date assumption and re-export.
+                </span>
+              </div>
+
+              <div className="modal-section">
+                <strong>Official guide</strong>
+                <span>
+                  <a
+                    href="https://quickbooks.intuit.com/learn-support/en-us/help-article/bank-transactions/format-csv-files-excel-get-bank-transactions/L4BjLWckq_US_en_US"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    QuickBooks CSV formatting guide
+                  </a>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isProcessing && (
         <div className="processing-toast">
