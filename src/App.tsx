@@ -116,6 +116,7 @@ type QuickBooksCsvSanitySnapshot = {
   ambiguousDateCount: number
   nonIsoDateCount: number
   overLimit: boolean
+  suggestInvertAmounts: boolean
   warningCount: number
   warnings: Array<{ label: string; detail: string }>
 }
@@ -521,6 +522,24 @@ const quickBooksCsvSanitySnapshot = (
     return Number.isFinite(net) && net !== 0
   }
 
+  const netAmountForRow = (row: ConversionResult['rows'][number]) => {
+    if (row.amount !== undefined && Number.isFinite(row.amount) && row.amount !== 0) return row.amount
+    const deposit = row.deposit
+    const withdrawal = row.withdrawal
+    const tax = row.tax
+    const hasDeposit = deposit !== undefined && Number.isFinite(deposit) && deposit !== 0
+    const hasWithdrawal = withdrawal !== undefined && Number.isFinite(withdrawal) && withdrawal !== 0
+    const hasTax = tax !== undefined && Number.isFinite(tax) && tax !== 0
+    if (!hasDeposit && !hasWithdrawal && !hasTax) return undefined
+    const net = (hasDeposit ? deposit ?? 0 : 0) - (hasWithdrawal ? withdrawal ?? 0 : 0) - (hasTax ? tax ?? 0 : 0)
+    return Number.isFinite(net) && net !== 0 ? net : undefined
+  }
+
+  const balanceForRow = (row: ConversionResult['rows'][number]) => {
+    const value = (row as { balance?: number }).balance
+    return value !== undefined && Number.isFinite(value) ? value : undefined
+  }
+
   const isDateParseable = (raw: string) => {
     const trimmed = raw.trim()
     if (!trimmed) return false
@@ -550,6 +569,8 @@ const quickBooksCsvSanitySnapshot = (
   let ambiguousDateCount = 0
   let nonIsoDateCount = 0
   let rangeExcludedCount = 0
+
+  let suggestInvertAmounts = false
 
   const filteredRows = normalizedRange
     ? result.rows.filter((row) => {
@@ -599,6 +620,59 @@ const quickBooksCsvSanitySnapshot = (
   const overLimit = exportRowCount > 999
   const warnings: QuickBooksCsvSanitySnapshot['warnings'] = []
 
+  const analyzeBalanceAgreement = (rows: ConversionResult['rows']) => {
+    let prevBalance: number | undefined
+    let evaluated = 0
+    let matched = 0
+    let inverted = 0
+    const tolerance = 0.02
+
+    for (const row of rows) {
+      const balance = balanceForRow(row)
+      if (balance === undefined) continue
+      if (prevBalance === undefined) {
+        prevBalance = balance
+        continue
+      }
+      const amount = netAmountForRow(row)
+      if (amount === undefined) {
+        prevBalance = balance
+        continue
+      }
+      const delta = balance - prevBalance
+      if (!Number.isFinite(delta) || Math.abs(delta) < tolerance) {
+        prevBalance = balance
+        continue
+      }
+
+      evaluated += 1
+      const same = Math.abs(delta - amount) <= tolerance
+      const flipped = Math.abs(delta + amount) <= tolerance
+      if (same) matched += 1
+      else if (flipped) inverted += 1
+
+      prevBalance = balance
+    }
+
+    return { evaluated, matched, inverted }
+  }
+
+  const agreementForward = analyzeBalanceAgreement(filteredRows)
+  const agreementReverse = analyzeBalanceAgreement([...filteredRows].reverse())
+  const agreement =
+    agreementReverse.evaluated > agreementForward.evaluated ||
+    agreementReverse.matched + agreementReverse.inverted > agreementForward.matched + agreementForward.inverted
+      ? agreementReverse
+      : agreementForward
+
+  if (agreement.evaluated >= 6 && agreement.inverted >= Math.max(4, agreement.matched * 2)) {
+    suggestInvertAmounts = true
+    warnings.push({
+      label: 'Amounts may be inverted',
+      detail: `ExtractMint compared ${agreement.evaluated} balance movements to transaction amounts and saw ${agreement.inverted} sign-inverted match(es). If this is a credit card statement (or the bank uses opposite debit/credit signs), enable “Invert amounts” before exporting QuickBooks CSV.`,
+    })
+  }
+
   if (normalizedRange && rangeExcludedCount > 0)
     warnings.push({
       label: 'Date range filtered rows',
@@ -634,6 +708,7 @@ const quickBooksCsvSanitySnapshot = (
     ambiguousDateCount,
     nonIsoDateCount,
     overLimit,
+    suggestInvertAmounts,
     warningCount: warnings.length,
     warnings,
   }
@@ -1088,6 +1163,9 @@ function App() {
   const [quickbooksCsvDateEnd, setQuickbooksCsvDateEnd] = useState<string>(() => {
     const raw = storedValue('extractmint.quickbooksCsvDateEnd')
     return typeof raw === 'string' ? raw : ''
+  })
+  const [quickbooksCsvInvertAmounts, setQuickbooksCsvInvertAmounts] = useState(() => {
+    return storedValue('extractmint.quickbooksCsvInvertAmounts') === '1'
   })
   const [isQuickbooksCsvChecklistOpen, setIsQuickbooksCsvChecklistOpen] = useState(false)
   const [quickbooksSplitSuggestion, setQuickbooksSplitSuggestion] = useState<QuickBooksSplitSuggestion | null>(null)
@@ -1887,6 +1965,7 @@ function App() {
       quickbooksCsv: (result: ConversionResult) =>
         converter.createQuickBooksCsvBlobWithOptions(result, {
           ambiguousDateFormat: qboAmbiguousDateFormat,
+          invertAmounts: quickbooksCsvInvertAmounts,
           dateRange:
             quickbooksCsvDateStart || quickbooksCsvDateEnd
               ? {
@@ -1959,6 +2038,7 @@ function App() {
     const converter = await loadConverter()
     const blob = await converter.createQuickBooksCsvBlobWithOptions(activeResult, {
       ambiguousDateFormat: qboAmbiguousDateFormat,
+      invertAmounts: quickbooksCsvInvertAmounts,
       dateRange: {
         start: start || undefined,
         end: end || undefined,
@@ -1983,6 +2063,7 @@ function App() {
       const converter = await loadConverter()
       const blob = await converter.createQuickBooksCsvSplitZipBlob(activeResult, {
         ambiguousDateFormat: qboAmbiguousDateFormat,
+        invertAmounts: quickbooksCsvInvertAmounts,
         dateRange:
           quickbooksCsvDateStart || quickbooksCsvDateEnd
             ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
@@ -3088,6 +3169,18 @@ function App() {
                 })()}
 
                 <div className="export-date-range" aria-label="QuickBooks CSV date range">
+                  <label title="Flip the Amount sign in the QuickBooks CSV export (useful for credit card statements or opposite debit/credit sign conventions).">
+                    <input
+                      type="checkbox"
+                      checked={quickbooksCsvInvertAmounts}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                        setQuickbooksCsvInvertAmounts(next)
+                        storeValue('extractmint.quickbooksCsvInvertAmounts', next ? '1' : '0')
+                      }}
+                    />
+                    Invert amounts
+                  </label>
                   <label title="Optional: restrict the QuickBooks CSV export to a date range to avoid QuickBooks import limits.">
                     From
                     <input
@@ -3343,6 +3436,8 @@ function App() {
                     actions.push('Balance check shows a discrepancy. Spot-check the opening/closing balances and scan for missing/duplicated lines.')
                   if (qbCsv.overLimit)
                     actions.push('QuickBooks CSV is near/over the ~1,000 line import limit. Use the split helper (or date-range filter) before importing.')
+                  if (qbCsv.suggestInvertAmounts)
+                    actions.push('QuickBooks CSV amounts look sign-inverted vs the balance trail. Enable “Invert amounts” if your import shows credits/debits flipped.')
                   if (qbo.droppedRowCount > 0)
                     actions.push('QuickBooks QBO will drop some rows (missing date/amount). Fix those rows before exporting QBO for reconciliation.')
                   if (xero.warningCount > 0)

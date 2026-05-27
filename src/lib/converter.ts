@@ -893,6 +893,7 @@ export async function createQuickBooksCsvSplitZipBlob(
       start?: string
       end?: string
     }
+    invertAmounts?: boolean
     maxLines?: number
     maxSplits?: number
   } = {},
@@ -920,6 +921,9 @@ export async function createQuickBooksCsvSplitZipBlob(
     readme.push('')
   }
   readme.push(`Split target: <= ${suggestion.maxLines} export rows per file (header row not counted).`)
+  if (options.invertAmounts) {
+    readme.push('Amount sign: inverted (helpful when statement balances move opposite the extracted debit/credit signs).')
+  }
   readme.push('')
   readme.push('Files:')
 
@@ -931,6 +935,7 @@ export async function createQuickBooksCsvSplitZipBlob(
     const blob = createQuickBooksCsvBlobWithOptions(result, {
       ambiguousDateFormat: options.ambiguousDateFormat,
       dateRange: { start: range.start, end: range.end },
+      invertAmounts: options.invertAmounts,
     })
     const countTag = String(range.exportRowCount).padStart(4, '0')
     const fileName = `${baseName}.quickbooks.range-${range.start}-${range.end}.${countTag}rows.csv`
@@ -956,6 +961,7 @@ export async function createQuickBooksCsvSplitZipBlob(
         fileName: result.fileName,
         statementPeriod: result.statementPeriod,
         requestedRange: options.dateRange ?? null,
+        invertAmounts: options.invertAmounts ?? false,
         targetMaxLines: suggestion.maxLines,
         totalExportRows: suggestion.totalExportRows,
         ranges,
@@ -977,9 +983,11 @@ export function createQuickBooksCsvBlobWithOptions(
       start?: string
       end?: string
     }
+    invertAmounts?: boolean
   } = {},
 ) {
   const mode = options.ambiguousDateFormat ?? 'infer'
+  const invertAmounts = options.invertAmounts === true
   const header = ['Date', 'Description', 'Amount']
   const normalizedRange = normalizeIsoRange(options.dateRange?.start, options.dateRange?.end)
   const sourceRows = normalizedRange
@@ -998,7 +1006,8 @@ export function createQuickBooksCsvBlobWithOptions(
       const amount = quickbooksCsvAmountForRow(row)
       if (!date) return null
       if (amount === undefined || !Number.isFinite(amount) || amount === 0) return null
-      return [date, row.description || 'Transaction', String(Math.round(amount * 100) / 100)]
+      const resolved = invertAmounts ? -amount : amount
+      return [date, row.description || 'Transaction', String(Math.round(resolved * 100) / 100)]
     })
     .filter((row): row is string[] => Boolean(row))
 
