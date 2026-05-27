@@ -22,7 +22,7 @@ import {
   Table2,
   UploadCloud,
 } from 'lucide-react'
-import { type DragEvent, Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { BankCsvCleaner } from './components/BankCsvCleaner'
 import type { PdfDocumentProxy, PdfMatchInfo } from './components/PdfCanvasViewer'
@@ -1086,6 +1086,44 @@ function App() {
   const [quickbooksSplitSuggestion, setQuickbooksSplitSuggestion] = useState<QuickBooksSplitSuggestion | null>(null)
   const [quickbooksSplitStatus, setQuickbooksSplitStatus] = useState<string | null>(null)
   const quickbooksSplitBusyRef = useRef(false)
+  const quickbooksSplitAutoComputedRef = useRef(false)
+  const quickbooksCsvSnapshot = useMemo(() => {
+    if (!activeResult) return null
+    return quickBooksCsvSanitySnapshot(activeResult, {
+      ambiguousDateFormat: qboAmbiguousDateFormat,
+      dateRange:
+        quickbooksCsvDateStart || quickbooksCsvDateEnd
+          ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
+          : undefined,
+    })
+  }, [activeResult, qboAmbiguousDateFormat, quickbooksCsvDateStart, quickbooksCsvDateEnd])
+
+  const computeQuickbooksSplitSuggestion = useCallback(async () => {
+    if (!activeResult) return
+    if (quickbooksSplitBusyRef.current) return
+    quickbooksSplitBusyRef.current = true
+    setQuickbooksSplitStatus('Computing split ranges…')
+    try {
+      const converter = await loadConverter()
+      const suggestion = converter.suggestQuickBooksCsvDateSplits(activeResult, {
+        dateRange:
+          quickbooksCsvDateStart || quickbooksCsvDateEnd
+            ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
+            : undefined,
+        maxLines: 950,
+      })
+      setQuickbooksSplitSuggestion(suggestion)
+      setQuickbooksSplitStatus(
+        suggestion.ranges.length > 0
+          ? `Generated ${suggestion.ranges.length} split(s) for ${suggestion.totalExportRows} export row(s).`
+          : 'No exportable rows found for the selected date range.',
+      )
+    } catch (error) {
+      setQuickbooksSplitStatus(error instanceof Error ? error.message : 'Failed to compute split ranges')
+    } finally {
+      quickbooksSplitBusyRef.current = false
+    }
+  }, [activeResult, quickbooksCsvDateEnd, quickbooksCsvDateStart])
 
   useEffect(() => {
     if (!activeResult) return
@@ -1111,7 +1149,23 @@ function App() {
     setQuickbooksSplitSuggestion(null)
     setQuickbooksSplitStatus(null)
     quickbooksSplitBusyRef.current = false
+    quickbooksSplitAutoComputedRef.current = false
   }, [activeResult, qboAmbiguousDateFormat, quickbooksCsvDateStart, quickbooksCsvDateEnd])
+
+  useEffect(() => {
+    if (!activeResult) return
+    if (!quickbooksCsvSnapshot?.overLimit) return
+    if (quickbooksSplitAutoComputedRef.current) return
+    quickbooksSplitAutoComputedRef.current = true
+    void computeQuickbooksSplitSuggestion()
+  }, [
+    activeResult,
+    computeQuickbooksSplitSuggestion,
+    qboAmbiguousDateFormat,
+    quickbooksCsvDateStart,
+    quickbooksCsvDateEnd,
+    quickbooksCsvSnapshot?.overLimit,
+  ])
   const supportMailtoHref = useMemo(() => {
     if (!supportEmail) return null
     const subject = 'ExtractMint support request'
@@ -1902,33 +1956,6 @@ function App() {
     anchor.download = `${baseName}.quickbooks${rangeTag}.csv`
     anchor.click()
     URL.revokeObjectURL(url)
-  }
-
-  const computeQuickbooksSplitSuggestion = async () => {
-    if (!activeResult) return
-    if (quickbooksSplitBusyRef.current) return
-    quickbooksSplitBusyRef.current = true
-    setQuickbooksSplitStatus('Computing split ranges…')
-    try {
-      const converter = await loadConverter()
-      const suggestion = converter.suggestQuickBooksCsvDateSplits(activeResult, {
-        dateRange:
-          quickbooksCsvDateStart || quickbooksCsvDateEnd
-            ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
-            : undefined,
-        maxLines: 950,
-      })
-      setQuickbooksSplitSuggestion(suggestion)
-      setQuickbooksSplitStatus(
-        suggestion.ranges.length > 0
-          ? `Generated ${suggestion.ranges.length} split(s) for ${suggestion.totalExportRows} export row(s).`
-          : 'No exportable rows found for the selected date range.',
-      )
-    } catch (error) {
-      setQuickbooksSplitStatus(error instanceof Error ? error.message : 'Failed to compute split ranges')
-    } finally {
-      quickbooksSplitBusyRef.current = false
-    }
   }
 
   const downloadQuickbooksCsvSplitZip = async () => {
@@ -3050,13 +3077,8 @@ function App() {
                 </div>
 
                 {(() => {
-                  const snapshot = quickBooksCsvSanitySnapshot(activeResult, {
-                    ambiguousDateFormat: qboAmbiguousDateFormat,
-                    dateRange:
-                      quickbooksCsvDateStart || quickbooksCsvDateEnd
-                        ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
-                        : undefined,
-                  })
+                  const snapshot = quickbooksCsvSnapshot
+                  if (!snapshot) return null
 
                   const suggestion = quickbooksSplitSuggestion
                   const showHelper = snapshot.overLimit || (suggestion?.ranges?.length ?? 0) > 0
@@ -3115,7 +3137,18 @@ function App() {
                       ) : (
                         <div className="export-split-helper-body">
                           <div className="export-split-helper-note">
-                            This export is near/over the QuickBooks CSV import limit. Generate suggested date ranges, then download a split ZIP.
+                            This export is near/over the QuickBooks CSV import limit. Suggested splits will appear automatically, then you can download a split ZIP.
+                          </div>
+                          <div className="export-split-helper-note" role="note">
+                            QuickBooks accepts a 3-column or 4-column bank CSV layout.{' '}
+                            <a
+                              href="https://quickbooks.intuit.com/learn-support/en-uk/help-article/bank-transactions/format-csv-files-excel-get-bank-transactions/L4BjLWckq_GB_en_GB"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Check the official CSV format guide
+                            </a>
+                            .
                           </div>
                         </div>
                       )}
