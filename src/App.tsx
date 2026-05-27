@@ -1172,6 +1172,8 @@ function App() {
     return raw === '0' || raw === '1'
   })())
   const quickbooksCsvInvertAmountsAutoAppliedForRef = useRef<string | null>(null)
+  const quickbooksCsvInvertAmountsAutoAppliedByAppForRef = useRef<string | null>(null)
+  const quickbooksCsvInvertAmountsAutoSuppressedForRef = useRef<string | null>(null)
   const [isQuickbooksCsvChecklistOpen, setIsQuickbooksCsvChecklistOpen] = useState(false)
   const [quickbooksSplitSuggestion, setQuickbooksSplitSuggestion] = useState<QuickBooksSplitSuggestion | null>(null)
   const [quickbooksSplitStatus, setQuickbooksSplitStatus] = useState<string | null>(null)
@@ -1191,7 +1193,8 @@ function App() {
   useEffect(() => {
     if (!activeResult) return
     if (quickbooksCsvInvertAmountsExplicitRef.current) return
-    if (quickbooksCsvInvertAmountsAutoAppliedForRef.current === (activeSha ?? activeResult.fileName)) return
+    const fileKey = activeSha ?? activeResult.fileName
+    if (quickbooksCsvInvertAmountsAutoAppliedForRef.current === fileKey) return
 
     const snapshot = quickBooksCsvSanitySnapshot(activeResult, {
       ambiguousDateFormat: qboAmbiguousDateFormat,
@@ -1201,11 +1204,16 @@ function App() {
           : undefined,
     })
 
-    if (snapshot.suggestInvertAmounts && !quickbooksCsvInvertAmounts) {
+    if (
+      snapshot.suggestInvertAmounts &&
+      !quickbooksCsvInvertAmounts &&
+      quickbooksCsvInvertAmountsAutoSuppressedForRef.current !== fileKey
+    ) {
       setQuickbooksCsvInvertAmounts(true)
+      quickbooksCsvInvertAmountsAutoAppliedByAppForRef.current = fileKey
     }
 
-    quickbooksCsvInvertAmountsAutoAppliedForRef.current = activeSha ?? activeResult.fileName
+    quickbooksCsvInvertAmountsAutoAppliedForRef.current = fileKey
   }, [
     activeResult,
     activeSha,
@@ -3229,6 +3237,28 @@ function App() {
                     />
                     Invert amounts
                   </label>
+                  {!quickbooksCsvInvertAmountsExplicitRef.current &&
+                  quickbooksCsvInvertAmounts &&
+                  quickbooksCsvSnapshot?.suggestInvertAmounts &&
+                  quickbooksCsvInvertAmountsAutoAppliedByAppForRef.current === (activeSha ?? activeResult?.fileName) ? (
+                    <span className="export-inline-hint">
+                      <span>Auto-enabled for this file. </span>
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => {
+                          const fileKey = activeSha ?? activeResult?.fileName
+                          if (!fileKey) return
+                          setQuickbooksCsvInvertAmounts(false)
+                          quickbooksCsvInvertAmountsAutoSuppressedForRef.current = fileKey
+                          quickbooksCsvInvertAmountsAutoAppliedByAppForRef.current = null
+                        }}
+                        aria-label="Undo auto-enabled invert amounts for this file"
+                      >
+                        Undo
+                      </button>
+                    </span>
+                  ) : null}
                   <label title="Optional: restrict the QuickBooks CSV export to a date range to avoid QuickBooks import limits.">
                     From
                     <input
