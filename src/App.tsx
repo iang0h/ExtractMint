@@ -1167,6 +1167,11 @@ function App() {
   const [quickbooksCsvInvertAmounts, setQuickbooksCsvInvertAmounts] = useState(() => {
     return storedValue('extractmint.quickbooksCsvInvertAmounts') === '1'
   })
+  const quickbooksCsvInvertAmountsExplicitRef = useRef<boolean>((() => {
+    const raw = storedValue('extractmint.quickbooksCsvInvertAmounts')
+    return raw === '0' || raw === '1'
+  })())
+  const quickbooksCsvInvertAmountsAutoAppliedForRef = useRef<string | null>(null)
   const [isQuickbooksCsvChecklistOpen, setIsQuickbooksCsvChecklistOpen] = useState(false)
   const [quickbooksSplitSuggestion, setQuickbooksSplitSuggestion] = useState<QuickBooksSplitSuggestion | null>(null)
   const [quickbooksSplitStatus, setQuickbooksSplitStatus] = useState<string | null>(null)
@@ -1182,6 +1187,33 @@ function App() {
           : undefined,
     })
   }, [activeResult, qboAmbiguousDateFormat, quickbooksCsvDateStart, quickbooksCsvDateEnd])
+
+  useEffect(() => {
+    if (!activeResult) return
+    if (quickbooksCsvInvertAmountsExplicitRef.current) return
+    if (quickbooksCsvInvertAmountsAutoAppliedForRef.current === (activeSha ?? activeResult.fileName)) return
+
+    const snapshot = quickBooksCsvSanitySnapshot(activeResult, {
+      ambiguousDateFormat: qboAmbiguousDateFormat,
+      dateRange:
+        quickbooksCsvDateStart || quickbooksCsvDateEnd
+          ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
+          : undefined,
+    })
+
+    if (snapshot.suggestInvertAmounts && !quickbooksCsvInvertAmounts) {
+      setQuickbooksCsvInvertAmounts(true)
+    }
+
+    quickbooksCsvInvertAmountsAutoAppliedForRef.current = activeSha ?? activeResult.fileName
+  }, [
+    activeResult,
+    activeSha,
+    qboAmbiguousDateFormat,
+    quickbooksCsvDateEnd,
+    quickbooksCsvDateStart,
+    quickbooksCsvInvertAmounts,
+  ])
 
   useEffect(() => {
     if (!isQuickbooksCsvChecklistOpen) return
@@ -3162,6 +3194,7 @@ function App() {
                                     type="button"
                                     className="link-button"
                                     onClick={() => {
+                                      quickbooksCsvInvertAmountsExplicitRef.current = true
                                       const next = !quickbooksCsvInvertAmounts
                                       setQuickbooksCsvInvertAmounts(next)
                                       storeValue('extractmint.quickbooksCsvInvertAmounts', next ? '1' : '0')
@@ -3188,6 +3221,7 @@ function App() {
                       type="checkbox"
                       checked={quickbooksCsvInvertAmounts}
                       onChange={(event) => {
+                        quickbooksCsvInvertAmountsExplicitRef.current = true
                         const next = event.target.checked
                         setQuickbooksCsvInvertAmounts(next)
                         storeValue('extractmint.quickbooksCsvInvertAmounts', next ? '1' : '0')
