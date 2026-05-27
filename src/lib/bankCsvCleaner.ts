@@ -182,6 +182,10 @@ function normalizeQuickBooksBankDate(raw: string, dateFormat: QuickBooksBankCsvD
   return value
 }
 
+function normalizeBankDate(raw: string, dateFormat: QuickBooksBankCsvDateFormat) {
+  return normalizeQuickBooksBankDate(raw, dateFormat)
+}
+
 function numberOrBlank(value: number | undefined) {
   if (value === undefined || !Number.isFinite(value)) return ''
   return String(Math.round(value * 100) / 100)
@@ -321,7 +325,7 @@ export function buildQuickBooksBankCsv(preview: BankDelimitedPreview, mapping: B
 
   for (const row of preview.dataRows) {
     const dateRaw = row[mapping.date] ?? ''
-    const date = normalizeQuickBooksBankDate(dateRaw, options.dateFormat)
+    const date = normalizeBankDate(dateRaw, options.dateFormat)
     if (!date) {
       skippedNoDate += 1
       continue
@@ -353,6 +357,59 @@ export function buildQuickBooksBankCsv(preview: BankDelimitedPreview, mapping: B
     }
 
     output.push(`${escapeCsvCell(date)},${escapeCsvCell(description)},${rounded}`)
+    written += 1
+  }
+
+  return {
+    text: output.join('\n') + '\n',
+    stats: { written, skippedNoDate, skippedNoAmount, skippedZeroAmount },
+  }
+}
+
+export function buildXeroBankCsv(preview: BankDelimitedPreview, mapping: BankCsvCleanerMapping, options: { dateFormat: QuickBooksBankCsvDateFormat }) {
+  const output: string[] = []
+  output.push('Date,Amount,Description,Reference')
+
+  let written = 0
+  let skippedNoDate = 0
+  let skippedNoAmount = 0
+  let skippedZeroAmount = 0
+
+  for (const row of preview.dataRows) {
+    const dateRaw = row[mapping.date] ?? ''
+    const date = normalizeBankDate(dateRaw, options.dateFormat)
+    if (!date) {
+      skippedNoDate += 1
+      continue
+    }
+
+    const description = clampText(mapping.description !== undefined ? (row[mapping.description] ?? '') : '', 220) || 'Transaction'
+    const reference = clampText(mapping.reference !== undefined ? (row[mapping.reference] ?? '') : '', 80)
+
+    const amountRaw = mapping.amount !== undefined ? parseMoney(row[mapping.amount] ?? '') : undefined
+    const withdrawalRaw = mapping.withdrawal !== undefined ? parseMoney(row[mapping.withdrawal] ?? '') : undefined
+    const depositRaw = mapping.deposit !== undefined ? parseMoney(row[mapping.deposit] ?? '') : undefined
+
+    const withdrawal = withdrawalRaw !== undefined ? Math.abs(withdrawalRaw) : undefined
+    const deposit = depositRaw !== undefined ? Math.abs(depositRaw) : undefined
+    const derivedAmount =
+      amountRaw !== undefined
+        ? amountRaw
+        : deposit !== undefined || withdrawal !== undefined
+          ? (deposit ?? 0) - (withdrawal ?? 0)
+          : undefined
+
+    if (derivedAmount === undefined || !Number.isFinite(derivedAmount)) {
+      skippedNoAmount += 1
+      continue
+    }
+    const rounded = Math.round(derivedAmount * 100) / 100
+    if (Math.abs(rounded) < 0.0001) {
+      skippedZeroAmount += 1
+      continue
+    }
+
+    output.push(`${escapeCsvCell(date)},${rounded},${escapeCsvCell(description)},${escapeCsvCell(reference)}`)
     written += 1
   }
 

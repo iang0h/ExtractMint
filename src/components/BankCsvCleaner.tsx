@@ -4,6 +4,7 @@ import type { BankCsvCleanerMapping } from '../lib/bankCsvCleaner'
 import {
   buildExtractMintCleanedTable,
   buildQuickBooksBankCsv,
+  buildXeroBankCsv,
   type QuickBooksBankCsvDateFormat,
   parseBankDelimitedText,
   parseBankSpreadsheetFile,
@@ -30,7 +31,16 @@ export function BankCsvCleaner(props: Props) {
   const [headerIndex, setHeaderIndex] = useState<number>(0)
   const [mapping, setMapping] = useState<Partial<BankCsvCleanerMapping>>({})
   const [error, setError] = useState<string>('')
-  const [lastStats, setLastStats] = useState<{ written: number; skippedNoDate: number } | null>(null)
+  const [lastStats, setLastStats] = useState<
+    | null
+    | {
+        kind: 'extractmint' | 'quickbooks' | 'xero'
+        written: number
+        skippedNoDate: number
+        skippedNoAmount?: number
+        skippedZeroAmount?: number
+      }
+  >(null)
 
   const isWorkbook = file ? ['xlsx', 'xls'].includes(extensionOf(file.name)) : false
 
@@ -115,7 +125,13 @@ export function BankCsvCleaner(props: Props) {
     setError('')
     try {
       const built = buildQuickBooksBankCsv(preview, mapping as BankCsvCleanerMapping, { dateFormat: props.quickBooksDateFormat })
-      setLastStats({ written: built.stats.written, skippedNoDate: built.stats.skippedNoDate })
+      setLastStats({
+        kind: 'quickbooks',
+        written: built.stats.written,
+        skippedNoDate: built.stats.skippedNoDate,
+        skippedNoAmount: built.stats.skippedNoAmount,
+        skippedZeroAmount: built.stats.skippedZeroAmount,
+      })
       const blob = new Blob([built.text], { type: 'text/csv;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
@@ -125,6 +141,30 @@ export function BankCsvCleaner(props: Props) {
       URL.revokeObjectURL(url)
     } catch (buildError) {
       setError(buildError instanceof Error ? buildError.message : 'Failed to build QuickBooks CSV')
+    }
+  }
+
+  const downloadXeroCsv = () => {
+    if (!preview || !file || mapping.date === undefined) return
+    setError('')
+    try {
+      const built = buildXeroBankCsv(preview, mapping as BankCsvCleanerMapping, { dateFormat: props.quickBooksDateFormat })
+      setLastStats({
+        kind: 'xero',
+        written: built.stats.written,
+        skippedNoDate: built.stats.skippedNoDate,
+        skippedNoAmount: built.stats.skippedNoAmount,
+        skippedZeroAmount: built.stats.skippedZeroAmount,
+      })
+      const blob = new Blob([built.text], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.xero-bank.${props.quickBooksDateFormat}.csv`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (buildError) {
+      setError(buildError instanceof Error ? buildError.message : 'Failed to build Xero CSV')
     }
   }
 
@@ -367,7 +407,7 @@ export function BankCsvCleaner(props: Props) {
               setError('')
               try {
                 const built = buildExtractMintCleanedTable(preview, mapping as BankCsvCleanerMapping)
-                setLastStats(built.stats)
+                setLastStats({ kind: 'extractmint', written: built.stats.written, skippedNoDate: built.stats.skippedNoDate })
                 const blob = new Blob([built.text], { type: 'text/plain;charset=utf-8' })
                 const cleaned = new File([blob], file.name.replace(/\\.csv$/i, '') + '.extractmint-cleaned.txt', {
                   type: 'text/plain',
@@ -392,6 +432,16 @@ export function BankCsvCleaner(props: Props) {
             <FileSpreadsheet size={16} />
             Download QuickBooks (CSV)
           </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canBuild}
+            onClick={downloadXeroCsv}
+            title="Downloads a Xero-friendly bank CSV (Date, Amount, Description, Reference). Amount uses negatives for withdrawals."
+          >
+            <FileSpreadsheet size={16} />
+            Download Xero (CSV)
+          </button>
           <small>
             Tip: pick <strong>Amount</strong> if you only have one column (negative = withdrawal, positive = deposit). Date format uses your QuickBooks export
             setting ({props.quickBooksDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}).
@@ -407,7 +457,15 @@ export function BankCsvCleaner(props: Props) {
         {error ? <div className="error-banner">{error}</div> : null}
         {lastStats ? (
           <div className="csv-cleaner-stats">
-            Cleaned rows: <strong>{lastStats.written}</strong> · Skipped rows missing date: <strong>{lastStats.skippedNoDate}</strong>
+            {lastStats.kind === 'extractmint' ? 'Cleaned rows' : 'Exported rows'}: <strong>{lastStats.written}</strong> · Skipped missing date:{' '}
+            <strong>{lastStats.skippedNoDate}</strong>
+            {lastStats.kind !== 'extractmint' ? (
+              <>
+                {' '}
+                · Skipped missing amount: <strong>{lastStats.skippedNoAmount ?? 0}</strong> · Skipped zero amount:{' '}
+                <strong>{lastStats.skippedZeroAmount ?? 0}</strong>
+              </>
+            ) : null}
           </div>
         ) : null}
 
