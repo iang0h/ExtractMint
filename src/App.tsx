@@ -2088,7 +2088,7 @@ function App() {
                 <Cloud size={28} />
               </motion.span>
               <strong>Drop documents here</strong>
-              <small>or click to choose PDFs, images, or ExtractMint review packs (.zip)</small>
+              <small>or click to choose PDFs, images, bank CSV/XLSX exports, or ExtractMint review packs (.zip)</small>
             </label>
 
             <div className="ocr-settings" aria-label="OCR settings">

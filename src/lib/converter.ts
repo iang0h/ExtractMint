@@ -1463,11 +1463,228 @@ async function extractText(file: File, onProgress: ProgressCallback, options: Ex
     return extractDocxText(file)
   }
 
+  if (extension === 'csv') {
+    return extractBankCsvText(file)
+  }
+
   if (['xlsx', 'xls'].includes(extension)) {
     return extractWorkbookText(file)
   }
 
   return file.text()
+}
+
+function countUnquotedDelimiters(line: string, delimiter: string) {
+  let inQuotes = false
+  let count = 0
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (char === '"') {
+      const next = line[index + 1]
+      if (inQuotes && next === '"') {
+        index += 1
+        continue
+      }
+      inQuotes = !inQuotes
+      continue
+    }
+    if (!inQuotes && char === delimiter) count += 1
+  }
+  return count
+}
+
+function splitDelimitedLine(line: string, delimiter: string) {
+  const cells: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (char === '"') {
+      const next = line[index + 1]
+      if (inQuotes && next === '"') {
+        current += '"'
+        index += 1
+        continue
+      }
+      inQuotes = !inQuotes
+      continue
+    }
+    if (!inQuotes && char === delimiter) {
+      cells.push(current)
+      current = ''
+      continue
+    }
+    current += char
+  }
+  cells.push(current)
+  return cells.map((cell) => cell.trim())
+}
+
+function guessDelimiter(lines: string[]) {
+  const candidates = [',', ';', '\t']
+  let best = ','
+  let bestScore = -1
+  for (const delimiter of candidates) {
+    const score = lines.reduce((sum, line) => sum + countUnquotedDelimiters(line, delimiter), 0)
+    if (score > bestScore) {
+      bestScore = score
+      best = delimiter
+    }
+  }
+  return best
+}
+
+function normalizeHeaderCell(value: string) {
+  return (value || '')
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function findHeaderRowIndex(rows: string[][]) {
+  const limit = Math.min(rows.length, 12)
+  for (let index = 0; index < limit; index += 1) {
+    const row = rows[index] ?? []
+    const joined = row.map(normalizeHeaderCell).join(' ')
+    const hasDate = row.some((cell) => /\bdate\b/.test(normalizeHeaderCell(cell)) || /transaction date|posted date|value date/.test(normalizeHeaderCell(cell)))
+    const hasAmountSignal = row.some((cell) =>
+      /\b(amount|amt|debit|credit|withdrawal|deposit|balance)\b/.test(normalizeHeaderCell(cell)),
+    )
+    if (hasDate && hasAmountSignal) return index
+    if (/date/.test(joined) && /(amount|debit|credit|withdrawal|deposit)/.test(joined)) return index
+  }
+  return 0
+}
+
+function pickColumnIndex(headers: string[], patterns: RegExp[]) {
+  for (let index = 0; index < headers.length; index += 1) {
+    const header = headers[index] ?? ''
+    if (patterns.some((pattern) => pattern.test(header))) return index
+  }
+  return -1
+}
+
+function formatDateForTable(raw: string) {
+  const value = (raw ?? '').trim()
+  if (!value) return ''
+  const numeric = value.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
+  if (numeric) {
+    const first = numeric[1]
+    const second = numeric[2]
+    const year = numeric[3]?.length === 2 ? `20${numeric[3]}` : numeric[3]
+    return `${first}/${second}/${year}`
+  }
+  const iso = parseDateToIso(value)
+  if (!iso) return value
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return value
+  return `${Number(match[3])}/${Number(match[2])}/${match[1]}`
+}
+
+function clampText(value: string, maxLength: number) {
+  const text = (value ?? '').trim().replace(/\s+/g, ' ')
+  if (text.length <= maxLength) return text
+  return text.slice(0, maxLength).trim()
+}
+
+function numberOrBlank(value: number | undefined) {
+  if (value === undefined || !Number.isFinite(value)) return ''
+  return String(Math.round(value * 100) / 100)
+}
+
+function parseMoney(value: string) {
+  const trimmed = (value ?? '').trim()
+  if (!trimmed) return undefined
+  const parsed = parseAmount(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+async function extractBankCsvText(file: File) {
+  const raw = await file.text()
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length === 0) return raw
+
+  const delimiter = guessDelimiter(lines.slice(0, 20))
+  const rows = lines.map((line) => splitDelimitedLine(line, delimiter)).filter((row) => row.some((cell) => (cell ?? '').trim()))
+  if (rows.length === 0) return raw
+
+  const headerIndex = findHeaderRowIndex(rows)
+  const headerRow = rows[headerIndex] ?? []
+  const headers = headerRow.map(normalizeHeaderCell)
+  const dataRows = rows.slice(headerIndex + 1)
+
+  const dateIndex = pickColumnIndex(headers, [/^date$/, /transaction date/, /posted date/, /value date/])
+  const descriptionIndex = pickColumnIndex(headers, [
+    /^description$/,
+    /details/,
+    /narration/,
+    /memo/,
+    /payee/,
+    /merchant/,
+    /transaction description/,
+  ])
+  const referenceIndex = pickColumnIndex(headers, [/^reference$/, /^ref\b/, /transaction id/, /^id$/, /cheque/, /check/])
+  const withdrawalIndex = pickColumnIndex(headers, [/withdrawal/, /^debit$/, /\bdr\b/, /money out/])
+  const depositIndex = pickColumnIndex(headers, [/deposit/, /^credit$/, /\bcr\b/, /money in/])
+  const amountIndex = pickColumnIndex(headers, [/^amount$/, /\bamt\b/, /transaction amount/])
+  const balanceIndex = pickColumnIndex(headers, [/balance/, /running balance/])
+
+  const hasAnyMapping =
+    dateIndex !== -1 ||
+    descriptionIndex !== -1 ||
+    referenceIndex !== -1 ||
+    withdrawalIndex !== -1 ||
+    depositIndex !== -1 ||
+    amountIndex !== -1 ||
+    balanceIndex !== -1
+
+  if (!hasAnyMapping) return raw
+
+  const output: string[] = []
+  output.push(['Date', 'Description', 'Reference', 'Withdrawal', 'Deposit', 'Tax', 'Balance'].join('\t'))
+
+  for (const row of dataRows) {
+    const dateRaw = dateIndex !== -1 ? (row[dateIndex] ?? '') : ''
+    const date = formatDateForTable(dateRaw)
+    if (!date) continue
+
+    const description = clampText(descriptionIndex !== -1 ? (row[descriptionIndex] ?? '') : '', 220) || 'Transaction'
+    const reference = clampText(referenceIndex !== -1 ? (row[referenceIndex] ?? '') : '', 80)
+
+    const withdrawal = withdrawalIndex !== -1 ? parseMoney(row[withdrawalIndex] ?? '') : undefined
+    const deposit = depositIndex !== -1 ? parseMoney(row[depositIndex] ?? '') : undefined
+    const amount = amountIndex !== -1 ? parseMoney(row[amountIndex] ?? '') : undefined
+    const balance = balanceIndex !== -1 ? parseMoney(row[balanceIndex] ?? '') : undefined
+
+    const normalizedWithdrawal =
+      withdrawal !== undefined
+        ? Math.abs(withdrawal)
+        : amount !== undefined && amount < 0
+          ? Math.abs(amount)
+          : undefined
+    const normalizedDeposit =
+      deposit !== undefined
+        ? Math.abs(deposit)
+        : amount !== undefined && amount > 0
+          ? Math.abs(amount)
+          : undefined
+
+    output.push(
+      [
+        date,
+        description,
+        reference,
+        numberOrBlank(normalizedWithdrawal),
+        numberOrBlank(normalizedDeposit),
+        '',
+        numberOrBlank(balance),
+      ].join('\t'),
+    )
+  }
+
+  return output.length > 1 ? output.join('\n') : raw
 }
 
 async function extractPdfText(file: File, onProgress: ProgressCallback, options: ExtractionOptions) {
@@ -1652,7 +1869,13 @@ async function extractWorkbookText(file: File) {
     chunks.push(`Sheet ${sheet.name}`)
     sheet.eachRow((row) => {
       const values = Array.isArray(row.values) ? row.values.slice(1) : []
-      chunks.push(values.map(cellToText).join(' '))
+      const cells = values.map(cellToText).map((cell) => {
+        const trimmed = (cell ?? '').trim()
+        if (!trimmed) return ''
+        if (trimmed.match(datePattern)) return formatDateForTable(trimmed)
+        return trimmed
+      })
+      chunks.push(cells.join('\t'))
     })
   })
   return chunks.join('\n')
