@@ -1447,18 +1447,76 @@ function sanitizeZipName(value: string) {
   return normalized.length > 120 ? normalized.slice(0, 120) : normalized || 'file'
 }
 
+function reviewPackReadmeForResult(result: ConversionResult) {
+  const fileName = result.fileName || 'statement'
+  const period =
+    result.statementPeriod?.start || result.statementPeriod?.end
+      ? [result.statementPeriod.start, result.statementPeriod.end].filter(Boolean).join(' to ')
+      : ''
+
+  const lines: string[] = []
+  lines.push(`# ExtractMint review pack: ${fileName}`)
+  if (period) lines.push(`- Statement period: ${period}`)
+  lines.push(`- Currency: ${result.currencyCode || 'USD'}`)
+  lines.push(`- Rows: ${result.rows.length}`)
+  lines.push(`- Confidence: ${result.confidence}%`)
+  lines.push(`- Validation: ${validationLabel(result.validation.status)} (${result.validation.issueCount} issue(s))`)
+
+  if (result.validation.issueCount > 0) {
+    lines.push('')
+    lines.push('## Next checks')
+    lines.push('- Review rows marked NEEDS_REVIEW in the XLSX "Rows" sheet.')
+    lines.push('- Compare the XLSX "Reconciliation" sheet against the statement totals (opening/closing balance + net change).')
+    lines.push('- If importing into accounting software, use the dedicated Xero/QuickBooks exports included in this pack.')
+  }
+
+  lines.push('')
+  lines.push('## Included files (per statement)')
+  lines.push('- `.xlsx` full workbook (Summary, Rows, Issues, Reconciliation)')
+  lines.push('- `.extractmint-review.json` re-importable ExtractMint review JSON')
+  lines.push('- `.csv` ExtractMint CSV (all columns)')
+  lines.push('- `.xero.csv` Xero-friendly bank statement CSV')
+  lines.push('- `.quickbooks.csv` QuickBooks-friendly 3-column CSV (Date, Description, Amount)')
+  lines.push('- `.qbo` QuickBooks Web Connect (OFX/QBO)')
+  lines.push('')
+  lines.push('Security note: This is a client-side export; files are generated locally in your browser.')
+
+  return `${lines.join('\n')}\n`
+}
+
 export async function createReviewPackZipBlob(results: ConversionResult[], sourcesBySha?: Record<string, ReviewPackSource>) {
   const JSZip = (await import('jszip')).default
   const zip = new JSZip()
   const root = zip.folder('extractmint-review-pack') ?? zip
   const sourcesFolder = root.folder('sources') ?? root
 
+  root.file(
+    'README.md',
+    [
+      '# ExtractMint review pack',
+      '',
+      'This ZIP contains one folder of source documents (optional) plus per-statement exports for review, reconciliation, and import.',
+      '',
+      'Tip: Prefer the dedicated `.xero.csv`, `.quickbooks.csv`, or `.qbo` files for accounting imports.',
+      '',
+    ].join('\n'),
+  )
+
   for (const result of results) {
-    const baseName = result.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
+    const baseName = sanitizeZipName(result.fileName.replace(/\.[^.]+$/, '') || 'extractmint')
     const xlsx = await createExcelBlob(result)
     const json = createReviewJsonBlob(result)
+    const csv = createCsvBlob(result)
+    const xeroCsv = createXeroCsvBlobWithOptions(result, {})
+    const quickbooksCsv = createQuickBooksCsvBlobWithOptions(result, {})
+    const qbo = createQboBlobWithOptions(result, {})
     root.file(`${baseName}.xlsx`, xlsx)
     root.file(`${baseName}.extractmint-review.json`, json)
+    root.file(`${baseName}.csv`, csv)
+    root.file(`${baseName}.xero.csv`, xeroCsv)
+    root.file(`${baseName}.quickbooks.csv`, quickbooksCsv)
+    root.file(`${baseName}.qbo`, qbo)
+    root.file(`${baseName}.README.md`, reviewPackReadmeForResult(result))
   }
 
   const manifest: Array<{ sha256: string; fileName: string; mimeType: string; size: number; path: string }> = []
