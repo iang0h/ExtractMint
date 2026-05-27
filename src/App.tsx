@@ -26,7 +26,7 @@ import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
-import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
+import type { ConversionResult, ProgressEvent, QuickBooksCsvSplitRange, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
   clearPersistentPdfTextIndex,
@@ -442,6 +442,13 @@ const qboSanitySnapshot = (
     warningCount: warnings.length,
     warnings,
   }
+}
+
+type QuickBooksSplitSuggestion = {
+  totalExportRows: number
+  maxLines: number
+  ranges: QuickBooksCsvSplitRange[]
+  warnings: string[]
 }
 
 const quickBooksCsvSanitySnapshot = (
@@ -1066,6 +1073,9 @@ function App() {
     const raw = storedValue('extractmint.quickbooksCsvDateEnd')
     return typeof raw === 'string' ? raw : ''
   })
+  const [quickbooksSplitSuggestion, setQuickbooksSplitSuggestion] = useState<QuickBooksSplitSuggestion | null>(null)
+  const [quickbooksSplitStatus, setQuickbooksSplitStatus] = useState<string | null>(null)
+  const quickbooksSplitBusyRef = useRef(false)
 
   useEffect(() => {
     if (!activeResult) return
@@ -1086,6 +1096,12 @@ function App() {
       setQboAmbiguousDateFormat(detected.format)
     }
   }, [activeResult, qboAmbiguousDateFormat])
+
+  useEffect(() => {
+    setQuickbooksSplitSuggestion(null)
+    setQuickbooksSplitStatus(null)
+    quickbooksSplitBusyRef.current = false
+  }, [activeResult, qboAmbiguousDateFormat, quickbooksCsvDateStart, quickbooksCsvDateEnd])
   const supportMailtoHref = useMemo(() => {
     if (!supportEmail) return null
     const subject = 'ExtractMint support request'
@@ -1820,6 +1836,64 @@ function App() {
     anchor.download = `${baseName}${exportTag}${rangeTag}.${extension}`
     anchor.click()
     URL.revokeObjectURL(url)
+  }
+
+  const computeQuickbooksSplitSuggestion = async () => {
+    if (!activeResult) return
+    if (quickbooksSplitBusyRef.current) return
+    quickbooksSplitBusyRef.current = true
+    setQuickbooksSplitStatus('Computing split ranges…')
+    try {
+      const converter = await loadConverter()
+      const suggestion = converter.suggestQuickBooksCsvDateSplits(activeResult, {
+        dateRange:
+          quickbooksCsvDateStart || quickbooksCsvDateEnd
+            ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
+            : undefined,
+        maxLines: 950,
+      })
+      setQuickbooksSplitSuggestion(suggestion)
+      setQuickbooksSplitStatus(
+        suggestion.ranges.length > 0
+          ? `Generated ${suggestion.ranges.length} split(s) for ${suggestion.totalExportRows} export row(s).`
+          : 'No exportable rows found for the selected date range.',
+      )
+    } catch (error) {
+      setQuickbooksSplitStatus(error instanceof Error ? error.message : 'Failed to compute split ranges')
+    } finally {
+      quickbooksSplitBusyRef.current = false
+    }
+  }
+
+  const downloadQuickbooksCsvSplitZip = async () => {
+    if (!activeResult) return
+    if (quickbooksSplitBusyRef.current) return
+    quickbooksSplitBusyRef.current = true
+    setQuickbooksSplitStatus('Building split ZIP…')
+    try {
+      const converter = await loadConverter()
+      const blob = await converter.createQuickBooksCsvSplitZipBlob(activeResult, {
+        ambiguousDateFormat: qboAmbiguousDateFormat,
+        dateRange:
+          quickbooksCsvDateStart || quickbooksCsvDateEnd
+            ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
+            : undefined,
+        maxLines: 950,
+      })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
+      const stamp = new Date().toISOString().slice(0, 10)
+      anchor.href = url
+      anchor.download = `${baseName}.quickbooks-split.${stamp}.zip`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setQuickbooksSplitStatus('Split ZIP downloaded.')
+    } catch (error) {
+      setQuickbooksSplitStatus(error instanceof Error ? error.message : 'Split ZIP export failed')
+    } finally {
+      quickbooksSplitBusyRef.current = false
+    }
   }
 
   const downloadReviewJson = () => {
@@ -2893,6 +2967,79 @@ function App() {
                   </button>
                 </div>
 
+                {(() => {
+                  const snapshot = quickBooksCsvSanitySnapshot(activeResult, {
+                    ambiguousDateFormat: qboAmbiguousDateFormat,
+                    dateRange:
+                      quickbooksCsvDateStart || quickbooksCsvDateEnd
+                        ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
+                        : undefined,
+                  })
+
+                  const suggestion = quickbooksSplitSuggestion
+                  const showHelper = snapshot.overLimit || (suggestion?.ranges?.length ?? 0) > 0
+                  if (!showHelper) return null
+
+                  return (
+                    <div className="export-split-helper" aria-label="QuickBooks CSV split helper">
+                      <div className="export-split-helper-header">
+                        <strong>QuickBooks split helper</strong>
+                        <small>Generates multiple QuickBooks CSV files under common import limits (~1,000 lines).</small>
+                      </div>
+                      {suggestion && suggestion.ranges.length > 0 ? (
+                        <div className="export-split-helper-body">
+                          <div className="export-split-helper-summary">
+                            Target: ≤ {suggestion.maxLines} rows per file · Total: {suggestion.totalExportRows} export rows
+                          </div>
+                          <ol className="export-split-helper-ranges">
+                            {suggestion.ranges.slice(0, 8).map((range) => (
+                              <li key={`${range.start}:${range.end}`}>
+                                <span className="export-split-helper-range">
+                                  {range.start} → {range.end}
+                                </span>
+                                <span className="export-split-helper-count">{range.exportRowCount} rows</span>
+                              </li>
+                            ))}
+                          </ol>
+                          {suggestion.ranges.length > 8 ? (
+                            <div className="export-split-helper-note">Showing the first 8 ranges. Download the ZIP for the full list.</div>
+                          ) : null}
+                          {suggestion.warnings.length > 0 ? (
+                            <div className="export-split-helper-note" role="note">
+                              {suggestion.warnings.slice(0, 1)[0]}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="export-split-helper-body">
+                          <div className="export-split-helper-note">
+                            This export is near/over the QuickBooks CSV import limit. Generate suggested date ranges, then download a split ZIP.
+                          </div>
+                        </div>
+                      )}
+                      <div className="export-split-helper-actions">
+                        <button type="button" className="export-date-range-button" onClick={() => void computeQuickbooksSplitSuggestion()}>
+                          Suggest splits
+                        </button>
+                        <button
+                          type="button"
+                          className="export-date-range-button"
+                          onClick={() => void downloadQuickbooksCsvSplitZip()}
+                          disabled={!quickbooksSplitSuggestion || quickbooksSplitSuggestion.ranges.length === 0}
+                          title={
+                            quickbooksSplitSuggestion && quickbooksSplitSuggestion.ranges.length > 0
+                              ? 'Downloads a ZIP of multiple QuickBooks CSV files, each covering a smaller date range.'
+                              : 'Generate split ranges first.'
+                          }
+                        >
+                          Download split ZIP
+                        </button>
+                        {quickbooksSplitStatus ? <span className="export-split-helper-status">{quickbooksSplitStatus}</span> : null}
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 <label title="Controls how ExtractMint interprets numeric dates like 03/05/2026 when building QuickBooks exports (QBO and QuickBooks CSV).">
                   <input
                     type="radio"
@@ -2981,7 +3128,7 @@ function App() {
                   if (balanceStatus.className === 'is-review')
                     actions.push('Balance check shows a discrepancy. Spot-check the opening/closing balances and scan for missing/duplicated lines.')
                   if (qbCsv.overLimit)
-                    actions.push('QuickBooks CSV is near/over the ~1,000 line import limit. Use the date-range filter to split the export.')
+                    actions.push('QuickBooks CSV is near/over the ~1,000 line import limit. Use the split helper (or date-range filter) before importing.')
                   if (qbo.droppedRowCount > 0)
                     actions.push('QuickBooks QBO will drop some rows (missing date/amount). Fix those rows before exporting QBO for reconciliation.')
                   if (xero.warningCount > 0)
