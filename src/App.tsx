@@ -1838,6 +1838,42 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
+  const applyQuickbooksCsvDateRange = (range: { start: string; end: string }) => {
+    const iso = /^\d{4}-\d{2}-\d{2}$/
+    const nextStart = iso.test(range.start) ? range.start : ''
+    const nextEnd = iso.test(range.end) ? range.end : ''
+    setQuickbooksCsvDateStart(nextStart)
+    setQuickbooksCsvDateEnd(nextEnd)
+    storeValue('extractmint.quickbooksCsvDateStart', nextStart)
+    storeValue('extractmint.quickbooksCsvDateEnd', nextEnd)
+  }
+
+  const downloadQuickbooksCsvForRange = async (range: { start: string; end: string }) => {
+    if (!activeResult) return
+
+    const iso = /^\d{4}-\d{2}-\d{2}$/
+    const start = iso.test(range.start) ? range.start : ''
+    const end = iso.test(range.end) ? range.end : ''
+    if (!start && !end) return
+
+    const converter = await loadConverter()
+    const blob = await converter.createQuickBooksCsvBlobWithOptions(activeResult, {
+      ambiguousDateFormat: qboAmbiguousDateFormat,
+      dateRange: {
+        start: start || undefined,
+        end: end || undefined,
+      },
+    })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
+    const rangeTag = `.range-${(start || 'start').replaceAll(/[^0-9-]/g, '')}-${(end || 'end').replaceAll(/[^0-9-]/g, '')}`
+    anchor.href = url
+    anchor.download = `${baseName}.quickbooks${rangeTag}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
   const computeQuickbooksSplitSuggestion = async () => {
     if (!activeResult) return
     if (quickbooksSplitBusyRef.current) return
@@ -2994,10 +3030,30 @@ function App() {
                           <ol className="export-split-helper-ranges">
                             {suggestion.ranges.slice(0, 8).map((range) => (
                               <li key={`${range.start}:${range.end}`}>
-                                <span className="export-split-helper-range">
-                                  {range.start} → {range.end}
+                                <span className="export-split-helper-row">
+                                  <span className="export-split-helper-range">
+                                    {range.start} → {range.end}
+                                  </span>
+                                  <span className="export-split-helper-count">{range.exportRowCount} rows</span>
                                 </span>
-                                <span className="export-split-helper-count">{range.exportRowCount} rows</span>
+                                <span className="export-split-helper-row-actions">
+                                  <button
+                                    type="button"
+                                    className="export-date-range-button"
+                                    onClick={() => applyQuickbooksCsvDateRange(range)}
+                                    title="Apply this date range to the QuickBooks CSV export filter."
+                                  >
+                                    Apply
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="export-date-range-button"
+                                    onClick={() => void downloadQuickbooksCsvForRange(range)}
+                                    title="Download a single QuickBooks CSV for this date range (no ZIP)."
+                                  >
+                                    Export CSV
+                                  </button>
+                                </span>
                               </li>
                             ))}
                           </ol>

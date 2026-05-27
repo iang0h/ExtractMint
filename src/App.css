@@ -1154,6 +1154,19 @@ footer span {
   gap: 12px;
 }
 
+.export-split-helper-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.export-split-helper-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .export-split-helper-range {
   color: var(--ink);
 }
