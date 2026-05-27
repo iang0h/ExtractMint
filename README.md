@@ -25,9 +25,12 @@ Elegant static SaaS prototype for converting bank statements, receipts, scans, P
 ```bash
 npm install
 npm run dev
+npm run dev:fixed
 npm run build
 npm run test:agent
 npm run preview
+npm run preview:fixed
+npm run qa:preview
 npm run deploy:vercel
 ```
 
