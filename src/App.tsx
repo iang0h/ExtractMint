@@ -1839,6 +1839,26 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
+  const downloadQuickbooksCsvTemplate = () => {
+    const resolvedFormat =
+      qboAmbiguousDateFormat === 'infer' ? (qboDateFormatDetection?.format ?? 'mdy') : qboAmbiguousDateFormat
+    const sampleDate = resolvedFormat === 'dmy' ? '13/05/2026' : '05/13/2026'
+    const lines = [
+      'Date,Description,Amount',
+      `${sampleDate},Coffee,-4.50`,
+      `${sampleDate},Client payment,2500.00`,
+      `${sampleDate},Bank fee,-2.00`,
+      '',
+    ]
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `quickbooks-bank-import-template.${resolvedFormat}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
   const applyQuickbooksCsvDateRange = (range: { start: string; end: string }) => {
     const iso = /^\d{4}-\d{2}-\d{2}$/
     const nextStart = iso.test(range.start) ? range.start : ''
@@ -3007,6 +3027,14 @@ function App() {
                     title="Set the QuickBooks CSV date range to the detected statement period (when available)."
                   >
                     Use statement period
+                  </button>
+                  <button
+                    type="button"
+                    className="export-date-range-button"
+                    onClick={downloadQuickbooksCsvTemplate}
+                    title="Download a sample QuickBooks 3-column CSV (Date, Description, Amount) to test-import. Uses your current DD/MM vs MM/DD assumption."
+                  >
+                    Template CSV
                   </button>
                 </div>
 
