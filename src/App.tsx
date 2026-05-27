@@ -109,6 +109,8 @@ type QboSanitySnapshot = {
 
 type QuickBooksCsvSanitySnapshot = {
   exportRowCount: number
+  droppedRowCount: number
+  rangeExcludedCount: number
   missingDateCount: number
   missingAmountCount: number
   ambiguousDateCount: number
@@ -542,6 +544,7 @@ const quickBooksCsvSanitySnapshot = (
   }
 
   let exportRowCount = 0
+  let droppedRowCount = 0
   let missingDateCount = 0
   let missingAmountCount = 0
   let ambiguousDateCount = 0
@@ -589,6 +592,7 @@ const quickBooksCsvSanitySnapshot = (
     }
 
     if (dateOk && amountOk) exportRowCount += 1
+    else droppedRowCount += 1
   }
 
   // Common community-reported cap: 1000 lines including header => 999 transactions.
@@ -623,6 +627,8 @@ const quickBooksCsvSanitySnapshot = (
 
   return {
     exportRowCount,
+    droppedRowCount,
+    rangeExcludedCount,
     missingDateCount,
     missingAmountCount,
     ambiguousDateCount,
@@ -2989,20 +2995,75 @@ function App() {
                         ? { start: quickbooksCsvDateStart || undefined, end: quickbooksCsvDateEnd || undefined }
                         : undefined,
                   })
-                  if (snapshot.warningCount === 0) return null
+                  const status =
+                    snapshot.warningCount === 0
+                      ? { label: 'Looks good', className: 'is-valid' }
+                      : { label: 'Review warnings', className: 'is-review' }
+
                   return (
                     <div className="export-sanity" aria-label="QuickBooks CSV import checks">
-                      <div className="export-sanity-header">
-                        <strong>QuickBooks CSV import checks</strong>
-                        <small>Flags common reasons QuickBooks CSV imports fail or shift dates.</small>
-                      </div>
-                      <div className="export-sanity-body">
-                        {snapshot.warnings.map((warning) => (
-                          <div key={warning.label} className="export-sanity-warning">
-                            <strong>{warning.label}</strong>
-                            <span>{warning.detail}</span>
+                      <div className={`export-sanity-card ${status.className}`}>
+                        <div className="export-sanity-header">
+                          <div>
+                            <strong>QuickBooks CSV import checks</strong>
+                            <small>Checklist + warnings for the 3-column bank CSV import (Date, Description, Amount).</small>
                           </div>
-                        ))}
+                          <span className="export-sanity-status">{status.label}</span>
+                        </div>
+                        <div className="export-sanity-grid" aria-label="QuickBooks CSV checks summary">
+                          <div>
+                            <span>Exportable rows</span>
+                            <strong>
+                              {snapshot.exportRowCount}
+                              {snapshot.overLimit ? ' (split recommended)' : ''}
+                            </strong>
+                          </div>
+                          <div>
+                            <span>Dropped rows</span>
+                            <strong>{snapshot.droppedRowCount}</strong>
+                          </div>
+                          <div>
+                            <span>Date assumption</span>
+                            <strong>
+                              {qboAmbiguousDateFormat === 'infer' ? 'Auto (infer)' : qboAmbiguousDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="export-sanity-notes" role="note">
+                          <div className="export-sanity-note">
+                            <strong>QuickBooks CSV checklist</strong>
+                            <span>
+                              Use the 3-column mapping in QuickBooks (Date, Description, Amount). Amount should be numeric (no currency symbols) and uses negatives for
+                              expenses. If your import shifts day/month, change the date assumption before exporting.
+                            </span>
+                          </div>
+                          <div className="export-sanity-note">
+                            <strong>Official guide</strong>
+                            <span>
+                              QuickBooks supports 3-column or 4-column bank CSV layouts.{' '}
+                              <a
+                                href="https://quickbooks.intuit.com/learn-support/en-us/help-article/bank-transactions/format-csv-files-excel-get-bank-transactions/L4BjLWckq_US_en_US"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                See QuickBooks’ official CSV formatting guide
+                              </a>
+                              .
+                            </span>
+                          </div>
+
+                          {snapshot.warningCount > 0 ? (
+                            snapshot.warnings.map((warning) => (
+                              <div key={warning.label} className="export-sanity-note">
+                                <strong>{warning.label}</strong>
+                                <span>{warning.detail}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="export-sanity-note">No obvious issues detected for QuickBooks CSV export.</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )
