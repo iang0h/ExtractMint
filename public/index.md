@@ -23,6 +23,7 @@ ExtractMint is a browser-based financial document extraction product for operato
 - Google Docs-ready DOCX
 - PDF summaries
 - QuickBooks-ready QBO
+- QuickBooks-friendly bank CSV
 - Review JSON
 - Review-pack ZIP
 
@@ -50,6 +51,7 @@ ExtractMint is a browser-based financial document extraction product for operato
 - [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
 - [Bank statement to Xero CSV](https://extractmint.iangoh.com/convert/bank-statement-to-xero-csv/)
 - [Bank statement to QBO](https://extractmint.iangoh.com/convert/bank-statement-to-qbo/)
+- [Bank statement to QuickBooks CSV](https://extractmint.iangoh.com/convert/bank-statement-to-quickbooks-csv/)
 - [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
 - [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)
 - [CIMB bank statement to Excel](https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/)

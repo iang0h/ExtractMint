@@ -97,6 +97,17 @@ type QboSanitySnapshot = {
   warnings: Array<{ label: string; detail: string }>
 }
 
+type QuickBooksCsvSanitySnapshot = {
+  exportRowCount: number
+  missingDateCount: number
+  missingAmountCount: number
+  ambiguousDateCount: number
+  nonIsoDateCount: number
+  overLimit: boolean
+  warningCount: number
+  warnings: Array<{ label: string; detail: string }>
+}
+
 const storedValue = (key: string) => {
   if (typeof window === 'undefined') return null
   try {
@@ -428,6 +439,117 @@ const qboSanitySnapshot = (
     missingAmountCount,
     ambiguousDateCount,
     nonIsoDateCount,
+    warningCount: warnings.length,
+    warnings,
+  }
+}
+
+const quickBooksCsvSanitySnapshot = (
+  result: ConversionResult,
+  options: { ambiguousDateFormat?: QboAmbiguousDateFormat } = {},
+): QuickBooksCsvSanitySnapshot => {
+  const ambiguousDateFormat = options.ambiguousDateFormat ?? 'infer'
+
+  const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const numericDateMatch = (value: string) => value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
+
+  const hasAmount = (row: ConversionResult['rows'][number]) => {
+    if (row.amount !== undefined && Number.isFinite(row.amount) && row.amount !== 0) return true
+    const deposit = row.deposit
+    const withdrawal = row.withdrawal
+    const tax = row.tax
+    const hasDeposit = deposit !== undefined && Number.isFinite(deposit) && deposit !== 0
+    const hasWithdrawal = withdrawal !== undefined && Number.isFinite(withdrawal) && withdrawal !== 0
+    const hasTax = tax !== undefined && Number.isFinite(tax) && tax !== 0
+    if (!hasDeposit && !hasWithdrawal && !hasTax) return false
+    const net = (hasDeposit ? deposit ?? 0 : 0) - (hasWithdrawal ? withdrawal ?? 0 : 0) - (hasTax ? tax ?? 0 : 0)
+    return Number.isFinite(net) && net !== 0
+  }
+
+  const isDateParseable = (raw: string) => {
+    const trimmed = raw.trim()
+    if (!trimmed) return false
+    if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(trimmed)) return true
+    const match = numericDateMatch(trimmed)
+    if (!match) return false
+    const first = Number.parseInt(match[1] ?? '', 10)
+    const second = Number.parseInt(match[2] ?? '', 10)
+    if (!Number.isFinite(first) || !Number.isFinite(second)) return false
+    if (first < 1 || first > 31 || second < 1 || second > 31) return false
+    const mode = ambiguousDateFormat
+    const [month, day] =
+      mode === 'dmy'
+        ? [second, first]
+        : mode === 'mdy'
+          ? [first, second]
+          : first > 12
+            ? [second, first]
+            : [first, second]
+    return month >= 1 && month <= 12 && day >= 1 && day <= 31
+  }
+
+  let exportRowCount = 0
+  let missingDateCount = 0
+  let missingAmountCount = 0
+  let ambiguousDateCount = 0
+  let nonIsoDateCount = 0
+
+  for (const row of result.rows) {
+    const rawDate = (row.date ?? '').trim()
+    const amountOk = hasAmount(row)
+    const dateOk = rawDate ? isDateParseable(rawDate) : false
+
+    if (!rawDate) missingDateCount += 1
+    if (!amountOk) missingAmountCount += 1
+
+    if (rawDate && !isIsoDate(rawDate)) {
+      const match = numericDateMatch(rawDate)
+      if (match) {
+        const first = Number.parseInt(match[1] ?? '', 10)
+        const second = Number.parseInt(match[2] ?? '', 10)
+        if (Number.isFinite(first) && Number.isFinite(second) && first >= 1 && first <= 12 && second >= 1 && second <= 12) {
+          ambiguousDateCount += 1
+        }
+      } else if (!/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(rawDate)) {
+        nonIsoDateCount += 1
+      }
+    }
+
+    if (dateOk && amountOk) exportRowCount += 1
+  }
+
+  // Common community-reported cap: 1000 lines including header => 999 transactions.
+  const overLimit = exportRowCount > 999
+  const warnings: QuickBooksCsvSanitySnapshot['warnings'] = []
+
+  if (overLimit)
+    warnings.push({
+      label: 'Row limit risk',
+      detail: `QuickBooks CSV imports often fail above ~1,000 lines. This export would contain ${exportRowCount} transactions (plus the header row). Consider splitting by date range.`,
+    })
+  if (ambiguousDateCount > 0)
+    warnings.push({
+      label: 'Ambiguous numeric dates',
+      detail: `${ambiguousDateCount} row(s) look like DD/MM/YYYY or MM/DD/YYYY (ambiguous). If imports shift day/month, pick the matching assumption before exporting.`,
+    })
+  if (nonIsoDateCount > 0)
+    warnings.push({
+      label: 'Non-standard dates',
+      detail: `${nonIsoDateCount} row(s) are not YYYY-MM-DD and not a simple numeric date. Consider normalizing those dates before exporting.`,
+    })
+  if (missingAmountCount > 0)
+    warnings.push({
+      label: 'Missing amounts',
+      detail: `${missingAmountCount} row(s) have no Amount (and no deposit/withdrawal/tax to derive a net amount).`,
+    })
+
+  return {
+    exportRowCount,
+    missingDateCount,
+    missingAmountCount,
+    ambiguousDateCount,
+    nonIsoDateCount,
+    overLimit,
     warningCount: warnings.length,
     warnings,
   }
@@ -1584,7 +1706,7 @@ function App() {
     void processFiles(event.dataTransfer.files)
   }
 
-  const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo' | 'xero') => {
+  const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo' | 'xero' | 'quickbooksCsv') => {
     if (!activeResult) return
 
     const converter = await loadConverter()
@@ -1597,6 +1719,10 @@ function App() {
           normalizeDates: xeroNormalizeDates,
           ambiguousDateFormat: xeroAmbiguousDateFormat,
         }),
+      quickbooksCsv: (result: ConversionResult) =>
+        converter.createQuickBooksCsvBlobWithOptions(result, {
+          ambiguousDateFormat: qboAmbiguousDateFormat,
+        }),
       docx: converter.createDocxBlob,
       pdf: converter.createPdfBlob,
       qbo: (result: ConversionResult) =>
@@ -1608,8 +1734,8 @@ function App() {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
-    const extension = format === 'xero' ? 'csv' : format
-    const exportTag = format === 'xero' ? '.xero' : ''
+    const extension = format === 'xero' || format === 'quickbooksCsv' ? 'csv' : format
+    const exportTag = format === 'xero' ? '.xero' : format === 'quickbooksCsv' ? '.quickbooks' : ''
     anchor.href = url
     anchor.download = `${baseName}${exportTag}.${extension}`
     anchor.click()
@@ -2361,6 +2487,14 @@ function App() {
                 CSV
               </button>
               <button
+                onClick={() => void downloadBlob('quickbooksCsv')}
+                disabled={!activeResult}
+                title="Exports a QuickBooks-friendly 3-column CSV (Date, Description, Amount) for manual bank transaction imports."
+              >
+                <ArrowDownToLine size={16} />
+                QuickBooks (CSV)
+              </button>
+              <button
                 onClick={() => void downloadBlob('xero')}
                 disabled={!activeResult}
                 title="Exports a Xero-friendly bank statement CSV (Date, Amount, Payee, Description, Reference)."
@@ -2592,7 +2726,30 @@ function App() {
 
             {activeResult ? (
               <div className="export-options" aria-label="QuickBooks export options">
-                <label title="Controls how ExtractMint interprets numeric dates like 03/05/2026 when building the QuickBooks QBO (OFX) export.">
+                {(() => {
+                  const snapshot = quickBooksCsvSanitySnapshot(activeResult, {
+                    ambiguousDateFormat: qboAmbiguousDateFormat,
+                  })
+                  if (snapshot.warningCount === 0) return null
+                  return (
+                    <div className="export-sanity" aria-label="QuickBooks CSV import checks">
+                      <div className="export-sanity-header">
+                        <strong>QuickBooks CSV import checks</strong>
+                        <small>Flags common reasons QuickBooks CSV imports fail or shift dates.</small>
+                      </div>
+                      <div className="export-sanity-body">
+                        {snapshot.warnings.map((warning) => (
+                          <div key={warning.label} className="export-sanity-warning">
+                            <strong>{warning.label}</strong>
+                            <span>{warning.detail}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                <label title="Controls how ExtractMint interprets numeric dates like 03/05/2026 when building QuickBooks exports (QBO and QuickBooks CSV).">
                   <input
                     type="radio"
                     name="qboAmbiguousDateFormat"
@@ -2635,11 +2792,11 @@ function App() {
                   <div className="export-options-hint" role="note">
                     {qboDateFormatDetection.format === 'unknown' ? (
                       <span>
-                        QBO date-format detection: no clear signal. If your statement uses numeric dates, pick the locale that matches your bank.
+                        QuickBooks date-format detection: no clear signal. If your statement uses numeric dates, pick the locale that matches your bank.
                       </span>
                     ) : (
                       <span>
-                        QBO date-format detection: looks like {qboDateFormatDetection.format === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'} (based on{' '}
+                        QuickBooks date-format detection: looks like {qboDateFormatDetection.format === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'} (based on{' '}
                         {qboDateFormatDetection.format === 'dmy'
                           ? qboDateFormatDetection.dmySignals
                           : qboDateFormatDetection.mdySignals}{' '}

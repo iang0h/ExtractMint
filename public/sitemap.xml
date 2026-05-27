@@ -85,6 +85,18 @@
     <priority>0.72</priority>
   </url>
   <url>
+    <loc>https://extractmint.iangoh.com/convert/bank-statement-to-quickbooks-csv/</loc>
+    <lastmod>2026-05-27</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.86</priority>
+  </url>
+  <url>
+    <loc>https://extractmint.iangoh.com/convert/bank-statement-to-quickbooks-csv/index.md</loc>
+    <lastmod>2026-05-27</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.72</priority>
+  </url>
+  <url>
     <loc>https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>

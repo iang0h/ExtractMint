@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Bank Statement to QuickBooks CSV Converter | ExtractMint</title>
+    <meta
+      name="description"
+      content="Convert bank statement PDFs into a QuickBooks-friendly 3-column CSV (Date, Description, Amount), plus Excel and QBO exports, with import checks for date and amount issues."
+    />
+    <link rel="canonical" href="https://extractmint.iangoh.com/convert/bank-statement-to-quickbooks-csv/" />
+    <link rel="stylesheet" href="/seo.css" />
+    <meta property="og:title" content="Bank Statement to QuickBooks CSV Converter | ExtractMint" />
+    <meta
+      property="og:description"
+      content="Export an import-ready QuickBooks bank CSV (Date, Description, Amount) from your statement PDF with validation checks before upload."
+    />
+    <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "ExtractMint",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://extractmint.iangoh.com/",
+        "description": "ExtractMint converts bank statements into QuickBooks-friendly CSV, QBO, Excel, and other exports.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true">EM</span>
+          ExtractMint
+        </a>
+        <div class="nav-links">
+          <a href="/#converter">Converter</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/convert/bank-statement-to-excel/">Excel export</a>
+        </div>
+      </nav>
+
+      <main>
+        <section class="hero">
+          <div>
+            <span class="eyebrow">Bank statement to QuickBooks CSV</span>
+            <h1>Export a QuickBooks bank CSV you can import without cleanup.</h1>
+            <p class="lede">
+              ExtractMint converts statement tables into transactions and exports a QuickBooks-friendly 3-column CSV (Date, Description, Amount),
+              plus Excel for review and QBO (OFX) for higher-fidelity imports.
+            </p>
+            <div class="cta-row">
+              <a class="button" href="/#converter">Upload a statement</a>
+              <a class="button secondary" href="/convert/bank-statement-to-qbo/">Prefer QBO (OFX)?</a>
+            </div>
+          </div>
+          <aside class="demo-card" aria-label="QuickBooks CSV import checks preview">
+            <div class="drop">
+              <strong>QuickBooks CSV checks</strong>
+              <div class="progress"><span></span></div>
+            </div>
+            <div class="sheet">
+              <div class="sheet-head"><span>Check</span><span>Why it matters</span><span>Status</span><span>Fix</span></div>
+              <div class="sheet-row highlight"><span>Row limit</span><span>Large files can fail to upload</span><span>Review</span><span>Split date range</span></div>
+              <div class="sheet-row"><span>Date format</span><span>Slash dates can flip month/day</span><span>Review</span><span>Choose DD/MM vs MM/DD</span></div>
+              <div class="sheet-row"><span>Missing amount</span><span>Imports omit blank/zero rows</span><span>Review</span><span>Edit or remove row</span></div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="grid">
+          <article class="panel">
+            <h2>3-column bank CSV</h2>
+            <p>Download a simple CSV formatted for QuickBooks manual bank transaction uploads.</p>
+          </article>
+          <article class="panel">
+            <h2>Import sanity checks</h2>
+            <p>See warnings for missing dates, missing amounts, ambiguous numeric dates, and large exports before you import.</p>
+          </article>
+          <article class="panel">
+            <h2>Reconcile first</h2>
+            <p>Export Excel for review, then import QuickBooks CSV or QBO when the balance trail matches your statement.</p>
+          </article>
+        </section>
+
+        <section class="panel">
+          <h2>Best fit</h2>
+          <ul>
+            <li>QuickBooks Online users importing bank transactions from CSV.</li>
+            <li>Accountants preparing client onboarding files from statement PDFs.</li>
+            <li>Teams who want a browser-side workflow before adding a backend queue.</li>
+          </ul>
+        </section>
+
+        <section class="faq">
+          <details open>
+            <summary>Should I use QuickBooks CSV or QBO?</summary>
+            <p>CSV is simple and widely supported. QBO (OFX) includes more structure and can be more reliable. ExtractMint supports both so you can pick what works for your account.</p>
+          </details>
+          <details>
+            <summary>Will QuickBooks accept any date format?</summary>
+            <p>Slash dates like 03/05/2026 can be ambiguous. ExtractMint lets you pick a DD/MM or MM/DD assumption so imports don’t shift.</p>
+          </details>
+          <details>
+            <summary>Does the file leave my computer?</summary>
+            <p>The current static app processes files in the browser. A future SaaS backend should add explicit retention controls and audit logs.</p>
+          </details>
+        </section>
+
+        <section class="related" aria-label="Related converters">
+          <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
+          <a href="/convert/bank-statement-to-qbo/">Bank statement to QBO</a>
+          <a href="/convert/bank-statement-to-xero-csv/">Bank statement to Xero CSV</a>
+          <a href="/convert/scanned-bank-statement-to-excel/">Scanned statement OCR</a>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>ExtractMint</span>
+        <span>Bank statements, receipts, invoices, and scans to clean working files.</span>
+      </footer>
+    </div>
+  </body>
+</html>
+

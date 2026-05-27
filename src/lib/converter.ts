@@ -685,6 +685,105 @@ export function createXeroCsvBlob(result: ConversionResult) {
   return createXeroCsvBlobWithOptions(result, {})
 }
 
+function quickbooksCsvDate(
+  raw: string,
+  options: { mode?: 'infer' | 'dmy' | 'mdy' } = {},
+) {
+  const value = (raw ?? '').trim()
+  if (!value) return ''
+
+  const mode = options.mode ?? 'infer'
+
+  const iso = value.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+  if (iso) {
+    const year = iso[1]
+    const month = Number.parseInt(iso[2] ?? '', 10)
+    const day = Number.parseInt(iso[3] ?? '', 10)
+    if (!Number.isFinite(month) || !Number.isFinite(day)) return value
+    if (month < 1 || month > 12 || day < 1 || day > 31) return value
+    const dd = String(day).padStart(2, '0')
+    const mm = String(month).padStart(2, '0')
+    return mode === 'mdy' ? `${mm}/${dd}/${year}` : `${dd}/${mm}/${year}`
+  }
+
+  const slash = value.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
+  if (slash) {
+    const first = Number.parseInt(slash[1] ?? '', 10)
+    const second = Number.parseInt(slash[2] ?? '', 10)
+    const year = (slash[3] ?? '').length === 2 ? `20${slash[3]}` : (slash[3] ?? '')
+    if (!Number.isFinite(first) || !Number.isFinite(second)) return value
+    if (!year) return value
+
+    const firstCanBeMonth = first >= 1 && first <= 12
+    const secondCanBeMonth = second >= 1 && second <= 12
+
+    const [month, day] =
+      mode === 'dmy'
+        ? [second, first]
+        : mode === 'mdy'
+          ? [first, second]
+          : !firstCanBeMonth && secondCanBeMonth
+            ? [second, first]
+            : !secondCanBeMonth && firstCanBeMonth
+              ? [first, second]
+              : [NaN, NaN]
+
+    if (!Number.isFinite(month) || !Number.isFinite(day)) {
+      // Ambiguous (e.g. 03/05/2026) and mode === 'infer'. Preserve as-is.
+      return value
+    }
+
+    if (month < 1 || month > 12 || day < 1 || day > 31) return value
+    const dd = String(day).padStart(2, '0')
+    const mm = String(month).padStart(2, '0')
+    return mode === 'mdy' ? `${mm}/${dd}/${year}` : `${dd}/${mm}/${year}`
+  }
+
+  const isoFromName = parseDateToIso(value)
+  if (isoFromName) return quickbooksCsvDate(isoFromName, { mode })
+
+  return value
+}
+
+function quickbooksCsvAmountForRow(row: ExtractedRow) {
+  if (row.amount !== undefined && Number.isFinite(row.amount)) return row.amount
+  const deposit = row.deposit
+  const withdrawal = row.withdrawal
+  const tax = row.tax
+  const hasDeposit = deposit !== undefined && Number.isFinite(deposit)
+  const hasWithdrawal = withdrawal !== undefined && Number.isFinite(withdrawal)
+  const hasTax = tax !== undefined && Number.isFinite(tax)
+  if (!hasDeposit && !hasWithdrawal && !hasTax) return undefined
+  return (hasDeposit ? deposit ?? 0 : 0) - (hasWithdrawal ? withdrawal ?? 0 : 0) - (hasTax ? tax ?? 0 : 0)
+}
+
+export function createQuickBooksCsvBlob(result: ConversionResult) {
+  return createQuickBooksCsvBlobWithOptions(result, {})
+}
+
+export function createQuickBooksCsvBlobWithOptions(
+  result: ConversionResult,
+  options: { ambiguousDateFormat?: 'infer' | 'dmy' | 'mdy' } = {},
+) {
+  const mode = options.ambiguousDateFormat ?? 'infer'
+  const header = ['Date', 'Description', 'Amount']
+  const rows = result.rows
+    .map((row) => {
+      const date = quickbooksCsvDate(row.date ?? '', { mode })
+      const amount = quickbooksCsvAmountForRow(row)
+      if (!date) return null
+      if (amount === undefined || !Number.isFinite(amount) || amount === 0) return null
+      return [date, row.description || 'Transaction', String(Math.round(amount * 100) / 100)]
+    })
+    .filter((row): row is string[] => Boolean(row))
+
+  const csv = [header, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+    .join('\n')
+
+  return new Blob([csv], { type: 'text/csv;charset=utf-8' })
+}
+
 export function createXeroCsvBlobWithOptions(
   result: ConversionResult,
   options: {

@@ -16,6 +16,7 @@ const markdownMirrors = [
   'https://extractmint.iangoh.com/convert/bank-statement-to-excel/index.md',
   'https://extractmint.iangoh.com/convert/bank-statement-to-xero-csv/index.md',
   'https://extractmint.iangoh.com/convert/bank-statement-to-qbo/index.md',
+  'https://extractmint.iangoh.com/convert/bank-statement-to-quickbooks-csv/index.md',
   'https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/index.md',
   'https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/index.md',
   'https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/index.md',
