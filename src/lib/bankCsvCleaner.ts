@@ -18,6 +18,8 @@ export type BankCsvCleanerMapping = {
   balance?: number
 }
 
+export type QuickBooksCsvDateFormat = 'mdy' | 'dmy' | 'ymd'
+
 export type BankSpreadsheetPreview = {
   sheetNames: string[]
   activeSheet: string
@@ -159,6 +161,41 @@ function numberOrBlank(value: number | undefined) {
   return String(Math.round(value * 100) / 100)
 }
 
+function formatMoneyForCsv(value: number) {
+  const normalized = Math.round(value * 100) / 100
+  if (!Number.isFinite(normalized)) return ''
+  return normalized.toFixed(2)
+}
+
+function csvEscape(value: string) {
+  const raw = value ?? ''
+  if (!raw) return ''
+  const needsQuotes = raw.includes(',') || raw.includes('"') || raw.includes('\n') || raw.includes('\r')
+  if (!needsQuotes) return raw
+  return `"${raw.replace(/"/g, '""')}"`
+}
+
+function formatDateForQuickBooksCsv(dateForTable: string, dateFormat: QuickBooksCsvDateFormat) {
+  const value = (dateForTable ?? '').trim()
+  if (!value) return ''
+
+  const table = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (table) {
+    const day = Number.parseInt(table[1] ?? '', 10)
+    const month = Number.parseInt(table[2] ?? '', 10)
+    const year = table[3] ?? ''
+    if (dateFormat === 'ymd') {
+      const mm = String(Math.max(1, Math.min(12, month))).padStart(2, '0')
+      const dd = String(Math.max(1, Math.min(31, day))).padStart(2, '0')
+      return `${year}-${mm}-${dd}`
+    }
+    if (dateFormat === 'mdy') return `${month}/${day}/${year}`
+    return `${day}/${month}/${year}`
+  }
+
+  return value
+}
+
 export function parseBankDelimitedText(raw: string, options: { headerIndex?: number } = {}): BankDelimitedPreview | null {
   const lines = raw
     .split(/\r?\n/)
@@ -271,5 +308,71 @@ export function buildExtractMintCleanedTable(preview: BankDelimitedPreview, mapp
   return {
     text: output.join('\n'),
     stats: { written, skippedNoDate },
+  }
+}
+
+export function buildQuickBooksThreeColumnCsv(
+  preview: BankDelimitedPreview,
+  mapping: BankCsvCleanerMapping,
+  options: { dateFormat?: QuickBooksCsvDateFormat } = {},
+) {
+  const output: string[] = []
+  output.push(['Date', 'Description', 'Amount'].join(','))
+
+  const dateFormat: QuickBooksCsvDateFormat = options.dateFormat ?? 'mdy'
+
+  let written = 0
+  let skippedNoDate = 0
+  let skippedNoAmount = 0
+
+  for (const row of preview.dataRows) {
+    const dateRaw = row[mapping.date] ?? ''
+    const dateForTable = formatDateForTable(dateRaw)
+    if (!dateForTable) {
+      skippedNoDate += 1
+      continue
+    }
+
+    const descriptionValue = clampText(mapping.description !== undefined ? (row[mapping.description] ?? '') : '', 220) || 'Transaction'
+    const referenceValue = clampText(mapping.reference !== undefined ? (row[mapping.reference] ?? '') : '', 80)
+    const description = referenceValue ? `${descriptionValue} (${referenceValue})` : descriptionValue
+
+    const withdrawalRaw = mapping.withdrawal !== undefined ? parseMoney(row[mapping.withdrawal] ?? '') : undefined
+    const depositRaw = mapping.deposit !== undefined ? parseMoney(row[mapping.deposit] ?? '') : undefined
+    const amountRaw = mapping.amount !== undefined ? parseMoney(row[mapping.amount] ?? '') : undefined
+
+    const normalizedWithdrawal =
+      withdrawalRaw !== undefined
+        ? Math.abs(withdrawalRaw)
+        : amountRaw !== undefined && amountRaw < 0
+          ? Math.abs(amountRaw)
+          : undefined
+    const normalizedDeposit =
+      depositRaw !== undefined
+        ? Math.abs(depositRaw)
+        : amountRaw !== undefined && amountRaw > 0
+          ? Math.abs(amountRaw)
+          : undefined
+
+    const amount =
+      amountRaw !== undefined
+        ? amountRaw
+        : normalizedDeposit !== undefined || normalizedWithdrawal !== undefined
+          ? (normalizedDeposit ?? 0) - (normalizedWithdrawal ?? 0)
+          : undefined
+
+    if (amount === undefined || !Number.isFinite(amount)) {
+      skippedNoAmount += 1
+      continue
+    }
+
+    const date = formatDateForQuickBooksCsv(dateForTable, dateFormat)
+    output.push([csvEscape(date), csvEscape(description), formatMoneyForCsv(amount)].join(','))
+    written += 1
+  }
+
+  return {
+    csv: output.join('\n'),
+    stats: { written, skippedNoDate, skippedNoAmount },
   }
 }

@@ -1,7 +1,8 @@
-import { FileSpreadsheet, Wand2 } from 'lucide-react'
+import { Download, FileSpreadsheet, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { BankCsvCleanerMapping } from '../lib/bankCsvCleaner'
-import { buildExtractMintCleanedTable, parseBankDelimitedText, parseBankSpreadsheetFile } from '../lib/bankCsvCleaner'
+import type { QuickBooksCsvDateFormat } from '../lib/bankCsvCleaner'
+import { buildExtractMintCleanedTable, buildQuickBooksThreeColumnCsv, parseBankDelimitedText, parseBankSpreadsheetFile } from '../lib/bankCsvCleaner'
 
 type Props = {
   onConvertCleanedFile: (file: File) => void
@@ -24,6 +25,8 @@ export function BankCsvCleaner(props: Props) {
   const [mapping, setMapping] = useState<Partial<BankCsvCleanerMapping>>({})
   const [error, setError] = useState<string>('')
   const [lastStats, setLastStats] = useState<{ written: number; skippedNoDate: number } | null>(null)
+  const [qboDateFormat, setQboDateFormat] = useState<QuickBooksCsvDateFormat>('mdy')
+  const [qboLastStats, setQboLastStats] = useState<{ written: number; skippedNoDate: number; skippedNoAmount: number } | null>(null)
 
   const isWorkbook = file ? ['xlsx', 'xls'].includes(extensionOf(file.name)) : false
 
@@ -126,6 +129,7 @@ export function BankCsvCleaner(props: Props) {
                 const next = event.target.files?.[0] ?? null
                 setError('')
                 setLastStats(null)
+                setQboLastStats(null)
                 setMapping({})
                 setHeaderIndex(0)
                 setFile(next)
@@ -184,6 +188,22 @@ export function BankCsvCleaner(props: Props) {
                   Row {index + 1}
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label>
+            <span>QuickBooks date format</span>
+            <select
+              value={qboDateFormat}
+              disabled={!preview}
+              onChange={(event) => {
+                const next = event.target.value as QuickBooksCsvDateFormat
+                setQboDateFormat(next)
+              }}
+            >
+              <option value="mdy">MM/DD/YYYY (recommended)</option>
+              <option value="dmy">DD/MM/YYYY</option>
+              <option value="ymd">YYYY-MM-DD</option>
             </select>
           </label>
 
@@ -338,6 +358,7 @@ export function BankCsvCleaner(props: Props) {
             onClick={() => {
               if (!preview || mapping.date === undefined || !file) return
               setError('')
+              setQboLastStats(null)
               try {
                 const built = buildExtractMintCleanedTable(preview, mapping as BankCsvCleanerMapping)
                 setLastStats(built.stats)
@@ -355,8 +376,36 @@ export function BankCsvCleaner(props: Props) {
             <FileSpreadsheet size={16} />
             Convert cleaned file
           </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!preview || mapping.date === undefined || !file}
+            onClick={() => {
+              if (!preview || mapping.date === undefined || !file) return
+              setError('')
+              setLastStats(null)
+              try {
+                const built = buildQuickBooksThreeColumnCsv(preview, mapping as BankCsvCleanerMapping, { dateFormat: qboDateFormat })
+                setQboLastStats(built.stats)
+                const blob = new Blob([built.csv], { type: 'text/csv;charset=utf-8' })
+                const url = URL.createObjectURL(blob)
+                const anchor = document.createElement('a')
+                anchor.href = url
+                const base = file.name.replace(/\\.(csv|xlsx|xls)$/i, '')
+                anchor.download = `${base}-quickbooks.csv`
+                anchor.click()
+                URL.revokeObjectURL(url)
+              } catch (buildError) {
+                setError(buildError instanceof Error ? buildError.message : 'Failed to build QuickBooks CSV')
+              }
+            }}
+          >
+            <Download size={16} />
+            Download QuickBooks CSV (3 columns)
+          </button>
           <small>
-            Tip: pick <strong>Amount</strong> if you only have one column (negative = withdrawal, positive = deposit).
+            Tip: QuickBooks CSV expects <strong>Date</strong>, <strong>Description</strong>, <strong>Amount</strong>. If your export has one Amount column,
+            pick <strong>Amount</strong> (negative = withdrawal, positive = deposit).
           </small>
         </div>
 
@@ -370,6 +419,12 @@ export function BankCsvCleaner(props: Props) {
         {lastStats ? (
           <div className="csv-cleaner-stats">
             Cleaned rows: <strong>{lastStats.written}</strong> · Skipped rows missing date: <strong>{lastStats.skippedNoDate}</strong>
+          </div>
+        ) : null}
+        {qboLastStats ? (
+          <div className="csv-cleaner-stats">
+            QuickBooks rows: <strong>{qboLastStats.written}</strong> · Skipped rows missing date: <strong>{qboLastStats.skippedNoDate}</strong> · Skipped
+            rows missing amount: <strong>{qboLastStats.skippedNoAmount}</strong>
           </div>
         ) : null}
 
