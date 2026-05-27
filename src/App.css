@@ -675,6 +675,131 @@ h3 {
   font-weight: 640;
 }
 
+.csv-cleaner-panel {
+  flex: 1 1 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(16, 32, 41, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+}
+
+.csv-cleaner-panel summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  display: grid;
+  gap: 2px;
+}
+
+.csv-cleaner-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.csv-cleaner-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 780;
+}
+
+.csv-cleaner-subtitle {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.csv-cleaner-body {
+  padding: 0 12px 12px;
+  color: #516067;
+  font-size: 13px;
+  font-weight: 600;
+  display: grid;
+  gap: 12px;
+}
+
+.csv-cleaner-body p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.csv-cleaner-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.csv-cleaner-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.csv-cleaner-grid label span {
+  color: var(--ink);
+  font-weight: 760;
+  font-size: 12px;
+}
+
+.csv-cleaner-grid input[type='file'] {
+  width: 100%;
+}
+
+.csv-cleaner-grid select {
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 32, 41, 0.18);
+  background: rgba(247, 244, 237, 0.7);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.csv-cleaner-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.csv-cleaner-actions small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 640;
+}
+
+.csv-cleaner-preview {
+  border-radius: 12px;
+  border: 1px solid rgba(16, 32, 41, 0.12);
+  background: rgba(247, 244, 237, 0.6);
+  overflow: hidden;
+}
+
+.csv-cleaner-preview-title {
+  padding: 10px 12px;
+  color: var(--ink);
+  font-weight: 760;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(16, 32, 41, 0.12);
+}
+
+.csv-cleaner-preview pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.csv-cleaner-stats {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+@media (max-width: 720px) {
+  .csv-cleaner-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .link-button {
   border: 0;
   padding: 0;

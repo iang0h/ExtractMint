@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import { BankCsvCleaner } from './components/BankCsvCleaner'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
 import type { ConversionResult, ProgressEvent, QuickBooksCsvSplitRange, ValidationSummary } from './lib/converter'
@@ -2535,6 +2536,12 @@ function App() {
                       </div>
                     </div>
                   </details>
+
+                  <BankCsvCleaner
+                    onConvertCleanedFile={(cleaned) => {
+                      void processFiles([cleaned])
+                    }}
+                  />
 
                   <details className="privacy-panel" id="support">
                     <summary>Support &amp; telemetry (local-only, no PII)</summary>
