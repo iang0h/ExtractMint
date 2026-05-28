@@ -32,6 +32,7 @@ export function BankCsvCleaner(props: Props) {
   const [headerIndex, setHeaderIndex] = useState<number>(0)
   const [mapping, setMapping] = useState<Partial<BankCsvCleanerMapping>>({})
   const [error, setError] = useState<string>('')
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState<boolean>(false)
   const [lastStats, setLastStats] = useState<
     | null
     | {
@@ -44,6 +45,7 @@ export function BankCsvCleaner(props: Props) {
   >(null)
 
   const isWorkbook = file ? ['xlsx', 'xls'].includes(extensionOf(file.name)) : false
+  const exampleDate = props.quickBooksDateFormat === 'dmy' ? '31/01/2026' : '01/31/2026'
 
   useEffect(() => {
     if (!file) return
@@ -190,6 +192,21 @@ export function BankCsvCleaner(props: Props) {
       URL.revokeObjectURL(url)
     } catch (buildError) {
       setError(buildError instanceof Error ? buildError.message : 'Failed to build QuickBooks Credit/Debit CSV')
+    }
+  }
+
+  const downloadTemplate = (filename: string, csv: string) => {
+    setError('')
+    try {
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = filename
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Failed to download template')
     }
   }
 
@@ -481,6 +498,9 @@ export function BankCsvCleaner(props: Props) {
             Tip: pick <strong>Amount</strong> if you only have one column (negative = withdrawal, positive = deposit). Date format uses your QuickBooks export
             setting ({props.quickBooksDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}).
           </small>
+          <button type="button" className="link-button" onClick={() => setIsTemplatesOpen(true)}>
+            Templates & import requirements
+          </button>
         </div>
 
         {sheetStats?.truncated ? (
@@ -511,6 +531,124 @@ export function BankCsvCleaner(props: Props) {
           </div>
         ) : null}
       </div>
+
+      {isTemplatesOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setIsTemplatesOpen(false)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="CSV import templates and requirements"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <strong>Templates & import requirements</strong>
+                <small>Download a known-good CSV layout, or sanity-check your bank export before importing.</small>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setIsTemplatesOpen(false)} aria-label="Close templates" title="Close (Esc)">
+                Close
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="modal-section">
+                <strong>QuickBooks (3-column)</strong>
+                <span>
+                  Columns: <code>Date</code>, <code>Description</code>, <code>Amount</code>. Amount should be a plain signed number (no currency symbols).
+                </span>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    downloadTemplate(
+                      `quickbooks-bank-3col.${props.quickBooksDateFormat}.template.csv`,
+                      `Date,Description,Amount\n${exampleDate},Coffee shop,-12.34\n${exampleDate},Client payment,120.00\n`,
+                    )
+                  }
+                >
+                  <FileSpreadsheet size={16} />
+                  Download QuickBooks template (3-column)
+                </button>
+              </div>
+
+              <div className="modal-section">
+                <strong>QuickBooks (4-column Credit/Debit)</strong>
+                <span>
+                  Columns: <code>Date</code>, <code>Description</code>, <code>Credit</code>, <code>Debit</code>. Use positives only; fill either Credit or
+                  Debit per row (not both).
+                </span>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    downloadTemplate(
+                      `quickbooks-bank-4col-credit-debit.${props.quickBooksDateFormat}.template.csv`,
+                      `Date,Description,Credit,Debit\n${exampleDate},Coffee shop,0,12.34\n${exampleDate},Client payment,120.00,0\n`,
+                    )
+                  }
+                >
+                  <FileSpreadsheet size={16} />
+                  Download QuickBooks template (Credit/Debit)
+                </button>
+              </div>
+
+              <div className="modal-section">
+                <strong>Xero</strong>
+                <span>
+                  Columns: <code>Date</code>, <code>Amount</code>, <code>Description</code>, <code>Reference</code>. Amount should be one column containing
+                  both income (+) and spend (-).
+                </span>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() =>
+                    downloadTemplate(
+                      `xero-bank.${props.quickBooksDateFormat}.template.csv`,
+                      `Date,Amount,Description,Reference\n${exampleDate},-12.34,Coffee shop,VISA\n${exampleDate},120.00,Client payment,INV-1001\n`,
+                    )
+                  }
+                >
+                  <FileSpreadsheet size={16} />
+                  Download Xero template
+                </button>
+              </div>
+
+              <div className="modal-section">
+                <strong>Common fixes</strong>
+                <ul>
+                  <li>
+                    Keep dates consistent ({props.quickBooksDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'} for templates). If day/month swaps, adjust
+                    the setting and re-export.
+                  </li>
+                  <li>Remove currency symbols, commas, and parentheses negatives (e.g. use -12.34 not (12.34)).</li>
+                  <li>Save as UTF-8 CSV and delete extra header/footer rows from bank exports.</li>
+                </ul>
+              </div>
+
+              <div className="modal-section">
+                <strong>Official guides</strong>
+                <ul>
+                  <li>
+                    <a
+                      href="https://quickbooks.intuit.com/learn-support/en-us/help-article/bank-transactions/format-csv-files-excel-get-bank-transactions/L4BjLWckq_US_en_US"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      QuickBooks CSV formatting guide
+                    </a>
+                  </li>
+                  <li>
+                    <a href="https://central.xero.com/s/article/Import-a-CSV-bank-statement" target="_blank" rel="noreferrer">
+                      Xero CSV bank statement import guide
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </details>
   )
 }
