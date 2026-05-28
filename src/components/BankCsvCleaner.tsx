@@ -34,6 +34,7 @@ export function BankCsvCleaner(props: Props) {
   const [error, setError] = useState<string>('')
   const [isTemplatesOpen, setIsTemplatesOpen] = useState<boolean>(false)
   const [dateFormatOverride, setDateFormatOverride] = useState<'auto' | QuickBooksBankCsvDateFormat>('auto')
+  const [quickBooksChunkSize, setQuickBooksChunkSize] = useState<number>(1000)
   const [quickBooksChunkStart, setQuickBooksChunkStart] = useState<number>(1)
   const [quickBooksChunkEnd, setQuickBooksChunkEnd] = useState<number>(1000)
   const [quickBooksZipStatus, setQuickBooksZipStatus] = useState<string | null>(null)
@@ -162,11 +163,13 @@ export function BankCsvCleaner(props: Props) {
     if (!rowCount) return null
 
     const start = Number.isFinite(quickBooksChunkStart) ? Math.max(1, Math.floor(quickBooksChunkStart)) : 1
-    const end = Number.isFinite(quickBooksChunkEnd) ? Math.min(rowCount, Math.floor(quickBooksChunkEnd)) : Math.min(1000, rowCount)
+    const end = Number.isFinite(quickBooksChunkEnd)
+      ? Math.min(rowCount, Math.floor(quickBooksChunkEnd))
+      : Math.min(Math.max(1, quickBooksChunkSize), rowCount)
     const clampedEnd = Math.max(start, end)
     const dataRows = preview.dataRows.slice(start - 1, clampedEnd)
     return { start, end: clampedEnd, rowCount, preview: { ...preview, dataRows } }
-  }, [preview, quickBooksChunkStart, quickBooksChunkEnd])
+  }, [preview, quickBooksChunkStart, quickBooksChunkEnd, quickBooksChunkSize])
 
   const downloadQuickBooksCsv = () => {
     if (!preview || !file || mapping.date === undefined) return
@@ -304,12 +307,14 @@ export function BankCsvCleaner(props: Props) {
         return
       }
 
-      const chunkSize = 1000
+      const chunkSize = Math.max(1, Math.floor(quickBooksChunkSize) || 1000)
       const totalChunks = Math.ceil(rowCount / chunkSize)
 
       const baseName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9._-]+/gi, '-')
       const rootName =
-        mode === 'bank' ? `${baseName}.quickbooks-bank.${resolvedDateFormat}.chunks` : `${baseName}.quickbooks-bank.credit-debit.${resolvedDateFormat}.chunks`
+        mode === 'bank'
+          ? `${baseName}.quickbooks-bank.${resolvedDateFormat}.chunks-${chunkSize}`
+          : `${baseName}.quickbooks-bank.credit-debit.${resolvedDateFormat}.chunks-${chunkSize}`
       const root = zip.folder(rootName) ?? zip
 
       for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
@@ -331,7 +336,7 @@ export function BankCsvCleaner(props: Props) {
       anchor.download = `${rootName}.zip`
       anchor.click()
       URL.revokeObjectURL(url)
-      setQuickBooksZipStatus(`Downloaded ${totalChunks} chunk${totalChunks === 1 ? '' : 's'} (ZIP).`)
+      setQuickBooksZipStatus(`Downloaded ${totalChunks} chunk${totalChunks === 1 ? '' : 's'} (ZIP, ${chunkSize} rows per chunk).`)
     } catch (zipError) {
       setError(zipError instanceof Error ? zipError.message : 'Failed to build ZIP')
       setQuickBooksZipStatus(null)
@@ -383,6 +388,7 @@ export function BankCsvCleaner(props: Props) {
                 setLastStats(null)
                 setMapping({})
                 setHeaderIndex(0)
+                setQuickBooksChunkSize(1000)
                 setQuickBooksChunkStart(1)
                 setQuickBooksChunkEnd(1000)
                 setQuickBooksZipStatus(null)
@@ -435,7 +441,7 @@ export function BankCsvCleaner(props: Props) {
               disabled={!preview}
               onChange={(event) => {
                 setQuickBooksChunkStart(1)
-                setQuickBooksChunkEnd(1000)
+                setQuickBooksChunkEnd(Math.max(1, Math.floor(quickBooksChunkSize) || 1000))
                 setHeaderIndex(Number.parseInt(event.target.value, 10) || 0)
               }}
             >
@@ -703,6 +709,31 @@ export function BankCsvCleaner(props: Props) {
                 ) : null}
               </div>
 
+              <label style={{ display: 'grid', gap: 6, maxWidth: 260 }}>
+                <span style={{ color: 'var(--ink)', fontWeight: 760, fontSize: 12 }}>Chunk size (rows)</span>
+                <select
+                  value={String(quickBooksChunkSize)}
+                  onChange={(event) => {
+                    const next = Number.parseInt(event.target.value, 10)
+                    const resolved = next === 500 ? 500 : 1000
+                    setQuickBooksChunkSize(resolved)
+                    setQuickBooksChunkStart(1)
+                    setQuickBooksChunkEnd(Math.min(quickBooksChunk.rowCount, resolved))
+                  }}
+                  style={{
+                    padding: '10px 10px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(16, 32, 41, 0.18)',
+                    background: 'rgba(247, 244, 237, 0.7)',
+                    color: 'var(--ink)',
+                    fontWeight: 700,
+                  }}
+                >
+                  <option value="500">500 (safer)</option>
+                  <option value="1000">1000 (standard)</option>
+                </select>
+              </label>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
                 <label style={{ display: 'grid', gap: 6 }}>
                   <span style={{ color: 'var(--ink)', fontWeight: 760, fontSize: 12 }}>Chunk start row</span>
@@ -749,10 +780,10 @@ export function BankCsvCleaner(props: Props) {
                   disabled={!canBuild}
                   onClick={() => {
                     setQuickBooksChunkStart(1)
-                    setQuickBooksChunkEnd(Math.min(1000, quickBooksChunk.rowCount))
+                    setQuickBooksChunkEnd(Math.min(quickBooksChunk.rowCount, Math.max(1, Math.floor(quickBooksChunkSize) || 1000)))
                   }}
                 >
-                  Set to rows 1–1000
+                  Set to rows 1–{Math.min(quickBooksChunk.rowCount, quickBooksChunkSize)}
                 </button>
                 <button
                   type="button"
@@ -760,7 +791,7 @@ export function BankCsvCleaner(props: Props) {
                   disabled={!canBuild}
                   onClick={() => {
                     const nextStart = Math.min(quickBooksChunk.rowCount, Math.max(1, quickBooksChunk.end + 1))
-                    const nextEnd = Math.min(quickBooksChunk.rowCount, nextStart + 999)
+                    const nextEnd = Math.min(quickBooksChunk.rowCount, nextStart + (Math.max(1, Math.floor(quickBooksChunkSize) || 1000) - 1))
                     setQuickBooksChunkStart(nextStart)
                     setQuickBooksChunkEnd(nextEnd)
                   }}
