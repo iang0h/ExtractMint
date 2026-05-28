@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 
-import JSZip from 'jszip'
-
 import type { PdfDocumentProxy } from './PdfCanvasViewer'
 
 type RedactionRectPx = { x: number; y: number; width: number; height: number }
@@ -323,6 +321,7 @@ export function PdfRedactionTool({
           return
         }
 
+        const JSZip = (await import('jszip')).default
         const zip = new JSZip()
         for (let index = 0; index < pages.length; index += 1) {
           const pageNumber = pages[index]!
