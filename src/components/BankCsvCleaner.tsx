@@ -4,6 +4,7 @@ import type { BankCsvCleanerMapping } from '../lib/bankCsvCleaner'
 import {
   buildExtractMintCleanedTable,
   buildQuickBooksBankCsv,
+  buildQuickBooksBankCsvCreditDebit,
   buildXeroBankCsv,
   type QuickBooksBankCsvDateFormat,
   parseBankDelimitedText,
@@ -34,7 +35,7 @@ export function BankCsvCleaner(props: Props) {
   const [lastStats, setLastStats] = useState<
     | null
     | {
-        kind: 'extractmint' | 'quickbooks' | 'xero'
+        kind: 'extractmint' | 'quickbooks' | 'quickbooks-credit-debit' | 'xero'
         written: number
         skippedNoDate: number
         skippedNoAmount?: number
@@ -165,6 +166,30 @@ export function BankCsvCleaner(props: Props) {
       URL.revokeObjectURL(url)
     } catch (buildError) {
       setError(buildError instanceof Error ? buildError.message : 'Failed to build Xero CSV')
+    }
+  }
+
+  const downloadQuickBooksCreditDebitCsv = () => {
+    if (!preview || !file || mapping.date === undefined) return
+    setError('')
+    try {
+      const built = buildQuickBooksBankCsvCreditDebit(preview, mapping as BankCsvCleanerMapping, { dateFormat: props.quickBooksDateFormat })
+      setLastStats({
+        kind: 'quickbooks-credit-debit',
+        written: built.stats.written,
+        skippedNoDate: built.stats.skippedNoDate,
+        skippedNoAmount: built.stats.skippedNoAmount,
+        skippedZeroAmount: built.stats.skippedZeroAmount,
+      })
+      const blob = new Blob([built.text], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.credit-debit.${props.quickBooksDateFormat}.csv`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (buildError) {
+      setError(buildError instanceof Error ? buildError.message : 'Failed to build QuickBooks Credit/Debit CSV')
     }
   }
 
@@ -431,6 +456,16 @@ export function BankCsvCleaner(props: Props) {
           >
             <FileSpreadsheet size={16} />
             Download QuickBooks (CSV)
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canBuild}
+            onClick={downloadQuickBooksCreditDebitCsv}
+            title="Downloads a QuickBooks-friendly 4-column bank CSV (Date, Description, Credit, Debit). Credit/Debit are always positive."
+          >
+            <FileSpreadsheet size={16} />
+            Download QuickBooks (Credit/Debit CSV)
           </button>
           <button
             type="button"

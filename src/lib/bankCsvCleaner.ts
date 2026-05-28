@@ -366,6 +366,64 @@ export function buildQuickBooksBankCsv(preview: BankDelimitedPreview, mapping: B
   }
 }
 
+export function buildQuickBooksBankCsvCreditDebit(
+  preview: BankDelimitedPreview,
+  mapping: BankCsvCleanerMapping,
+  options: { dateFormat: QuickBooksBankCsvDateFormat },
+) {
+  const output: string[] = []
+  output.push('Date,Description,Credit,Debit')
+
+  let written = 0
+  let skippedNoDate = 0
+  let skippedNoAmount = 0
+  let skippedZeroAmount = 0
+
+  for (const row of preview.dataRows) {
+    const dateRaw = row[mapping.date] ?? ''
+    const date = normalizeBankDate(dateRaw, options.dateFormat)
+    if (!date) {
+      skippedNoDate += 1
+      continue
+    }
+
+    const description = clampText(mapping.description !== undefined ? (row[mapping.description] ?? '') : '', 220) || 'Transaction'
+
+    const amountRaw = mapping.amount !== undefined ? parseMoney(row[mapping.amount] ?? '') : undefined
+    const withdrawalRaw = mapping.withdrawal !== undefined ? parseMoney(row[mapping.withdrawal] ?? '') : undefined
+    const depositRaw = mapping.deposit !== undefined ? parseMoney(row[mapping.deposit] ?? '') : undefined
+
+    const withdrawal = withdrawalRaw !== undefined ? Math.abs(withdrawalRaw) : undefined
+    const deposit = depositRaw !== undefined ? Math.abs(depositRaw) : undefined
+    const derivedAmount =
+      amountRaw !== undefined
+        ? amountRaw
+        : deposit !== undefined || withdrawal !== undefined
+          ? (deposit ?? 0) - (withdrawal ?? 0)
+          : undefined
+
+    if (derivedAmount === undefined || !Number.isFinite(derivedAmount)) {
+      skippedNoAmount += 1
+      continue
+    }
+    const rounded = Math.round(derivedAmount * 100) / 100
+    if (Math.abs(rounded) < 0.0001) {
+      skippedZeroAmount += 1
+      continue
+    }
+
+    const credit = rounded > 0 ? Math.abs(rounded) : ''
+    const debit = rounded < 0 ? Math.abs(rounded) : ''
+    output.push(`${escapeCsvCell(date)},${escapeCsvCell(description)},${credit},${debit}`)
+    written += 1
+  }
+
+  return {
+    text: output.join('\n') + '\n',
+    stats: { written, skippedNoDate, skippedNoAmount, skippedZeroAmount },
+  }
+}
+
 export function buildXeroBankCsv(preview: BankDelimitedPreview, mapping: BankCsvCleanerMapping, options: { dateFormat: QuickBooksBankCsvDateFormat }) {
   const output: string[] = []
   output.push('Date,Amount,Description,Reference')
