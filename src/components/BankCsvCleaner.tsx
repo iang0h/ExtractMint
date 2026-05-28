@@ -1,5 +1,5 @@
 import { FileSpreadsheet, Wand2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BankCsvCleanerMapping } from '../lib/bankCsvCleaner'
 import {
   buildExtractMintCleanedTable,
@@ -36,6 +36,8 @@ export function BankCsvCleaner(props: Props) {
   const [dateFormatOverride, setDateFormatOverride] = useState<'auto' | QuickBooksBankCsvDateFormat>('auto')
   const [quickBooksChunkStart, setQuickBooksChunkStart] = useState<number>(1)
   const [quickBooksChunkEnd, setQuickBooksChunkEnd] = useState<number>(1000)
+  const [quickBooksZipStatus, setQuickBooksZipStatus] = useState<string | null>(null)
+  const quickBooksZipBusyRef = useRef(false)
   const [lastStats, setLastStats] = useState<
     | null
     | {
@@ -286,6 +288,59 @@ export function BankCsvCleaner(props: Props) {
     }
   }
 
+  const downloadQuickBooksAllChunksZip = async (mode: 'bank' | 'credit-debit') => {
+    if (!preview || !file || mapping.date === undefined) return
+    if (quickBooksZipBusyRef.current) return
+    quickBooksZipBusyRef.current = true
+    setError('')
+    setQuickBooksZipStatus('Preparing ZIP…')
+    try {
+      const JSZip = (await import('jszip')).default
+      const zip = new JSZip()
+
+      const rowCount = preview.dataRows.length
+      if (!rowCount) {
+        setQuickBooksZipStatus('No transaction rows found.')
+        return
+      }
+
+      const chunkSize = 1000
+      const totalChunks = Math.ceil(rowCount / chunkSize)
+
+      const baseName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9._-]+/gi, '-')
+      const rootName =
+        mode === 'bank' ? `${baseName}.quickbooks-bank.${resolvedDateFormat}.chunks` : `${baseName}.quickbooks-bank.credit-debit.${resolvedDateFormat}.chunks`
+      const root = zip.folder(rootName) ?? zip
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+        const start = chunkIndex * chunkSize + 1
+        const end = Math.min(rowCount, start + chunkSize - 1)
+        const chunkPreview = { ...preview, dataRows: preview.dataRows.slice(start - 1, end) }
+        const built =
+          mode === 'bank'
+            ? buildQuickBooksBankCsv(chunkPreview, mapping as BankCsvCleanerMapping, { dateFormat: resolvedDateFormat })
+            : buildQuickBooksBankCsvCreditDebit(chunkPreview, mapping as BankCsvCleanerMapping, { dateFormat: resolvedDateFormat })
+
+        root.file(`rows-${start}-${end}.csv`, built.text)
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' })
+      const url = URL.createObjectURL(zipBlob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${rootName}.zip`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setQuickBooksZipStatus(`Downloaded ${totalChunks} chunk${totalChunks === 1 ? '' : 's'} (ZIP).`)
+    } catch (zipError) {
+      setError(zipError instanceof Error ? zipError.message : 'Failed to build ZIP')
+      setQuickBooksZipStatus(null)
+    } finally {
+      quickBooksZipBusyRef.current = false
+      window.setTimeout(() => setQuickBooksZipStatus(null), 5000)
+    }
+  }
+
   const downloadTemplate = (filename: string, csv: string) => {
     setError('')
     try {
@@ -330,6 +385,7 @@ export function BankCsvCleaner(props: Props) {
                 setHeaderIndex(0)
                 setQuickBooksChunkStart(1)
                 setQuickBooksChunkEnd(1000)
+                setQuickBooksZipStatus(null)
                 setFile(next)
                 setSheetNames([])
                 setSheetName('')
@@ -722,6 +778,28 @@ export function BankCsvCleaner(props: Props) {
                   <FileSpreadsheet size={16} />
                   Download QuickBooks chunk (Credit/Debit CSV)
                 </button>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!canBuild || Boolean(quickBooksZipStatus)}
+                  onClick={() => void downloadQuickBooksAllChunksZip('bank')}
+                >
+                  <FileSpreadsheet size={16} />
+                  Download all chunks (ZIP)
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!canBuild || Boolean(quickBooksZipStatus)}
+                  onClick={() => void downloadQuickBooksAllChunksZip('credit-debit')}
+                >
+                  <FileSpreadsheet size={16} />
+                  Download all chunks (Credit/Debit ZIP)
+                </button>
+                {quickBooksZipStatus ? <small style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 700 }}>{quickBooksZipStatus}</small> : null}
               </div>
 
               <small style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 640 }}>
