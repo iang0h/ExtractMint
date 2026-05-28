@@ -33,6 +33,7 @@ export function BankCsvCleaner(props: Props) {
   const [mapping, setMapping] = useState<Partial<BankCsvCleanerMapping>>({})
   const [error, setError] = useState<string>('')
   const [isTemplatesOpen, setIsTemplatesOpen] = useState<boolean>(false)
+  const [dateFormatOverride, setDateFormatOverride] = useState<'auto' | QuickBooksBankCsvDateFormat>('auto')
   const [lastStats, setLastStats] = useState<
     | null
     | {
@@ -45,7 +46,8 @@ export function BankCsvCleaner(props: Props) {
   >(null)
 
   const isWorkbook = file ? ['xlsx', 'xls'].includes(extensionOf(file.name)) : false
-  const exampleDate = props.quickBooksDateFormat === 'dmy' ? '31/01/2026' : '01/31/2026'
+  const resolvedDateFormat = dateFormatOverride === 'auto' ? props.quickBooksDateFormat : dateFormatOverride
+  const exampleDate = resolvedDateFormat === 'dmy' ? '31/01/2026' : '01/31/2026'
 
   useEffect(() => {
     if (!file) return
@@ -121,13 +123,40 @@ export function BankCsvCleaner(props: Props) {
     return built.text.split('\n').slice(0, 7)
   }, [preview, mapping])
 
+  const dateFormatDetection = useMemo(() => {
+    if (!preview) return null
+    if (mapping.date === undefined) return null
+
+    let sampled = 0
+    let dmyHints = 0
+    let mdyHints = 0
+
+    for (const row of preview.dataRows) {
+      if (sampled >= 250) break
+      const raw = (row[mapping.date] ?? '').trim()
+      if (!raw) continue
+      const match = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
+      if (!match) continue
+
+      sampled += 1
+      const first = Number.parseInt(match[1], 10)
+      const second = Number.parseInt(match[2], 10)
+      if (!Number.isFinite(first) || !Number.isFinite(second)) continue
+      if (first > 12 && second <= 12) dmyHints += 1
+      if (second > 12 && first <= 12) mdyHints += 1
+    }
+
+    const format: QuickBooksBankCsvDateFormat | null = dmyHints > mdyHints ? 'dmy' : mdyHints > dmyHints ? 'mdy' : null
+    return { sampled, dmyHints, mdyHints, format }
+  }, [preview, mapping.date])
+
   const canBuild = Boolean(preview && file && mapping.date !== undefined)
 
   const downloadQuickBooksCsv = () => {
     if (!preview || !file || mapping.date === undefined) return
     setError('')
     try {
-      const built = buildQuickBooksBankCsv(preview, mapping as BankCsvCleanerMapping, { dateFormat: props.quickBooksDateFormat })
+      const built = buildQuickBooksBankCsv(preview, mapping as BankCsvCleanerMapping, { dateFormat: resolvedDateFormat })
       setLastStats({
         kind: 'quickbooks',
         written: built.stats.written,
@@ -139,7 +168,7 @@ export function BankCsvCleaner(props: Props) {
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.${props.quickBooksDateFormat}.csv`
+      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.${resolvedDateFormat}.csv`
       anchor.click()
       URL.revokeObjectURL(url)
     } catch (buildError) {
@@ -151,7 +180,7 @@ export function BankCsvCleaner(props: Props) {
     if (!preview || !file || mapping.date === undefined) return
     setError('')
     try {
-      const built = buildXeroBankCsv(preview, mapping as BankCsvCleanerMapping, { dateFormat: props.quickBooksDateFormat })
+      const built = buildXeroBankCsv(preview, mapping as BankCsvCleanerMapping, { dateFormat: resolvedDateFormat })
       setLastStats({
         kind: 'xero',
         written: built.stats.written,
@@ -163,7 +192,7 @@ export function BankCsvCleaner(props: Props) {
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.xero-bank.${props.quickBooksDateFormat}.csv`
+      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.xero-bank.${resolvedDateFormat}.csv`
       anchor.click()
       URL.revokeObjectURL(url)
     } catch (buildError) {
@@ -175,7 +204,7 @@ export function BankCsvCleaner(props: Props) {
     if (!preview || !file || mapping.date === undefined) return
     setError('')
     try {
-      const built = buildQuickBooksBankCsvCreditDebit(preview, mapping as BankCsvCleanerMapping, { dateFormat: props.quickBooksDateFormat })
+      const built = buildQuickBooksBankCsvCreditDebit(preview, mapping as BankCsvCleanerMapping, { dateFormat: resolvedDateFormat })
       setLastStats({
         kind: 'quickbooks-credit-debit',
         written: built.stats.written,
@@ -187,7 +216,7 @@ export function BankCsvCleaner(props: Props) {
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.credit-debit.${props.quickBooksDateFormat}.csv`
+      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.credit-debit.${resolvedDateFormat}.csv`
       anchor.click()
       URL.revokeObjectURL(url)
     } catch (buildError) {
@@ -496,12 +525,47 @@ export function BankCsvCleaner(props: Props) {
           </button>
           <small>
             Tip: pick <strong>Amount</strong> if you only have one column (negative = withdrawal, positive = deposit). Date format uses your QuickBooks export
-            setting ({props.quickBooksDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}).
+            setting ({resolvedDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}).
           </small>
+          <label className="csv-cleaner-date-format">
+            <span>Date format for exports</span>
+            <select
+              value={dateFormatOverride}
+              onChange={(event) => {
+                const next = event.target.value === 'dmy' ? 'dmy' : event.target.value === 'mdy' ? 'mdy' : 'auto'
+                setDateFormatOverride(next)
+              }}
+            >
+              <option value="auto">Auto (from app)</option>
+              <option value="dmy">DD/MM/YYYY</option>
+              <option value="mdy">MM/DD/YYYY</option>
+            </select>
+          </label>
           <button type="button" className="link-button" onClick={() => setIsTemplatesOpen(true)}>
             Templates & import requirements
           </button>
         </div>
+
+        {dateFormatDetection?.format &&
+        dateFormatOverride === 'auto' &&
+        dateFormatDetection.sampled >= 6 &&
+        dateFormatDetection.format !== resolvedDateFormat ? (
+          <div className="warning-banner">
+            Date format detection: dates look like <strong>{dateFormatDetection.format === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}</strong> (based on{' '}
+            {dateFormatDetection.dmyHints + dateFormatDetection.mdyHints} unambiguous samples), but exports are currently using{' '}
+            <strong>{resolvedDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'}</strong>.{' '}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                if (!dateFormatDetection.format) return
+                setDateFormatOverride(dateFormatDetection.format)
+              }}
+            >
+              Use detected format for downloads
+            </button>
+          </div>
+        ) : null}
 
         {sheetStats?.truncated ? (
           <div className="warning-banner">
@@ -562,7 +626,7 @@ export function BankCsvCleaner(props: Props) {
                   className="secondary-button"
                   onClick={() =>
                     downloadTemplate(
-                      `quickbooks-bank-3col.${props.quickBooksDateFormat}.template.csv`,
+                      `quickbooks-bank-3col.${resolvedDateFormat}.template.csv`,
                       `Date,Description,Amount\n${exampleDate},Coffee shop,-12.34\n${exampleDate},Client payment,120.00\n`,
                     )
                   }
@@ -583,7 +647,7 @@ export function BankCsvCleaner(props: Props) {
                   className="secondary-button"
                   onClick={() =>
                     downloadTemplate(
-                      `quickbooks-bank-4col-credit-debit.${props.quickBooksDateFormat}.template.csv`,
+                      `quickbooks-bank-4col-credit-debit.${resolvedDateFormat}.template.csv`,
                       `Date,Description,Credit,Debit\n${exampleDate},Coffee shop,0,12.34\n${exampleDate},Client payment,120.00,0\n`,
                     )
                   }
@@ -604,7 +668,7 @@ export function BankCsvCleaner(props: Props) {
                   className="secondary-button"
                   onClick={() =>
                     downloadTemplate(
-                      `xero-bank.${props.quickBooksDateFormat}.template.csv`,
+                      `xero-bank.${resolvedDateFormat}.template.csv`,
                       `Date,Amount,Description,Reference\n${exampleDate},-12.34,Coffee shop,VISA\n${exampleDate},120.00,Client payment,INV-1001\n`,
                     )
                   }
@@ -618,8 +682,8 @@ export function BankCsvCleaner(props: Props) {
                 <strong>Common fixes</strong>
                 <ul>
                   <li>
-                    Keep dates consistent ({props.quickBooksDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'} for templates). If day/month swaps, adjust
-                    the setting and re-export.
+                    Keep dates consistent ({resolvedDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'} for templates). If day/month swaps, change the date
+                    format for exports and re-download.
                   </li>
                   <li>Remove currency symbols, commas, and parentheses negatives (e.g. use -12.34 not (12.34)).</li>
                   <li>Save as UTF-8 CSV and delete extra header/footer rows from bank exports.</li>
