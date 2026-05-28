@@ -34,6 +34,8 @@ export function BankCsvCleaner(props: Props) {
   const [error, setError] = useState<string>('')
   const [isTemplatesOpen, setIsTemplatesOpen] = useState<boolean>(false)
   const [dateFormatOverride, setDateFormatOverride] = useState<'auto' | QuickBooksBankCsvDateFormat>('auto')
+  const [quickBooksChunkStart, setQuickBooksChunkStart] = useState<number>(1)
+  const [quickBooksChunkEnd, setQuickBooksChunkEnd] = useState<number>(1000)
   const [lastStats, setLastStats] = useState<
     | null
     | {
@@ -152,6 +154,18 @@ export function BankCsvCleaner(props: Props) {
 
   const canBuild = Boolean(preview && file && mapping.date !== undefined)
 
+  const quickBooksChunk = useMemo(() => {
+    if (!preview) return null
+    const rowCount = preview.dataRows.length
+    if (!rowCount) return null
+
+    const start = Number.isFinite(quickBooksChunkStart) ? Math.max(1, Math.floor(quickBooksChunkStart)) : 1
+    const end = Number.isFinite(quickBooksChunkEnd) ? Math.min(rowCount, Math.floor(quickBooksChunkEnd)) : Math.min(1000, rowCount)
+    const clampedEnd = Math.max(start, end)
+    const dataRows = preview.dataRows.slice(start - 1, clampedEnd)
+    return { start, end: clampedEnd, rowCount, preview: { ...preview, dataRows } }
+  }, [preview, quickBooksChunkStart, quickBooksChunkEnd])
+
   const downloadQuickBooksCsv = () => {
     if (!preview || !file || mapping.date === undefined) return
     setError('')
@@ -169,6 +183,30 @@ export function BankCsvCleaner(props: Props) {
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.${resolvedDateFormat}.csv`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (buildError) {
+      setError(buildError instanceof Error ? buildError.message : 'Failed to build QuickBooks CSV')
+    }
+  }
+
+  const downloadQuickBooksChunkCsv = () => {
+    if (!quickBooksChunk || !file || mapping.date === undefined) return
+    setError('')
+    try {
+      const built = buildQuickBooksBankCsv(quickBooksChunk.preview, mapping as BankCsvCleanerMapping, { dateFormat: resolvedDateFormat })
+      setLastStats({
+        kind: 'quickbooks',
+        written: built.stats.written,
+        skippedNoDate: built.stats.skippedNoDate,
+        skippedNoAmount: built.stats.skippedNoAmount,
+        skippedZeroAmount: built.stats.skippedZeroAmount,
+      })
+      const blob = new Blob([built.text], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.${resolvedDateFormat}.rows-${quickBooksChunk.start}-${quickBooksChunk.end}.csv`
       anchor.click()
       URL.revokeObjectURL(url)
     } catch (buildError) {
@@ -224,6 +262,30 @@ export function BankCsvCleaner(props: Props) {
     }
   }
 
+  const downloadQuickBooksChunkCreditDebitCsv = () => {
+    if (!quickBooksChunk || !file || mapping.date === undefined) return
+    setError('')
+    try {
+      const built = buildQuickBooksBankCsvCreditDebit(quickBooksChunk.preview, mapping as BankCsvCleanerMapping, { dateFormat: resolvedDateFormat })
+      setLastStats({
+        kind: 'quickbooks-credit-debit',
+        written: built.stats.written,
+        skippedNoDate: built.stats.skippedNoDate,
+        skippedNoAmount: built.stats.skippedNoAmount,
+        skippedZeroAmount: built.stats.skippedZeroAmount,
+      })
+      const blob = new Blob([built.text], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${file.name.replace(/\.[^.]+$/, '')}.quickbooks-bank.credit-debit.${resolvedDateFormat}.rows-${quickBooksChunk.start}-${quickBooksChunk.end}.csv`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (buildError) {
+      setError(buildError instanceof Error ? buildError.message : 'Failed to build QuickBooks Credit/Debit CSV')
+    }
+  }
+
   const downloadTemplate = (filename: string, csv: string) => {
     setError('')
     try {
@@ -266,6 +328,8 @@ export function BankCsvCleaner(props: Props) {
                 setLastStats(null)
                 setMapping({})
                 setHeaderIndex(0)
+                setQuickBooksChunkStart(1)
+                setQuickBooksChunkEnd(1000)
                 setFile(next)
                 setSheetNames([])
                 setSheetName('')
@@ -314,6 +378,8 @@ export function BankCsvCleaner(props: Props) {
               value={String(headerIndex)}
               disabled={!preview}
               onChange={(event) => {
+                setQuickBooksChunkStart(1)
+                setQuickBooksChunkEnd(1000)
                 setHeaderIndex(Number.parseInt(event.target.value, 10) || 0)
               }}
             >
@@ -564,6 +630,104 @@ export function BankCsvCleaner(props: Props) {
             >
               Use detected format for downloads
             </button>
+          </div>
+        ) : null}
+
+        {quickBooksChunk && quickBooksChunk.rowCount > 0 ? (
+          <div className={quickBooksChunk.rowCount > 1000 ? 'warning-banner' : 'csv-cleaner-preview'}>
+            <div className="csv-cleaner-preview-title">QuickBooks import sanity check</div>
+            <div style={{ padding: '10px 12px', display: 'grid', gap: 10 }}>
+              <div>
+                Detected <strong>{quickBooksChunk.rowCount}</strong> transaction rows after the header row.
+                {quickBooksChunk.rowCount > 1000 ? (
+                  <>
+                    {' '}
+                    QuickBooks CSV bank imports often fail above <strong>1,000</strong> rows — download in chunks.
+                  </>
+                ) : null}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: 'var(--ink)', fontWeight: 760, fontSize: 12 }}>Chunk start row</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={quickBooksChunk.rowCount}
+                    value={String(quickBooksChunkStart)}
+                    onChange={(event) => setQuickBooksChunkStart(Number.parseInt(event.target.value, 10) || 1)}
+                    style={{
+                      padding: '10px 10px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(16, 32, 41, 0.18)',
+                      background: 'rgba(247, 244, 237, 0.7)',
+                      color: 'var(--ink)',
+                      fontWeight: 700,
+                    }}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ color: 'var(--ink)', fontWeight: 760, fontSize: 12 }}>Chunk end row</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={quickBooksChunk.rowCount}
+                    value={String(quickBooksChunkEnd)}
+                    onChange={(event) => setQuickBooksChunkEnd(Number.parseInt(event.target.value, 10) || 1)}
+                    style={{
+                      padding: '10px 10px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(16, 32, 41, 0.18)',
+                      background: 'rgba(247, 244, 237, 0.7)',
+                      color: 'var(--ink)',
+                      fontWeight: 700,
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!canBuild}
+                  onClick={() => {
+                    setQuickBooksChunkStart(1)
+                    setQuickBooksChunkEnd(Math.min(1000, quickBooksChunk.rowCount))
+                  }}
+                >
+                  Set to rows 1–1000
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!canBuild}
+                  onClick={() => {
+                    const nextStart = Math.min(quickBooksChunk.rowCount, Math.max(1, quickBooksChunk.end + 1))
+                    const nextEnd = Math.min(quickBooksChunk.rowCount, nextStart + 999)
+                    setQuickBooksChunkStart(nextStart)
+                    setQuickBooksChunkEnd(nextEnd)
+                  }}
+                >
+                  Next chunk
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                <button type="button" className="secondary-button" disabled={!canBuild} onClick={downloadQuickBooksChunkCsv}>
+                  <FileSpreadsheet size={16} />
+                  Download QuickBooks chunk (CSV)
+                </button>
+                <button type="button" className="secondary-button" disabled={!canBuild} onClick={downloadQuickBooksChunkCreditDebitCsv}>
+                  <FileSpreadsheet size={16} />
+                  Download QuickBooks chunk (Credit/Debit CSV)
+                </button>
+              </div>
+
+              <small style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 640 }}>
+                This chunking applies only to downloads generated from this cleaner; it does not modify your original bank export file.
+              </small>
+            </div>
           </div>
         ) : null}
 
