@@ -22,6 +22,124 @@ function extensionOf(name: string) {
   return name.split('.').pop()?.toLowerCase() ?? ''
 }
 
+function normalizeHeaderLabel(value: string) {
+  return (value || '')
+    .replace(/^\uFEFF/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function parseLooseNumber(raw: string) {
+  const cleaned = raw
+    .trim()
+    .replace(/[,$]/g, '')
+    .replace(/^\((.*)\)$/, '-$1')
+    .replace(/^[^\d-]+/, '')
+    .replace(/[^\d.-]+$/g, '')
+  if (!cleaned) return null
+  const parsed = Number.parseFloat(cleaned)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function guessMappingFromPreview(preview: { headers: string[]; dataRows: string[][] }): Partial<BankCsvCleanerMapping> {
+  const headers = preview.headers ?? []
+  const normalized = headers.map((label) => normalizeHeaderLabel(label))
+  const columnCount = headers.length
+
+  const dateHint = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$|^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$|^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\s+\\d{1,2},?\\s+\\d{2,4}$/i
+
+  const sampleRows = preview.dataRows.slice(0, 80)
+  const stats = Array.from({ length: columnCount }, () => ({
+    dateHits: 0,
+    amountHits: 0,
+    nonEmpty: 0,
+    totalText: 0,
+  }))
+
+  for (const row of sampleRows) {
+    for (let col = 0; col < columnCount; col += 1) {
+      const value = (row[col] ?? '').trim()
+      if (!value) continue
+      const entry = stats[col]
+      entry.nonEmpty += 1
+      entry.totalText += value.length
+      if (dateHint.test(value)) entry.dateHits += 1
+      if (parseLooseNumber(value) !== null) entry.amountHits += 1
+    }
+  }
+
+  const bestByHeader = (keywords: string[]) => {
+    for (let col = 0; col < normalized.length; col += 1) {
+      const label = normalized[col]
+      if (!label) continue
+      if (keywords.some((keyword) => label === keyword)) return col
+    }
+    for (let col = 0; col < normalized.length; col += 1) {
+      const label = normalized[col]
+      if (!label) continue
+      if (keywords.some((keyword) => label.includes(keyword))) return col
+    }
+    return undefined
+  }
+
+  const bestByScore = (pick: (entry: (typeof stats)[number], col: number) => number) => {
+    let bestCol: number | undefined
+    let bestScore = 0
+    for (let col = 0; col < stats.length; col += 1) {
+      const score = pick(stats[col], col)
+      if (score > bestScore) {
+        bestScore = score
+        bestCol = col
+      }
+    }
+    return bestCol
+  }
+
+  const date =
+    bestByHeader(['date', 'transaction date', 'posted date', 'value date']) ??
+    bestByScore((entry) => entry.dateHits / Math.max(1, entry.nonEmpty))
+
+  const reference = bestByHeader(['reference', 'ref', 'transaction id', 'trans id', 'id', 'cheque', 'check number'])
+  const balance = bestByHeader(['balance', 'running balance', 'current balance'])
+
+  const debit =
+    bestByHeader(['debit', 'withdrawal', 'money out', 'outflow', 'spent']) ??
+    bestByHeader(['withdrawals', 'withdraw'])
+  const credit =
+    bestByHeader(['credit', 'deposit', 'money in', 'inflow', 'received']) ??
+    bestByHeader(['deposits', 'deposit'])
+
+  const amount =
+    bestByHeader(['amount', 'amt', 'value']) ??
+    bestByScore((entry) => entry.amountHits / Math.max(1, entry.nonEmpty))
+
+  const description =
+    bestByHeader(['description', 'details', 'narration', 'memo', 'payee', 'merchant', 'name']) ??
+    bestByScore((entry, col) => {
+      const label = normalized[col] || ''
+      if (label.includes('date') || label.includes('amount') || label.includes('debit') || label.includes('credit')) return 0
+      const averageLength = entry.totalText / Math.max(1, entry.nonEmpty)
+      return averageLength >= 8 ? averageLength : 0
+    })
+
+  const mapping: Partial<BankCsvCleanerMapping> = {}
+  if (date !== undefined) mapping.date = date
+  if (description !== undefined) mapping.description = description
+  if (reference !== undefined) mapping.reference = reference
+  if (balance !== undefined) mapping.balance = balance
+
+  if (debit !== undefined || credit !== undefined) {
+    if (debit !== undefined) mapping.withdrawal = debit
+    if (credit !== undefined) mapping.deposit = credit
+  } else if (amount !== undefined) {
+    mapping.amount = amount
+  }
+
+  return mapping
+}
+
 export function BankCsvCleaner(props: Props) {
   const [file, setFile] = useState<File | null>(null)
   const [rawText, setRawText] = useState<string>('')
@@ -156,6 +274,11 @@ export function BankCsvCleaner(props: Props) {
   }, [preview, mapping.date])
 
   const canBuild = Boolean(preview && file && mapping.date !== undefined)
+
+  const guessedMapping = useMemo(() => {
+    if (!preview) return null
+    return guessMappingFromPreview(preview)
+  }, [preview])
 
   const quickBooksChunk = useMemo(() => {
     if (!preview) return null
@@ -377,6 +500,31 @@ export function BankCsvCleaner(props: Props) {
         </p>
 
         <div className="csv-cleaner-grid">
+          <div className="csv-cleaner-actions" style={{ marginBottom: 8, gridColumn: '1 / -1', justifyContent: 'flex-start' }}>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!preview || !guessedMapping?.date}
+              title="Tries to guess Date/Amount/Description columns from headers and sample rows."
+              onClick={() => {
+                if (!guessedMapping) return
+                setMapping((previous) => {
+                  const next: Partial<BankCsvCleanerMapping> = { ...previous }
+                  for (const [key, value] of Object.entries(guessedMapping) as Array<[keyof BankCsvCleanerMapping, number]>) {
+                    if (next[key] === undefined) next[key] = value
+                  }
+                  return next
+                })
+              }}
+            >
+              <Wand2 size={16} />
+              Auto-map columns
+            </button>
+            <button type="button" className="secondary-button" disabled={!preview} onClick={() => setIsTemplatesOpen(true)}>
+              <FileSpreadsheet size={16} />
+              Templates & requirements
+            </button>
+          </div>
           <label className="csv-cleaner-file">
             <span>Bank export</span>
             <input
