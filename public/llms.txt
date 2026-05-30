@@ -52,6 +52,7 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 - Pricing: https://extractmint.iangoh.com/pricing/
 - Privacy: https://extractmint.iangoh.com/privacy/
 - Security: https://extractmint.iangoh.com/security/
+- Bank CSV cleaner: https://extractmint.iangoh.com/bank-csv-cleaner/
 - Bank statement to Excel: https://extractmint.iangoh.com/convert/bank-statement-to-excel/
 - Bank statement to Xero CSV: https://extractmint.iangoh.com/convert/bank-statement-to-xero-csv/
 - Bank statement to QBO: https://extractmint.iangoh.com/convert/bank-statement-to-qbo/
@@ -68,6 +69,7 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 - Pricing Markdown: https://extractmint.iangoh.com/pricing/index.md
 - Privacy Markdown: https://extractmint.iangoh.com/privacy/index.md
 - Security Markdown: https://extractmint.iangoh.com/security/index.md
+- Bank CSV cleaner Markdown: https://extractmint.iangoh.com/bank-csv-cleaner/index.md
 - Bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/bank-statement-to-excel/index.md
 - Bank statement to Xero CSV Markdown: https://extractmint.iangoh.com/convert/bank-statement-to-xero-csv/index.md
 - Bank statement to QBO Markdown: https://extractmint.iangoh.com/convert/bank-statement-to-qbo/index.md

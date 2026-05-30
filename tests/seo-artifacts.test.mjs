@@ -13,6 +13,7 @@ const markdownMirrors = [
   'https://extractmint.iangoh.com/pricing/index.md',
   'https://extractmint.iangoh.com/privacy/index.md',
   'https://extractmint.iangoh.com/security/index.md',
+  'https://extractmint.iangoh.com/bank-csv-cleaner/index.md',
   'https://extractmint.iangoh.com/convert/bank-statement-to-excel/index.md',
   'https://extractmint.iangoh.com/convert/bank-statement-to-xero-csv/index.md',
   'https://extractmint.iangoh.com/convert/bank-statement-to-qbo/index.md',

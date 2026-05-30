@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Bank CSV Cleaner (QuickBooks &amp; Xero) | ExtractMint</title>
+    <meta
+      name="description"
+      content="Clean messy bank exports for QuickBooks and Xero. Auto-map columns, fix dates/amounts, and export import-ready CSV — all local-first in the browser."
+    />
+    <link rel="canonical" href="https://extractmint.iangoh.com/bank-csv-cleaner/" />
+    <link rel="stylesheet" href="/seo.css" />
+    <meta property="og:title" content="Bank CSV Cleaner (QuickBooks &amp; Xero) | ExtractMint" />
+    <meta
+      property="og:description"
+      content="Fix bank CSV exports: auto-map columns, normalize dates, and export QuickBooks/Xero-ready files without uploading statements."
+    />
+    <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Bank CSV Cleaner (QuickBooks & Xero) | ExtractMint",
+        "url": "https://extractmint.iangoh.com/bank-csv-cleaner/",
+        "isPartOf": { "@type": "WebSite", "name": "ExtractMint", "url": "https://extractmint.iangoh.com/" }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true">EM</span>
+          ExtractMint
+        </a>
+        <div class="nav-links">
+          <a href="/#converter">Converter</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/privacy/">Privacy</a>
+          <a href="/security/">Security</a>
+        </div>
+      </nav>
+
+      <main>
+        <section class="hero">
+          <div>
+            <span class="eyebrow">Bank CSV cleaner</span>
+            <h1>Fix messy bank exports for QuickBooks and Xero.</h1>
+            <p class="lede">
+              When your bank CSV has extra columns, odd date formats, or debit/credit split fields, imports get rejected. ExtractMint’s cleaner
+              helps you auto-map columns and export import-ready CSV — local-first in the browser.
+            </p>
+            <div class="cta-row">
+              <a class="button" href="/#bank-csv-cleaner">Open CSV cleaner</a>
+              <a class="button secondary" href="/#converter">Convert a cleaned file</a>
+              <a class="button secondary" href="/convert/bank-statement-to-quickbooks-csv/">QuickBooks CSV guide</a>
+            </div>
+          </div>
+          <div class="demo-card" aria-label="Cleaner snapshot">
+            <div class="drop">
+              <strong>Outputs</strong>
+              <p style="margin: 10px 0 0; color: #49616a; font-weight: 650; line-height: 1.4">
+                QuickBooks 3-column CSV, Xero-ready bank CSV, or a cleaned ExtractMint table for Excel exports and review packs.
+              </p>
+              <div class="progress" aria-hidden="true"><span></span></div>
+              <p style="margin: 12px 0 0; color: #49616a; font-weight: 650; line-height: 1.4">
+                Local-first: nothing uploads in the current static build.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>What the cleaner fixes</h2>
+          <ul>
+            <li>Extra columns like running balances, categories, notes, or duplicate headers.</li>
+            <li>Date formats that don’t match the target import.</li>
+            <li>Amount fields split into Debit/Credit columns.</li>
+            <li>Currency symbols, commas, or accounting-style negatives (e.g. <code>(12.34)</code>).</li>
+          </ul>
+        </section>
+
+        <section class="grid" aria-label="Cleaner workflows">
+          <article class="panel">
+            <h2>QuickBooks (CSV)</h2>
+            <p>Exports a QuickBooks-friendly 3-column CSV: <strong>Date</strong>, <strong>Description</strong>, <strong>Amount</strong>.</p>
+            <ul>
+              <li>Auto-map columns from headers + sample rows.</li>
+              <li>Choose a date format when it’s ambiguous.</li>
+              <li>Split large files into chunks when imports have row limits.</li>
+            </ul>
+          </article>
+          <article class="panel">
+            <h2>Xero (CSV)</h2>
+            <p>Exports a Xero-ready bank statement CSV with <strong>Date</strong>, <strong>Amount</strong>, <strong>Payee</strong>, <strong>Description</strong>, and <strong>Reference</strong>.</p>
+            <ul>
+              <li>Normalize dates to reduce import ambiguity.</li>
+              <li>Optionally make references unique to avoid accidental de-dupe.</li>
+              <li>Keep one signed Amount column (deposits positive, withdrawals negative).</li>
+            </ul>
+          </article>
+          <article class="panel">
+            <h2>ExtractMint table</h2>
+            <p>Creates a cleaned ExtractMint-friendly table you can convert to Excel and review packs.</p>
+            <ul>
+              <li>Convert to XLSX, CSV, PDF, DOCX, QBO, and review packs.</li>
+              <li>Balance trail signals carry into reconciliation exports.</li>
+              <li>Use support diagnostics when a bank format is unusual.</li>
+            </ul>
+          </article>
+        </section>
+
+        <section class="panel">
+          <h2>How to use it</h2>
+          <ol>
+            <li>Open the cleaner at <a href="/#bank-csv-cleaner">/#bank-csv-cleaner</a>.</li>
+            <li>Upload a bank-export <code>.csv</code> or <code>.xlsx</code>.</li>
+            <li>Click <strong>Auto-map columns</strong> (or map fields manually).</li>
+            <li>Export the format you need, then import into QuickBooks or Xero.</li>
+          </ol>
+          <p style="margin-top: 14px; color: #49616a; font-weight: 650">
+            Tip: if an import fails, try a smaller chunk size and confirm your date format matches the accounting system’s importer.
+          </p>
+        </section>
+
+        <section class="related" aria-label="Related pages">
+          <a href="/convert/bank-statement-to-quickbooks-csv/">Bank statement to QuickBooks CSV</a>
+          <a href="/convert/bank-statement-to-xero-csv/">Bank statement to Xero CSV</a>
+          <a href="/privacy/">Privacy</a>
+          <a href="/security/">Security</a>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>ExtractMint</span>
+        <span>Bank statements, receipts, invoices, and scans to clean working files.</span>
+      </footer>
+    </div>
+  </body>
+</html>
+

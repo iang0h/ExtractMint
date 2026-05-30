@@ -141,6 +141,7 @@ function guessMappingFromPreview(preview: { headers: string[]; dataRows: string[
 }
 
 export function BankCsvCleaner(props: Props) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [rawText, setRawText] = useState<string>('')
   const [sheetNames, setSheetNames] = useState<string[]>([])
@@ -171,6 +172,22 @@ export function BankCsvCleaner(props: Props) {
   const isWorkbook = file ? ['xlsx', 'xls'].includes(extensionOf(file.name)) : false
   const resolvedDateFormat = dateFormatOverride === 'auto' ? props.quickBooksDateFormat : dateFormatOverride
   const exampleDate = resolvedDateFormat === 'dmy' ? '31/01/2026' : '01/31/2026'
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const syncFromHash = () => {
+      if (window.location.hash !== '#bank-csv-cleaner') return
+      const element = detailsRef.current
+      if (!element) return
+      element.open = true
+      element.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+
+    syncFromHash()
+    window.addEventListener('hashchange', syncFromHash)
+    return () => window.removeEventListener('hashchange', syncFromHash)
+  }, [])
 
   useEffect(() => {
     if (!file) return
@@ -485,11 +502,11 @@ export function BankCsvCleaner(props: Props) {
   }
 
   return (
-    <details className="csv-cleaner-panel">
+    <details ref={detailsRef} className="csv-cleaner-panel" id="bank-csv-cleaner">
       <summary>
         <span className="csv-cleaner-title">
           <Wand2 size={16} />
-          Bank CSV cleaner (manual mapping)
+          Bank CSV cleaner
         </span>
         <span className="csv-cleaner-subtitle">Fix messy exports when auto-detection fails</span>
       </summary>

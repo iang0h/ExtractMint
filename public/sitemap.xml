@@ -49,6 +49,18 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://extractmint.iangoh.com/bank-csv-cleaner/</loc>
+    <lastmod>2026-05-31</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.82</priority>
+  </url>
+  <url>
+    <loc>https://extractmint.iangoh.com/bank-csv-cleaner/index.md</loc>
+    <lastmod>2026-05-31</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.68</priority>
+  </url>
+  <url>
     <loc>https://extractmint.iangoh.com/convert/bank-statement-to-excel/</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>

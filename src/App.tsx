@@ -2413,6 +2413,7 @@ function App() {
         </a>
         <nav aria-label="Primary navigation">
           <a href="#converter">Converter</a>
+          <a href="/bank-csv-cleaner/">CSV cleaner</a>
           <a href="#formats">Formats</a>
           <a href="#agent">Agent</a>
           <a href="#video">Demo</a>
