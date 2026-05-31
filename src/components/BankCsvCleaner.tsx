@@ -16,7 +16,24 @@ type Props = {
   quickBooksDateFormat: QuickBooksBankCsvDateFormat
 }
 
+type SavedBankCsvCleanerMapping = {
+  schema: 'extractmint.bankCsvCleaner.mapping.v1'
+  savedAt: string
+  columnsByField: Partial<Record<keyof BankCsvCleanerMapping, string>>
+}
+
 const defaultHeaderIndices = Array.from({ length: 12 }, (_, index) => index)
+const mappingStorageKey = 'extractmint.bankCsvCleaner.mapping.v1'
+
+const mappingFields: Array<keyof BankCsvCleanerMapping> = [
+  'date',
+  'description',
+  'reference',
+  'withdrawal',
+  'deposit',
+  'amount',
+  'balance',
+]
 
 function extensionOf(name: string) {
   return name.split('.').pop()?.toLowerCase() ?? ''
@@ -158,6 +175,7 @@ export function BankCsvCleaner(props: Props) {
   const [quickBooksChunkEnd, setQuickBooksChunkEnd] = useState<number>(1000)
   const [quickBooksZipStatus, setQuickBooksZipStatus] = useState<string | null>(null)
   const quickBooksZipBusyRef = useRef(false)
+  const [mappingStatus, setMappingStatus] = useState<string | null>(null)
   const [lastStats, setLastStats] = useState<
     | null
     | {
@@ -291,6 +309,86 @@ export function BankCsvCleaner(props: Props) {
   }, [preview, mapping.date])
 
   const canBuild = Boolean(preview && file && mapping.date !== undefined)
+
+  const saveMapping = () => {
+    if (typeof window === 'undefined') return
+    if (!preview) return
+    setError('')
+    try {
+      const columnsByField: SavedBankCsvCleanerMapping['columnsByField'] = {}
+      for (const key of mappingFields) {
+        const colIndex = mapping[key]
+        if (colIndex === undefined) continue
+        const label = preview.headers[colIndex] ?? ''
+        if (!label) continue
+        columnsByField[key] = label
+      }
+
+      const payload: SavedBankCsvCleanerMapping = {
+        schema: 'extractmint.bankCsvCleaner.mapping.v1',
+        savedAt: new Date().toISOString(),
+        columnsByField,
+      }
+      window.localStorage.setItem(mappingStorageKey, JSON.stringify(payload))
+      setMappingStatus('Saved mapping on this device.')
+      window.setTimeout(() => setMappingStatus(null), 3500)
+    } catch (storageError) {
+      setError(storageError instanceof Error ? storageError.message : 'Failed to save mapping')
+    }
+  }
+
+  const loadMapping = () => {
+    if (typeof window === 'undefined') return
+    if (!preview) return
+    setError('')
+    try {
+      const raw = window.localStorage.getItem(mappingStorageKey)
+      if (!raw) {
+        setMappingStatus('No saved mapping found on this device yet.')
+        window.setTimeout(() => setMappingStatus(null), 3500)
+        return
+      }
+      const parsed = JSON.parse(raw) as Partial<SavedBankCsvCleanerMapping>
+      if (parsed.schema !== 'extractmint.bankCsvCleaner.mapping.v1' || typeof parsed.columnsByField !== 'object' || !parsed.columnsByField) {
+        setError('Saved mapping is invalid. Clear it and try again.')
+        return
+      }
+
+      const indexByNormalizedHeader = new Map<string, number>()
+      for (let index = 0; index < preview.headers.length; index += 1) {
+        const normalized = normalizeHeaderLabel(preview.headers[index] ?? '')
+        if (!normalized) continue
+        if (!indexByNormalizedHeader.has(normalized)) indexByNormalizedHeader.set(normalized, index)
+      }
+
+      const next: Partial<BankCsvCleanerMapping> = {}
+      const missing: string[] = []
+      for (const [field, label] of Object.entries(parsed.columnsByField) as Array<[keyof BankCsvCleanerMapping, string]>) {
+        if (!label) continue
+        const match = indexByNormalizedHeader.get(normalizeHeaderLabel(label))
+        if (match === undefined) missing.push(label)
+        else next[field] = match
+      }
+
+      setMapping(next)
+      setMappingStatus(missing.length ? `Loaded mapping (missing ${missing.length} column${missing.length === 1 ? '' : 's'}).` : 'Loaded mapping.')
+      window.setTimeout(() => setMappingStatus(null), 4500)
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Failed to load mapping')
+    }
+  }
+
+  const clearSavedMapping = () => {
+    if (typeof window === 'undefined') return
+    setError('')
+    try {
+      window.localStorage.removeItem(mappingStorageKey)
+      setMappingStatus('Cleared saved mapping on this device.')
+      window.setTimeout(() => setMappingStatus(null), 3500)
+    } catch (storageError) {
+      setError(storageError instanceof Error ? storageError.message : 'Failed to clear saved mapping')
+    }
+  }
 
   const guessedMapping = useMemo(() => {
     if (!preview) return null
@@ -541,6 +639,21 @@ export function BankCsvCleaner(props: Props) {
               <FileSpreadsheet size={16} />
               Templates & requirements
             </button>
+            <button type="button" className="secondary-button" disabled={!preview} onClick={loadMapping} title="Loads a previously saved mapping from this device.">
+              Load saved mapping
+            </button>
+            <button type="button" className="secondary-button" disabled={!preview} onClick={saveMapping} title="Saves the current mapping to this device (local-only).">
+              Save mapping
+            </button>
+            <button
+              type="button"
+              className="link-button"
+              disabled={!preview}
+              onClick={clearSavedMapping}
+              title="Clears the saved mapping on this device."
+            >
+              Clear saved mapping
+            </button>
           </div>
           <label className="csv-cleaner-file">
             <span>Bank export</span>
@@ -760,6 +873,8 @@ export function BankCsvCleaner(props: Props) {
             </select>
           </label>
         </div>
+
+        {mappingStatus ? <div className="csv-cleaner-preview">{mappingStatus}</div> : null}
 
         <div className="csv-cleaner-actions">
           <button
@@ -1122,6 +1237,10 @@ export function BankCsvCleaner(props: Props) {
                   <li>
                     Keep dates consistent ({resolvedDateFormat === 'dmy' ? 'DD/MM/YYYY' : 'MM/DD/YYYY'} for templates). If day/month swaps, change the date
                     format for exports and re-download.
+                  </li>
+                  <li>
+                    If you have more than <strong>1,000</strong> transaction rows, use chunk downloads (or ZIP) and import each chunk separately in
+                    QuickBooks.
                   </li>
                   <li>Remove currency symbols, commas, and parentheses negatives (e.g. use -12.34 not (12.34)).</li>
                   <li>Save as UTF-8 CSV and delete extra header/footer rows from bank exports.</li>
