@@ -2,6 +2,7 @@ import { FileSpreadsheet, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BankCsvCleanerMapping } from '../lib/bankCsvCleaner'
 import {
+  buildBankCsvCleanerValidationPack,
   buildExtractMintCleanedTable,
   buildQuickBooksBankCsv,
   buildQuickBooksBankCsvCreditDebit,
@@ -430,6 +431,36 @@ export function BankCsvCleaner(props: Props) {
       URL.revokeObjectURL(url)
     } catch (buildError) {
       setError(buildError instanceof Error ? buildError.message : 'Failed to build QuickBooks CSV')
+    }
+  }
+
+  const downloadValidationPack = () => {
+    if (!preview || !file || mapping.date === undefined) return
+    setError('')
+    try {
+      const pack = buildBankCsvCleanerValidationPack(preview, mapping as BankCsvCleanerMapping)
+      const columnsByField: Record<string, { index: number; header: string } | null> = {}
+      for (const key of mappingFields) {
+        const index = mapping[key]
+        if (index === undefined) continue
+        columnsByField[key] = { index, header: preview.headers[index] ?? '' }
+      }
+
+      const payload = {
+        ...pack,
+        file: { name: file.name, kind: isWorkbook ? 'spreadsheet' : 'delimited-text', delimiter: preview.delimiter, headerIndex: preview.headerIndex },
+        mapping: { columnsByField },
+      }
+
+      const blob = new Blob([JSON.stringify(payload, null, 2) + '\n'], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${file.name.replace(/\\.[^.]+$/, '')}.validation-pack.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (buildError) {
+      setError(buildError instanceof Error ? buildError.message : 'Failed to build validation pack')
     }
   }
 
@@ -900,6 +931,16 @@ export function BankCsvCleaner(props: Props) {
           >
             <FileSpreadsheet size={16} />
             Convert cleaned file
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canBuild}
+            onClick={downloadValidationPack}
+            title="Downloads a local-only validation pack (row counts + optional balance trail check) to help reconcile before importing."
+          >
+            <FileSpreadsheet size={16} />
+            Download validation pack (JSON)
           </button>
           <button
             type="button"

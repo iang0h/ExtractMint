@@ -314,6 +314,157 @@ export function buildExtractMintCleanedTable(preview: BankDelimitedPreview, mapp
   }
 }
 
+export type BankCsvCleanerValidationPack = {
+  schema: 'extractmint.bankCsvCleaner.validationPack.v1'
+  generatedAt: string
+  stats: {
+    inputRows: number
+    written: number
+    skippedNoDate: number
+  }
+  balanceTrail?: {
+    available: boolean
+    checked: number
+    mismatches: number
+    unknownNet: number
+    missingBalance: number
+    invalidBalance: number
+    examples: Array<{
+      rowNumber: number
+      date: string
+      description: string
+      previousBalance: number
+      expectedBalance: number
+      actualBalance: number
+      delta: number
+    }>
+  }
+}
+
+export function buildBankCsvCleanerValidationPack(preview: BankDelimitedPreview, mapping: BankCsvCleanerMapping): BankCsvCleanerValidationPack {
+  const inputRows = preview.dataRows.length
+
+  let written = 0
+  let skippedNoDate = 0
+
+  const hasBalance = mapping.balance !== undefined
+  let checked = 0
+  let mismatches = 0
+  let unknownNet = 0
+  let missingBalance = 0
+  let invalidBalance = 0
+  const examples: Array<{
+    rowNumber: number
+    date: string
+    description: string
+    previousBalance: number
+    expectedBalance: number
+    actualBalance: number
+    delta: number
+  }> = []
+
+  let previousBalance: number | undefined
+
+  for (let index = 0; index < preview.dataRows.length; index += 1) {
+    const row = preview.dataRows[index]
+
+    const dateRaw = row[mapping.date] ?? ''
+    const date = formatDateForTable(dateRaw)
+    if (!date) {
+      skippedNoDate += 1
+      continue
+    }
+
+    const description = clampText(mapping.description !== undefined ? (row[mapping.description] ?? '') : '', 220) || 'Transaction'
+
+    const withdrawalRaw = mapping.withdrawal !== undefined ? (row[mapping.withdrawal] ?? '') : ''
+    const depositRaw = mapping.deposit !== undefined ? (row[mapping.deposit] ?? '') : ''
+    const amountRaw = mapping.amount !== undefined ? (row[mapping.amount] ?? '') : ''
+    const balanceRaw = mapping.balance !== undefined ? (row[mapping.balance] ?? '') : ''
+
+    const withdrawalParsed = mapping.withdrawal !== undefined ? parseMoney(withdrawalRaw) : undefined
+    const depositParsed = mapping.deposit !== undefined ? parseMoney(depositRaw) : undefined
+    const amountParsed = mapping.amount !== undefined ? parseMoney(amountRaw) : undefined
+    const balanceParsed = mapping.balance !== undefined ? parseMoney(balanceRaw) : undefined
+
+    const normalizedWithdrawal =
+      withdrawalParsed !== undefined
+        ? Math.abs(withdrawalParsed)
+        : amountParsed !== undefined && amountParsed < 0
+          ? Math.abs(amountParsed)
+          : undefined
+    const normalizedDeposit =
+      depositParsed !== undefined
+        ? Math.abs(depositParsed)
+        : amountParsed !== undefined && amountParsed > 0
+          ? Math.abs(amountParsed)
+          : undefined
+
+    written += 1
+
+    if (!hasBalance) continue
+
+    const balanceRawTrimmed = balanceRaw.trim()
+    if (!balanceRawTrimmed) {
+      missingBalance += 1
+      previousBalance = undefined
+      continue
+    }
+
+    if (balanceParsed === undefined) {
+      invalidBalance += 1
+      previousBalance = undefined
+      continue
+    }
+
+    if (previousBalance === undefined) {
+      previousBalance = balanceParsed
+      continue
+    }
+
+    const net =
+      normalizedDeposit !== undefined || normalizedWithdrawal !== undefined
+        ? (normalizedDeposit ?? 0) - (normalizedWithdrawal ?? 0)
+        : undefined
+    if (net === undefined || !Number.isFinite(net)) {
+      unknownNet += 1
+      previousBalance = balanceParsed
+      continue
+    }
+
+    const expected = Math.round((previousBalance + net) * 100) / 100
+    const actual = Math.round(balanceParsed * 100) / 100
+    const delta = Math.round((actual - expected) * 100) / 100
+
+    checked += 1
+    if (Math.abs(delta) > 0.01) {
+      mismatches += 1
+      if (examples.length < 8) {
+        examples.push({
+          rowNumber: preview.headerIndex + 2 + index,
+          date,
+          description,
+          previousBalance: Math.round(previousBalance * 100) / 100,
+          expectedBalance: expected,
+          actualBalance: actual,
+          delta,
+        })
+      }
+    }
+
+    previousBalance = balanceParsed
+  }
+
+  return {
+    schema: 'extractmint.bankCsvCleaner.validationPack.v1',
+    generatedAt: new Date().toISOString(),
+    stats: { inputRows, written, skippedNoDate },
+    balanceTrail: hasBalance
+      ? { available: true, checked, mismatches, unknownNet, missingBalance, invalidBalance, examples }
+      : undefined,
+  }
+}
+
 export function buildQuickBooksBankCsv(preview: BankDelimitedPreview, mapping: BankCsvCleanerMapping, options: { dateFormat: QuickBooksBankCsvDateFormat }) {
   const output: string[] = []
   output.push('Date,Description,Amount')
