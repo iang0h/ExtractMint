@@ -157,7 +157,7 @@ main {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
   gap: clamp(36px, 6vw, 82px);
-  align-items: center;
+  align-items: start;
   width: min(1180px, calc(100% - 32px));
   margin: 26px auto 0;
   min-height: calc(100svh - 126px);
@@ -303,9 +303,10 @@ h3 {
 
 .product-stage {
   position: relative;
-  min-height: 580px;
+  min-height: 620px;
   display: grid;
   place-items: center;
+  align-self: start;
 }
 
 .stage-frame {
@@ -440,6 +441,7 @@ h3 {
   position: relative;
   z-index: 2;
   width: min(100%, 560px);
+  max-height: min(760px, calc(100svh - 150px));
   border: 1px solid rgba(16, 32, 41, 0.09);
   border-radius: 24px;
   background:
@@ -447,7 +449,9 @@ h3 {
     rgba(255, 255, 255, 0.82);
   box-shadow: var(--shadow);
   backdrop-filter: blur(28px);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .converter-toolbar {
