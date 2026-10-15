@@ -619,10 +619,9 @@ footer span {
   background: #fbfaf7;
 }
 
-.export-row::before {
-  content: 'Export files';
+.export-row-label {
   grid-column: 1 / -1;
-  margin-bottom: 2px;
+  margin: 0 0 2px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 760;
