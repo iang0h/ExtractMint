@@ -326,3 +326,18 @@ Do not deploy, push, or create a pull request as part of this plan.
 - [ ] The TopoField shader is decorative, locally implemented from the ThreeUI Community source, and has a static CSS fallback.
 - [ ] Reduced-motion users and browsers without WebGL can use the complete conversion workflow.
 - [ ] No conversion, privacy, or export behavior changed; no production deployment was made.
+
+### Task 6: Defer loading the optional shader module
+
+**Files:**
+- Modify: `src/App.tsx`
+- Modify: `docs/superpowers/plans/2026-10-15-extractmint-product-first-redesign.md`
+
+**Interfaces:**
+- Produces: the hero's CSS field renders immediately; the optional WebGL module loads only after the app has rendered and the browser reaches an idle opportunity.
+
+- [x] Render the static `.topo-field-backdrop` element immediately as the first child of the hero so the field never depends on JavaScript chunk loading.
+- [x] Dynamically import `TopoFieldBackdrop` from its local module during `requestIdleCallback`, with a bounded timer fallback for browsers without that API. Do not use a third-party URL or add a package.
+- [x] Keep the CSS stylesheet available in the initial app styles so the static field remains visible while the module loads or if the import fails. Mount the WebGL component only after the dynamic import succeeds.
+- [x] Cancel a pending idle callback or fallback timer on unmount, and prevent a completed import from setting state after unmount. Preserve the converter's first render and all conversion behavior.
+- [x] Run the production build and inspect that Vite emits the shader module as a separate on-demand chunk. Record that output in the Task 6 report; do not add or run test scripts.
