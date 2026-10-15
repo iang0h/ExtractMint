@@ -16,4 +16,11 @@
 
 body {
   margin: 0;
+  background: #f8f7f1;
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 3px solid rgba(8, 122, 101, 0.72);
+  outline-offset: 3px;
 }
