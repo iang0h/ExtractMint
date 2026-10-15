@@ -1550,8 +1550,7 @@ function App() {
       </header>
 
       <section id="top" className="hero-section">
-        <div className="topo-field-backdrop" aria-hidden="true" />
-        {TopoFieldBackdrop && <TopoFieldBackdrop />}
+        {TopoFieldBackdrop ? <TopoFieldBackdrop /> : <div className="topo-field-backdrop" aria-hidden="true" />}
         <div className="hero-copy">
           <motion.p
             className="eyebrow"
