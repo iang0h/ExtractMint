@@ -940,6 +940,7 @@ footer {
 .preview-header h3 {
   margin: 4px 0 0;
   font-size: clamp(24px, 3vw, 34px);
+  overflow-wrap: anywhere;
 }
 
 .confidence-pill {
@@ -1595,7 +1596,7 @@ footer {
   color: var(--muted);
 }
 
-.table-wrap input {
+.table-wrap td input {
   width: 100%;
   padding: 8px 10px;
   border-radius: 12px;
@@ -1605,7 +1606,7 @@ footer {
   font-size: 13px;
 }
 
-.table-wrap input:focus {
+.table-wrap td input:focus {
   outline: none;
   border-color: rgba(41, 176, 128, 0.72);
   box-shadow: 0 0 0 3px rgba(41, 176, 128, 0.14);
@@ -2195,6 +2196,20 @@ footer strong {
 
   .brand-copy small {
     display: none;
+  }
+
+  .source-statement,
+  .excel-output {
+    overflow-x: auto;
+  }
+
+  .statement-row {
+    min-width: 420px;
+  }
+
+  .excel-head,
+  .excel-row {
+    min-width: 480px;
   }
 }
 
