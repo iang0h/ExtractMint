@@ -1878,6 +1878,7 @@ function App() {
             </div>
 
             <div className="export-row">
+              <h3 className="export-row-label">Export files</h3>
               <button onClick={() => void downloadBlob('xlsx')} disabled={!activeResult}>
                 <FileSpreadsheet size={16} />
                 Excel
