@@ -26,6 +26,7 @@ import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
+import { TopoFieldBackdrop } from './components/TopoFieldBackdrop'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
@@ -1521,6 +1522,7 @@ function App() {
       </header>
 
       <section id="top" className="hero-section">
+        <TopoFieldBackdrop />
         <div className="hero-copy">
           <motion.p
             className="eyebrow"
@@ -1540,14 +1542,14 @@ function App() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08 }}
             >
-              Statements in.
+              Turn statements into
             </motion.span>
             <motion.span
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.18 }}
             >
-              Reconciled files out.
+              clean data.
             </motion.span>
           </motion.h1>
           <motion.p
@@ -1556,9 +1558,8 @@ function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            Upload a PDF statement, receipt, or invoice. ExtractMint reads the
-            table, validates the balance trail, and exports Excel, CSV, DOCX,
-            PDF, QBO, and review packs without sending files to a server.
+            Upload a statement or receipt. ExtractMint structures transactions,
+            checks the balance trail, and exports useful files in your browser.
           </motion.p>
           <motion.div
             className="hero-actions"
@@ -1615,58 +1616,12 @@ function App() {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ delay: 0.12, duration: 0.55 }}
         >
-          <div className="stage-frame" aria-hidden="true" />
-          <div className="stage-glow" />
-          <motion.div
-            className="scan-path"
-            animate={{ x: ['-18%', '118%'], opacity: [0, 1, 1, 0] }}
-            transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-            aria-hidden="true"
-          />
-          <motion.div
-            className="data-chip chip-pdf"
-            animate={{ y: [0, -12, 0], rotate: [-4, 3, -4] }}
-            transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-            aria-hidden="true"
-          >
-            PDF
-          </motion.div>
-          <motion.div
-            className="data-chip chip-excel"
-            animate={{ y: [0, 10, 0], rotate: [5, -2, 5] }}
-            transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut' }}
-            aria-hidden="true"
-          >
-            XLSX
-          </motion.div>
-          <motion.div
-            className="data-chip chip-balance"
-            animate={{ y: [0, -9, 0], scale: [1, 1.04, 1] }}
-            transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
-            aria-hidden="true"
-          >
-            RM 3,669.19
-          </motion.div>
-          <div className="document-stack" aria-hidden="true">
-            <motion.div
-              className="paper paper-left"
-              animate={{ y: [-2, 7, -2], rotate: [-8, -5, -8] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            <motion.div
-              className="paper paper-right"
-              animate={{ y: [6, -4, 6], rotate: [7, 4, 7] }}
-              transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </div>
           <motion.div
             className="converter-card"
             id="converter"
-            animate={{ y: [0, -8, 0] }}
-            transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
           >
             <div className="converter-toolbar">
-              <span>Live extraction desk</span>
+              <span>Document workbench</span>
               <div>
                 <i />
                 <i />
@@ -1698,11 +1653,11 @@ function App() {
               >
                 <Cloud size={28} />
               </motion.span>
-              <strong>Drop documents here</strong>
-              <small>or click to choose PDFs, images, or ExtractMint review packs (.zip)</small>
+              <strong>Drop a document or choose a file</strong>
+              <small>PDF, scan, receipt, spreadsheet, DOCX, or ExtractMint review pack</small>
             </label>
 
-            <div className="ocr-settings" aria-label="OCR settings">
+            <div className="ocr-settings" aria-label="Processing settings">
               <label>
                 <input
                   type="checkbox"
