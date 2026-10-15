@@ -22,11 +22,11 @@ import {
   Table2,
   UploadCloud,
 } from 'lucide-react'
-import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type ComponentType, type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import './components/TopoFieldBackdrop.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
-import { TopoFieldBackdrop } from './components/TopoFieldBackdrop'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
@@ -423,6 +423,7 @@ const TELEMETRY_STORAGE_KEY = 'extractmint.telemetry.v1'
 
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [TopoFieldBackdrop, setTopoFieldBackdrop] = useState<ComponentType | null>(null)
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL ?? '').trim()
   const [results, setResults] = useState<ConversionResult[]>([createSampleResultLite()])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -608,6 +609,33 @@ function App() {
   useEffect(() => {
     pdfUrlRef.current = pdfUrlsBySha
   }, [pdfUrlsBySha])
+
+  useEffect(() => {
+    let mounted = true
+    const loadBackdrop = () => {
+      void import('./components/TopoFieldBackdrop')
+        .then(({ TopoFieldBackdrop: Component }) => {
+          if (mounted) setTopoFieldBackdrop(() => Component)
+        })
+        .catch(() => {
+          // The static CSS field remains visible if the optional shader cannot load.
+        })
+    }
+
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(loadBackdrop, { timeout: 2000 })
+      return () => {
+        mounted = false
+        window.cancelIdleCallback(idleId)
+      }
+    }
+
+    const timerId = setTimeout(loadBackdrop, 200)
+    return () => {
+      mounted = false
+      clearTimeout(timerId)
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -1522,7 +1550,8 @@ function App() {
       </header>
 
       <section id="top" className="hero-section">
-        <TopoFieldBackdrop />
+        <div className="topo-field-backdrop" aria-hidden="true" />
+        {TopoFieldBackdrop && <TopoFieldBackdrop />}
         <div className="hero-copy">
           <motion.p
             className="eyebrow"
