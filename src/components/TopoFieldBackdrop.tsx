@@ -57,7 +57,7 @@ void main() {
   float numBands = 10.0;
   float bandVal = n * numBands;
   float triangleWave = abs(fract(bandVal) - 0.5) * 2.0;
-  float topoLines = smoothstep(0.02, 0.00, triangleWave) * 0.45;
+  float topoLines = (1.0 - smoothstep(0.0, 0.02, triangleWave)) * 0.45;
 
   vec3 ink = vec3(0.063, 0.125, 0.161);
   vec3 mint = vec3(0.071, 0.725, 0.506);
@@ -140,6 +140,7 @@ export function TopoFieldBackdrop() {
     let frame = 0
     let elapsed = 0
     let lastFrameTime: number | null = null
+    let lastDpr = 0
 
     const draw = () => {
       if (contextLost || canvas.width === 0 || canvas.height === 0) return
@@ -154,6 +155,8 @@ export function TopoFieldBackdrop() {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
       const width = Math.max(0, Math.round(canvas.clientWidth * dpr))
       const height = Math.max(0, Math.round(canvas.clientHeight * dpr))
+      if (canvas.width === width && canvas.height === height && lastDpr === dpr) return
+      lastDpr = dpr
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width
         canvas.height = height
@@ -181,10 +184,14 @@ export function TopoFieldBackdrop() {
     const sync = () => {
       if (contextLost || !visible || document.hidden || motion.matches) {
         stop()
-        if (motion.matches) draw()
       } else if (!frame) {
         frame = window.requestAnimationFrame(tick)
       }
+    }
+
+    const onMotionChange = () => {
+      sync()
+      if (motion.matches) draw()
     }
 
     const onContextLost = () => {
@@ -193,7 +200,7 @@ export function TopoFieldBackdrop() {
     }
     canvas.addEventListener('webglcontextlost', onContextLost)
     document.addEventListener('visibilitychange', sync)
-    motion.addEventListener('change', sync)
+    motion.addEventListener('change', onMotionChange)
     window.addEventListener('resize', resize)
     const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize)
     resizeObserver?.observe(canvas)
@@ -214,7 +221,7 @@ export function TopoFieldBackdrop() {
       intersectionObserver?.disconnect()
       canvas.removeEventListener('webglcontextlost', onContextLost)
       document.removeEventListener('visibilitychange', sync)
-      motion.removeEventListener('change', sync)
+      motion.removeEventListener('change', onMotionChange)
       if (!gl.isContextLost()) {
         gl.deleteBuffer(buffer)
         gl.deleteProgram(program)
