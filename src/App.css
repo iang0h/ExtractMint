@@ -806,23 +806,14 @@ footer {
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   border: 1px solid var(--line);
-  border-radius: 22px;
+  border-radius: 16px;
   background: var(--line);
   overflow: hidden;
-  box-shadow: 0 18px 48px rgba(44, 53, 44, 0.08);
 }
 
 .summary-band div {
-  padding: 24px;
-  background: rgba(255, 255, 255, 0.72);
-  transition:
-    transform 180ms ease,
-    background 180ms ease;
-}
-
-.summary-band div:hover {
-  transform: translateY(-3px);
-  background: rgba(255, 255, 255, 0.92);
+  padding: 22px 24px;
+  background: var(--panel);
 }
 
 .summary-band strong {
@@ -841,7 +832,7 @@ footer {
 .workflow-section,
 .trust-section,
 .agent-section {
-  padding: 96px 0 0;
+  padding: clamp(52px, 7vw, 88px) 0 0;
 }
 
 .section-heading {
@@ -849,7 +840,7 @@ footer {
   grid-template-columns: minmax(180px, 0.35fr) minmax(0, 0.65fr);
   gap: 36px;
   align-items: end;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .section-heading .eyebrow {
@@ -858,22 +849,21 @@ footer {
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: 310px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(250px, 290px) minmax(0, 1fr);
+  gap: 16px;
 }
 
 .file-list,
 .preview-panel,
 .workflow-grid article,
 .trust-section div {
-  border: 1px solid rgba(16, 32, 41, 0.08);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.74);
-  box-shadow: 0 18px 46px rgba(42, 53, 42, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
 }
 
 .file-list {
-  padding: 14px;
+  padding: 12px;
 }
 
 .mini-stat {
@@ -883,7 +873,8 @@ footer {
   align-items: center;
   margin-bottom: 10px;
   padding: 14px;
-  border-radius: 16px;
+  border: 1px solid #24433e;
+  border-radius: 14px;
   background: #102029;
   color: #e9fff7;
 }
@@ -902,16 +893,25 @@ footer {
   margin-top: 8px;
   padding: 13px;
   border: 1px solid transparent;
-  border-radius: 16px;
+  border-radius: 14px;
   background: transparent;
   color: var(--ink);
   text-align: left;
 }
 
-.file-list button.active,
 .file-list button:hover {
   border-color: var(--line);
-  background: #f6f8f2;
+  background: var(--paper);
+}
+
+.file-list button.active {
+  border-color: rgba(8, 122, 101, 0.35);
+  background: #edf8f1;
+  box-shadow: inset 3px 0 0 var(--mint-dark);
+}
+
+.file-list button.active svg {
+  color: var(--mint-dark);
 }
 
 .file-list button strong,
@@ -926,7 +926,7 @@ footer {
 
 .preview-panel {
   min-width: 0;
-  padding: 22px;
+  padding: 20px;
 }
 
 .preview-header {
@@ -947,6 +947,7 @@ footer {
   white-space: nowrap;
   border-radius: 999px;
   padding: 9px 12px;
+  border: 1px solid #b9e6d0;
   background: #ebf8ef;
   color: var(--mint-dark);
   font-size: 14px;
@@ -954,11 +955,13 @@ footer {
 }
 
 .confidence-pill.is-review {
+  border-color: #f0d492;
   background: #fff4db;
   color: #8a5600;
 }
 
 .confidence-pill.is-missing {
+  border-color: #d8e0de;
   background: #eef2f1;
   color: #55666d;
 }
@@ -971,9 +974,10 @@ footer {
 }
 
 .summary-cards div {
-  padding: 14px;
-  border-radius: 16px;
-  background: #f7f4ed;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfaf7;
 }
 
 .summary-cards strong {
@@ -989,21 +993,44 @@ footer {
   line-height: 1.35;
 }
 
-.validation-card {
-  background: #eef8ee !important;
+.summary-cards .validation-card {
+  border-color: #b9e6d0;
+  background: #edf8f1;
+}
+
+.validation-card strong {
+  color: var(--mint-dark);
+}
+
+.preview-panel:has(.confidence-pill.is-review) .validation-card {
+  border-color: #f0d492;
+  background: #fff8e6;
+}
+
+.preview-panel:has(.confidence-pill.is-review) .validation-card strong {
+  color: #8a5600;
+}
+
+.preview-panel:has(.confidence-pill.is-missing) .validation-card {
+  border-color: var(--line);
+  background: #f4f6f4;
+}
+
+.preview-panel:has(.confidence-pill.is-missing) .validation-card strong {
+  color: var(--muted);
 }
 
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #fff;
 }
 
 .review-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 14px;
   align-items: start;
 }
 
@@ -1013,7 +1040,7 @@ footer {
 
 .source-preview {
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #fff;
   overflow: hidden;
   min-width: 0;
@@ -1025,7 +1052,7 @@ footer {
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
-  border-bottom: 1px solid #ece7dc;
+  border-bottom: 1px solid var(--line);
   background: #fbfaf7;
 }
 
@@ -1508,7 +1535,7 @@ footer {
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
-  border-bottom: 1px solid #ece7dc;
+  border-bottom: 1px solid var(--line);
   background: #fbfaf7;
 }
 
@@ -1592,14 +1619,14 @@ table {
 
 th,
 td {
-  padding: 13px 14px;
-  border-bottom: 1px solid #ece7dc;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
   text-align: left;
   font-size: 14px;
 }
 
 th {
-  background: #f6f2e9;
+  background: #f4f2eb;
   color: #55666d;
   font-size: 12px;
   letter-spacing: 0.06em;
@@ -1653,24 +1680,16 @@ tbody tr:last-child td {
 .workflow-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 14px;
 }
 
 .workflow-grid article {
-  padding: 24px;
-  transition:
-    transform 180ms ease,
-    box-shadow 180ms ease;
-}
-
-.workflow-grid article:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 26px 58px rgba(42, 53, 42, 0.12);
+  padding: 22px;
 }
 
 .workflow-grid h3 {
-  margin: 26px 0 10px;
-  font-size: 24px;
+  margin: 22px 0 10px;
+  font-size: clamp(19px, 2vw, 22px);
 }
 
 .workflow-grid p,
@@ -1688,8 +1707,8 @@ tbody tr:last-child td {
   margin-top: 18px;
   min-height: 300px;
   padding: 28px;
-  border: 1px solid rgba(16, 32, 41, 0.08);
-  border-radius: 24px;
+  border: 1px solid #24433e;
+  border-radius: 18px;
   background:
     linear-gradient(135deg, rgba(16, 32, 41, 0.96), rgba(17, 66, 58, 0.96)),
     #102029;
@@ -1710,10 +1729,11 @@ tbody tr:last-child td {
   position: relative;
   z-index: 1;
   min-height: 218px;
-  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
   color: #102029;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
@@ -1819,11 +1839,11 @@ tbody tr:last-child td {
 .trust-section {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 14px;
 }
 
 .trust-section div {
-  padding: 24px;
+  padding: 22px;
 }
 
 .trust-section svg {
@@ -1832,6 +1852,7 @@ tbody tr:last-child td {
 
 .trust-section h3 {
   margin: 18px 0 8px;
+  font-size: clamp(18px, 2vw, 21px);
 }
 
 .agent-panel {
@@ -1839,13 +1860,12 @@ tbody tr:last-child td {
   grid-template-columns: 0.38fr minmax(0, 0.62fr);
   gap: 16px;
   align-items: stretch;
-  border: 1px solid rgba(16, 32, 41, 0.08);
-  border-radius: 24px;
+  border: 1px solid #24433e;
+  border-radius: 18px;
   background:
     radial-gradient(circle at 10% 0%, rgba(18, 185, 129, 0.18), transparent 34%),
     linear-gradient(135deg, rgba(16, 32, 41, 0.97), rgba(19, 62, 57, 0.97));
   color: #e9fff7;
-  box-shadow: 0 26px 70px rgba(16, 32, 41, 0.14);
   overflow: hidden;
 }
 
@@ -1893,7 +1913,7 @@ tbody tr:last-child td {
   grid-template-rows: minmax(260px, 1fr) auto;
   min-width: 0;
   margin: 12px;
-  border-radius: 20px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
   color: var(--ink);
   overflow: hidden;
@@ -1913,7 +1933,7 @@ tbody tr:last-child td {
   padding: 12px 14px;
   border-radius: 16px;
   background: #f4f8f3;
-  box-shadow: 0 10px 24px rgba(16, 32, 41, 0.06);
+  border: 1px solid #e4ebe3;
 }
 
 .agent-message.user {
@@ -1983,7 +2003,9 @@ footer {
   display: flex;
   justify-content: space-between;
   gap: 20px;
-  padding: 48px 0 36px;
+  margin-top: clamp(52px, 7vw, 88px);
+  padding: 28px 0 36px;
+  border-top: 1px solid var(--line);
 }
 
 footer strong {
@@ -2022,7 +2044,7 @@ footer strong {
 .faq-section {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 96px 0 0;
+  padding: clamp(52px, 7vw, 88px) 0 0;
 }
 
 .faq-grid {
@@ -2032,10 +2054,9 @@ footer strong {
 }
 
 .faq-grid details {
-  border: 1px solid rgba(16, 32, 41, 0.08);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.74);
-  box-shadow: 0 16px 38px rgba(42, 53, 42, 0.07);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
   overflow: hidden;
 }
 
