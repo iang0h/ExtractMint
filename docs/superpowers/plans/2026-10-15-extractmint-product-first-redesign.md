@@ -43,7 +43,7 @@ The linked ThreeUI Community source exports `TopoField` from `src/shaders/neufor
 **Interfaces:**
 - Produces: `TopoFieldBackdrop()`, a decorative component with no props. It paints only a low-contrast field behind page content; it does not accept or inspect files or conversion state.
 
-- [ ] **Step 1: Add the upstream MIT attribution**
+- [x] **Step 1: Add the upstream MIT attribution**
 
 Create `THIRD_PARTY_NOTICES.md` with this complete notice:
 
@@ -76,7 +76,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-- [ ] **Step 2: Create the fallback background stylesheet**
+- [x] **Step 2: Create the fallback background stylesheet**
 
 Create `src/components/TopoFieldBackdrop.css` with a paper-colored static grid and contour-like radial detail. Keep the canvas transparent so this layer remains visible underneath it:
 
@@ -103,7 +103,7 @@ Create `src/components/TopoFieldBackdrop.css` with a paper-colored static grid a
 }
 ```
 
-- [ ] **Step 3: Create the WebGL adapter**
+- [x] **Step 3: Create the WebGL adapter**
 
 Create `src/components/TopoFieldBackdrop.tsx` and import `useEffect` and `useRef` from React plus the stylesheet above. Implement a WebGL 1 fullscreen quad using only local shader strings: use the upstream TopoField simplex-noise function, animated noise offset, ten contour bands, and 48-pixel grid spacing. Set the fragment output to a translucent ink/mint line color over transparent pixels so the CSS layer remains the fallback. Use `getContext('webgl', { alpha: true, antialias: false, depth: false, premultipliedAlpha: false })`; if context creation, shader compilation, or program linking fails, leave the canvas transparent and let the CSS background show through.
 
@@ -126,7 +126,7 @@ return (
 
 For shader math, adapt the source at `https://github.com/MengTo/threeui/blob/main/src/shaders/neuform-isolated/sources/topo-field.html` around its `snoise`, `gridLines`, `noiseScale`, and `numBands` calculations. Change only the final color/alpha composition to match ExtractMint’s paper and mint palette.
 
-- [ ] **Step 4: Check the component contract and notice**
+- [x] **Step 4: Check the component contract and notice**
 
 Confirm the component exports `TopoFieldBackdrop`, has no external imports beyond React and its local stylesheet, and the MIT attribution appears in `THIRD_PARTY_NOTICES.md`. Confirm no dependency was added to either package manifest.
 
@@ -139,17 +139,17 @@ Confirm the component exports `TopoFieldBackdrop`, has no external imports beyon
 - Consumes: `TopoFieldBackdrop()` from Task 1.
 - Produces: the existing `#converter` destination, upload input, OCR state controls, privacy/support disclosures, progress, exports, and summary remain in the same React application and retain their existing handlers.
 
-- [ ] **Step 1: Add the decorative layer inside the hero section**
+- [x] **Step 1: Add the decorative layer inside the hero section**
 
-Import `TopoFieldBackdrop` next to the existing PDF components. As the first child of `<section id="top" className="hero-section">`, add:
+Keep a static CSS field as the first child of `<section id="top" className="hero-section">` until the optional local module loads. The initial stylesheet is imported with the app styles; the WebGL component is loaded after the first render through the idle import described in Task 6. Ensure only one `.topo-field-backdrop` wrapper is rendered at a time.
 
 ```tsx
-<TopoFieldBackdrop />
+<div className="topo-field-backdrop" aria-hidden="true" />
 ```
 
-Keep it before `hero-copy` and `product-stage`. Its CSS z-index is behind the content, and its wrapper is `aria-hidden`.
+Keep it before `hero-copy` and `product-stage`. Its CSS z-index is behind the content, and its wrapper is `aria-hidden`. Once the dynamic import resolves, render the component in place of this static wrapper.
 
-- [ ] **Step 2: Replace the long headline and lede**
+- [x] **Step 2: Replace the long headline and lede**
 
 Keep the existing `motion.h1` and its animation props. Replace its two child strings with the following exact copy:
 
@@ -172,7 +172,7 @@ Keep the existing `motion.h1` and its animation props. Replace its two child str
 
 Replace the hero lede with: `Upload a statement or receipt. ExtractMint structures transactions, checks the balance trail, and exports useful files in your browser.`
 
-- [ ] **Step 3: Keep the converter as the right-hand hero surface**
+- [x] **Step 3: Keep the converter as the right-hand hero surface**
 
 Keep the current `id="converter"` on `.converter-card`, the same `inputRef`, the `accept` value, `handleDrop`, `processFiles`, OCR handlers, cache handlers, privacy/support action handlers, progress values, download functions, and balance calculations. Change only visible copy as follows:
   - Converter toolbar: `Live extraction desk` → `Document workbench`.
@@ -182,11 +182,11 @@ Keep the current `id="converter"` on `.converter-card`, the same `inputRef`, the
 
 Keep the upload surface before processing settings in DOM order. Keep the four settings labels and both privacy/support `details` in the card; do not change their state or move them outside `#converter`.
 
-- [ ] **Step 4: Remove only the old decorative stage elements**
+- [x] **Step 4: Remove only the old decorative stage elements**
 
 Remove the `stage-frame`, `stage-glow`, `scan-path`, `data-chip`, and `document-stack` JSX and their motion wrappers from `product-stage`. Retain `product-stage` and its `converter-card`. Do not remove the `motion.div` around the converter if it contains the converter itself; remove only its continuous float animation so the large interactive card stays still while users interact with it.
 
-- [ ] **Step 5: Preserve the page’s navigation anchors**
+- [x] **Step 5: Preserve the page’s navigation anchors**
 
 Keep the existing `href="#top"`, `href="#converter"`, `href="#formats"`, `href="#agent"`, `href="#video"`, and `href="#faq"` targets and keep the pricing link. Do not rename the section IDs.
 
@@ -200,7 +200,7 @@ Keep the existing `href="#top"`, `href="#converter"`, `href="#formats"`, `href="
 - Consumes: the hero and converter DOM from Task 2, existing status classes, and the existing palette tokens.
 - Produces: a compact responsive hero/workbench composition and visible keyboard focus.
 
-- [ ] **Step 1: Simplify the global page background and keyboard focus**
+- [x] **Step 1: Simplify the global page background and keyboard focus**
 
 In `src/index.css`, replace the multi-hue body background with the following:
 
@@ -218,11 +218,11 @@ body {
 
 Keep the existing `:root` tokens and base element rules unless a later selector overrides them. Do not remove native keyboard outlines from controls.
 
-- [ ] **Step 2: Refine the tokens and section width**
+- [x] **Step 2: Refine the tokens and section width**
 
 In `src/App.css`, retain the current ink, muted, paper, panel, line, mint, amber, rose, and steel tokens. Reduce shadow strength to `--shadow: 0 20px 54px rgba(24, 39, 39, 0.10)` and `--tight-shadow: 0 10px 28px rgba(28, 43, 48, 0.08)`. Keep the shared page width at `min(1180px, calc(100% - 32px))` on desktop, and use the existing 24px total side gutter (12px per side) at mobile.
 
-- [ ] **Step 3: Restyle the header and hero**
+- [x] **Step 3: Restyle the header and hero**
 
 Update the existing selectors instead of adding duplicate rules:
   - Header: flatter white surface, 16px radius, thin border, small shadow; keep sticky placement, logo, navigation targets, and CTA.
@@ -237,7 +237,7 @@ Update the existing selectors instead of adding duplicate rules:
   - Processing settings: arrange the existing toggles/selects in a compact two-column grid on desktop; let each optional cache detail and privacy/support disclosure span the full width.
   - Progress, exports, and sanity check: use separate labeled surfaces in their current DOM order. Make unavailable exports visibly disabled; use muted neutral status, amber for review, and mint only for a match/success.
 
-- [ ] **Step 4: Remove obsolete stage decoration styles**
+- [x] **Step 4: Remove obsolete stage decoration styles**
 
 Delete the now-unused `.stage-frame`, `.stage-glow`, `.scan-path`, `.data-chip`, `.document-stack`, and `.paper` rules and their mobile overrides. Keep no CSS animations for decorative elements that Task 2 removed. Retain shared motion used by the product where it communicates progress.
 
@@ -250,11 +250,11 @@ Delete the now-unused `.stage-frame`, `.stage-glow`, `.scan-path`, `.data-chip`,
 - Consumes: existing summary, batch queue, review, PDF preview, workflow, trust, agent, FAQ, and footer markup.
 - Produces: a consistent visual system for the rest of the site without changing transaction review behavior.
 
-- [ ] **Step 1: Restyle conversion summary and section spacing**
+- [x] **Step 1: Restyle conversion summary and section spacing**
 
 Set `.summary-band` to a flat bordered three-column band with no large shadow. Use a consistent section top spacing of `clamp(52px, 7vw, 88px)` for the results, workflow, trust, and agent sections. Keep the existing heading text, metric values, and IDs.
 
-- [ ] **Step 2: Restyle the queue and review panels**
+- [x] **Step 2: Restyle the queue and review panels**
 
 Update `.workspace-grid`, `.file-list`, `.preview-panel`, `.mini-stat`, `.summary-cards`, `.validation-card`, `.review-split`, `.table-controls`, `.table-wrap`, and `.source-preview`:
   - Use white or paper surfaces with thin borders and consistent 14–18px radii.
@@ -263,16 +263,16 @@ Update `.workspace-grid`, `.file-list`, `.preview-panel`, `.mini-stat`, `.summar
   - Keep the table’s `min-width: 980px` and horizontal scroll container so editing remains usable on narrow screens.
   - Keep the source PDF preview optional and below the table on tablet/mobile as the existing breakpoint already does.
 
-- [ ] **Step 3: Restyle lower-page sections**
+- [x] **Step 3: Restyle lower-page sections**
 
 Apply the same width, border, radius, and typography scale to workflow cards, trust content, the agent panel, FAQ, and footer. Keep all current copy, form fields, links, and behavior. Avoid adding new feature cards or changing product claims.
 
-### Task 5: Check responsive layout, reduced motion, and the existing build
+### Task 5: Check responsive layout, motion support, and the existing build
 
 **Files:**
 - No new test files. Adjust `src/App.css` or `src/components/TopoFieldBackdrop.css` only if the inspection shows a defect.
 
-- [ ] **Step 1: Verify the existing production build**
+- [x] **Step 1: Verify the existing production build**
 
 Run `npm ci` first if the repository has no `node_modules` directory. This restores the exact lockfile dependency set; no package changes are planned.
 
@@ -284,11 +284,11 @@ npm run build
 
 Expected: TypeScript compilation and the Vite production build complete successfully. Do not add or run the project’s test scripts for this visual change.
 
-- [ ] **Step 2: Run the local preview**
+- [x] **Step 2: Run the local preview**
 
 Run `npm run dev -- --host 127.0.0.1` from the repository root and open the printed local URL in the browser.
 
-- [ ] **Step 3: Inspect desktop and mobile**
+- [x] **Step 3: Inspect desktop and mobile**
 
 Inspect the home page at desktop (1440px), tablet (768px), and mobile (390px) widths. Confirm:
   - The headline, local-processing statement, and upload action are the first-screen hierarchy.
@@ -296,11 +296,11 @@ Inspect the home page at desktop (1440px), tablet (768px), and mobile (390px) wi
   - The header links still land at their original sections.
   - The page sections, batch queue, summary cards, table, and PDF preview have no clipping or overlapping controls.
 
-- [ ] **Step 4: Inspect behavior and accessibility without changing data logic**
+- [x] **Step 4: Inspect behavior and accessibility without changing data logic**
 
-Use the in-app sample flow to confirm result review, filtering/editing, balance checks, and at least one export remain operable. For file selection/drop, use a disposable synthetic CSV created under `work/` rather than a personal financial file. Keyboard through the header, upload label/input, settings, disclosures, review controls, and export buttons; confirm visible focus. Enable `prefers-reduced-motion: reduce` and disable WebGL in browser settings/devtools; confirm the static fallback remains visible and all controls still work.
+Use the in-app sample flow to confirm result review, filtering/editing, balance checks, and at least one export remain operable. For file selection/drop, use a disposable synthetic CSV created under `work/` rather than a personal financial file. Keyboard through the header, upload label/input, settings, disclosures, review controls, and export buttons; confirm visible focus. The in-app browser did not expose `prefers-reduced-motion` emulation or a WebGL-disable control, so those runtime checks remain unverified; source inspection confirms the static CSS field remains available if WebGL is unavailable and the component disables animation for reduced motion.
 
-- [ ] **Step 5: Review the diff and commit the completed redesign**
+- [x] **Step 5: Review the diff and commit the completed redesign**
 
 Run:
 
@@ -320,12 +320,14 @@ Do not deploy, push, or create a pull request as part of this plan.
 
 ## Acceptance Checklist
 
-- [ ] The first screen communicates statement conversion, local processing, and the upload action clearly.
-- [ ] Existing file selection/drop, processing settings, progress, exports, balance checks, table editing/filtering, batch review, and PDF preview remain present and functional.
-- [ ] The full site uses a restrained and consistent visual system at desktop, tablet, and mobile widths.
-- [ ] The TopoField shader is decorative, locally implemented from the ThreeUI Community source, and has a static CSS fallback.
+- [x] The first screen communicates statement conversion, local processing, and the upload action clearly.
+- [x] Existing file selection/drop, processing settings, progress, exports, balance checks, table editing/filtering, batch review, and PDF preview remain present and functional.
+- [x] The full site uses a restrained and consistent visual system at desktop, tablet, and mobile widths.
+- [x] The TopoField shader is decorative, locally implemented from the ThreeUI Community source, and has a static CSS fallback.
 - [ ] Reduced-motion users and browsers without WebGL can use the complete conversion workflow.
-- [ ] No conversion, privacy, or export behavior changed; no production deployment was made.
+- [x] No conversion, privacy, or export behavior changed; no production deployment was made.
+
+The reduced-motion and WebGL-disabled runtime check remains unverified because the in-app browser exposed neither emulation control. Source inspection confirms the static CSS field is available without WebGL and the shader stops animating when reduced motion is enabled.
 
 ### Task 6: Defer loading the optional shader module
 
