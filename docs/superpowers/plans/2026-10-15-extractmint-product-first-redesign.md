@@ -316,7 +316,7 @@ git add src/App.tsx src/App.css src/index.css src/components/TopoFieldBackdrop.t
 git commit -m "feat: redesign ExtractMint workbench"
 ```
 
-Do not deploy, push, or create a pull request as part of this plan.
+The original implementation plan excluded deployment, push, and pull request creation. Production deployment was completed after the user's separate request; see the deployment record below.
 
 ## Acceptance Checklist
 
@@ -325,7 +325,7 @@ Do not deploy, push, or create a pull request as part of this plan.
 - [x] The full site uses a restrained and consistent visual system at desktop, tablet, and mobile widths.
 - [x] The TopoField shader is decorative, locally implemented from the ThreeUI Community source, and has a static CSS fallback.
 - [ ] Reduced-motion users and browsers without WebGL can use the complete conversion workflow.
-- [x] No conversion, privacy, or export behavior changed; no production deployment was made.
+- [x] No conversion, privacy, or export behavior changed; the production deployment completed as a follow-up.
 
 The reduced-motion and WebGL-disabled runtime check remains unverified because the in-app browser exposed neither emulation control. Source inspection confirms the static CSS field is available without WebGL and the shader stops animating when reduced motion is enabled.
 
@@ -343,3 +343,10 @@ The reduced-motion and WebGL-disabled runtime check remains unverified because t
 - [x] Keep the CSS stylesheet available in the initial app styles so the static field remains visible while the module loads or if the import fails. Mount the WebGL component only after the dynamic import succeeds.
 - [x] Cancel a pending idle callback or fallback timer on unmount, and prevent a completed import from setting state after unmount. Preserve the converter's first render and all conversion behavior.
 - [x] Run the production build and inspect that Vite emits the shader module as a separate on-demand chunk. Record that output in the Task 6 report; do not add or run test scripts.
+
+### Production deployment follow-up — 2026-10-16
+
+- Vercel project: `extractmint` (`prj_zRj0UaQ2b1DZzJdfJ4xPxLN3ummp`), target: production.
+- Deployment: `dpl_5Q4RZbNHQ8rRKMB6EsJmpbKenqt1`, status `READY`; aliases include `https://extractmint.iangoh.com`.
+- Source: clean local commit `b4bbb87` uploaded directly to Vercel. The Git branch was not pushed.
+- Post-deploy check: custom domain returned HTTP 200 and served the new hero/workbench strings plus the TopoField fallback stylesheet. Vercel reported no runtime errors in the last hour. The drain inventory endpoint returned 404, so drain configuration could not be confirmed.
