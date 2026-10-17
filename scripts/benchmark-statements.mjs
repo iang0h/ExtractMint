@@ -3,9 +3,9 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { jsPDF } from 'jspdf'
 import { createServer } from 'vite'
 import { corpusMetadata, statementCases } from '../benchmarks/statements/fixtures.mjs'
+import { createStatementPdf } from '../benchmarks/statements/pdf-generator.mjs'
 
 // The app's PDF.js browser path uses DOM APIs. PDF.js ships this optional canvas
 // runtime for Node so the same converter can read generated PDFs in the CLI.
@@ -50,54 +50,6 @@ function parseArguments(args) {
   }
 
   return { jsonPath: jsonPath ? resolve(jsonPath) : undefined }
-}
-
-function wrappedLines(text, maxLength = 94) {
-  const words = text.split(/\s+/)
-  const lines = []
-  let line = ''
-
-  for (const word of words) {
-    const next = line ? `${line} ${word}` : word
-    if (next.length > maxLength && line) {
-      lines.push(line)
-      line = word
-    } else {
-      line = next
-    }
-  }
-  if (line) lines.push(line)
-  return lines
-}
-
-function pdfBytesFor(statementCase) {
-  const pdf = new jsPDF({ unit: 'pt', format: 'letter', compress: true })
-  const left = 22
-  let y = 38
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8)
-
-  // Enough non-whitespace text keeps the real converter on its embedded-text path.
-  for (const line of wrappedLines(statementCase.introText)) {
-    pdf.text(line, left, y)
-    y += 10
-  }
-
-  y += 18
-  pdf.setFontSize(10)
-  pdf.text('SYNTHETIC STATEMENT — LOCAL BENCHMARK', left, y)
-  y += 18
-
-  const columns = [20, 72, 250, 320, 395, 470, 510]
-  pdf.setFontSize(8)
-  statementCase.tableRows.forEach((row) => {
-    row.cells.forEach((cell, columnIndex) => {
-      if (cell) pdf.text(String(cell), columns[columnIndex], y)
-    })
-    y += 15
-  })
-
-  return pdf.output('arraybuffer')
 }
 
 function normalizeDate(value) {
@@ -428,7 +380,7 @@ async function runBenchmark() {
 
     for (const statementCase of statementCases) {
       const fileName = `${statementCase.id}.pdf`
-      const file = new File([pdfBytesFor(statementCase)], fileName, {
+      const file = new File([createStatementPdf(statementCase)], fileName, {
         type: 'application/pdf',
         lastModified: 1,
       })
