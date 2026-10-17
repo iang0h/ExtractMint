@@ -5,6 +5,7 @@ export type ExtractMintAnalyticsEvent =
   | 'conversion_completed'
   | 'export_started'
   | 'sample_conversion_started'
+  | 'sample_conversion_cancelled'
   | 'sample_conversion_completed'
   | 'sample_conversion_failed'
 

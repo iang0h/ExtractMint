@@ -8,3 +8,34 @@ export async function fetchSyntheticSample(fetcher = fetch) {
   }
   return response.blob()
 }
+
+export function createSampleRunGuard(trackEvent) {
+  let activeSample = null
+
+  return {
+    startSample() {
+      const run = { superseded: false, settled: false }
+      activeSample = run
+      trackEvent('sample_conversion_started')
+      return run
+    },
+    startUpload() {
+      if (activeSample && !activeSample.settled) {
+        activeSample.superseded = true
+        activeSample.settled = true
+        trackEvent('sample_conversion_cancelled')
+      }
+      activeSample = null
+    },
+    isCurrent(run) {
+      return activeSample === run && !run.superseded
+    },
+    finish(run, event) {
+      if (activeSample !== run || run.settled) return false
+      run.settled = true
+      activeSample = null
+      trackEvent(event)
+      return true
+    },
+  }
+}

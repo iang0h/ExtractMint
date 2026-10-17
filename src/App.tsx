@@ -35,7 +35,7 @@ import {
   setPersistentPdfPageText,
 } from './lib/pdfTextIndexCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
-import { fetchSyntheticSample, SYNTHETIC_SAMPLE_FILENAME, SYNTHETIC_SAMPLE_URL } from './lib/syntheticSample.mjs'
+import { createSampleRunGuard, fetchSyntheticSample, SYNTHETIC_SAMPLE_FILENAME, SYNTHETIC_SAMPLE_URL, type SampleRun } from './lib/syntheticSample.mjs'
 
 type ParsedPage = { pageNumber: number; text: string }
 type AgentMessage = {
@@ -444,6 +444,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [isSampleLoading, setIsSampleLoading] = useState(false)
   const sampleLoadingRef = useRef(false)
+  const sampleRunGuardRef = useRef(createSampleRunGuard(trackExtractMintEvent))
   const [forceOcr, setForceOcr] = useState(() => storedValue('extractmint.forceOcr') === '1')
   const [ocrLanguage, setOcrLanguage] = useState(() => storedValue('extractmint.ocrLanguage') || 'eng')
   const [persistOcrCache, setPersistOcrCache] = useState(() => storedValue('extractmint.persistOcrCache') !== '0')
@@ -1020,10 +1021,21 @@ function App() {
     }
   }, [results])
 
-  const processFiles = async (fileList: FileList | File[], source: 'upload' | 'sample' = 'upload') => {
+  const processFiles = async (fileList: FileList | File[], source: 'upload' | 'sample' = 'upload', sampleRun?: SampleRun) => {
     const files = Array.from(fileList)
     if (files.length === 0) return
-    if (source === 'upload') files.forEach(() => trackExtractMintEvent('upload_started'))
+    const sampleIsCurrent = () => source !== 'sample' || (sampleRun !== undefined && sampleRunGuardRef.current.isCurrent(sampleRun))
+    if (source === 'upload') {
+      sampleRunGuardRef.current.startUpload()
+      files.forEach(() => trackExtractMintEvent('upload_started'))
+      setProgress({
+        fileName: files.length === 1 ? files[0].name : `${files.length} files`,
+        stage: 'reading',
+        percent: 0,
+        detail: 'Preparing files',
+      })
+    }
+    if (!sampleIsCurrent()) return
 
     const signatureUrls: Record<string, string> = {}
     const reviewJsonFiles = files.filter((file) =>
@@ -1048,6 +1060,7 @@ function App() {
     setActiveIndex(0)
     try {
       const converter = await loadConverter()
+      if (!sampleIsCurrent()) return
       const imported: ConversionResult[] = []
       for (let index = 0; index < reviewPackZipFiles.length; index += 1) {
         const file = reviewPackZipFiles[index]
@@ -1113,6 +1126,7 @@ function App() {
 
       conversionSawOcrRef.current = false
       const onConversionProgress = (event: ProgressEvent) => {
+        if (!sampleIsCurrent()) return
         if (event.stage === 'ocr') conversionSawOcrRef.current = true
         setProgress(event)
       }
@@ -1125,6 +1139,7 @@ function App() {
               ocrLanguage,
               persistOcrCache,
             })
+      if (!sampleIsCurrent()) return
 
       if (converted.length > 0) {
         if (source === 'upload') converted.forEach(() => trackExtractMintEvent('conversion_completed'))
@@ -1187,15 +1202,17 @@ function App() {
         percent: 100,
         detail: 'Conversion package is ready',
       })
-      if (source === 'sample') trackExtractMintEvent('sample_conversion_completed')
+      if (source === 'sample' && sampleRun) sampleRunGuardRef.current.finish(sampleRun, 'sample_conversion_completed')
     } catch (error) {
-      if (source === 'sample') trackExtractMintEvent('sample_conversion_failed')
-      setProgress({
-        fileName: files.length === 1 ? files[0].name : `${files.length} files`,
-        stage: 'error',
-        percent: 100,
-        detail: error instanceof Error ? error.message : 'Conversion failed',
-      })
+      if (sampleIsCurrent()) {
+        if (source === 'sample' && sampleRun) sampleRunGuardRef.current.finish(sampleRun, 'sample_conversion_failed')
+        setProgress({
+          fileName: files.length === 1 ? files[0].name : `${files.length} files`,
+          stage: 'error',
+          percent: 100,
+          detail: error instanceof Error ? error.message : 'Conversion failed',
+        })
+      }
       Object.values(signatureUrls).forEach((url) => {
         try {
           URL.revokeObjectURL(url)
@@ -1204,7 +1221,16 @@ function App() {
         }
       })
     } finally {
-      setIsProcessing(false)
+      if (source === 'upload' || !sampleRun?.superseded) setIsProcessing(false)
+      if (source === 'sample' && sampleRun?.superseded) {
+        Object.values(signatureUrls).forEach((url) => {
+          try {
+            URL.revokeObjectURL(url)
+          } catch {
+            // ignore
+          }
+        })
+      }
     }
   }
 
@@ -1212,7 +1238,7 @@ function App() {
     if (sampleLoadingRef.current || isProcessing) return
     sampleLoadingRef.current = true
     setIsSampleLoading(true)
-    trackExtractMintEvent('sample_conversion_started')
+    const sampleRun = sampleRunGuardRef.current.startSample()
     setProgress({
       fileName: SYNTHETIC_SAMPLE_FILENAME,
       stage: 'reading',
@@ -1221,16 +1247,19 @@ function App() {
     })
     try {
       const blob = await fetchSyntheticSample()
+      if (!sampleRunGuardRef.current.isCurrent(sampleRun)) return
       const sampleFile = new File([blob], SYNTHETIC_SAMPLE_FILENAME, { type: 'application/pdf' })
-      await processFiles([sampleFile], 'sample')
+      await processFiles([sampleFile], 'sample', sampleRun)
     } catch (error) {
-      trackExtractMintEvent('sample_conversion_failed')
-      setProgress({
-        fileName: SYNTHETIC_SAMPLE_FILENAME,
-        stage: 'error',
-        percent: 100,
-        detail: error instanceof Error ? error.message : 'Could not load the synthetic example',
-      })
+      if (sampleRunGuardRef.current.isCurrent(sampleRun)) {
+        sampleRunGuardRef.current.finish(sampleRun, 'sample_conversion_failed')
+        setProgress({
+          fileName: SYNTHETIC_SAMPLE_FILENAME,
+          stage: 'error',
+          percent: 100,
+          detail: error instanceof Error ? error.message : 'Could not load the synthetic example',
+        })
+      }
     } finally {
       sampleLoadingRef.current = false
       setIsSampleLoading(false)

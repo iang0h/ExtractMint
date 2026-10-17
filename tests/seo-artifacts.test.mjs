@@ -108,7 +108,7 @@ assert.match(app, /runs in your browser/i)
 assert.match(app, /href=\{SYNTHETIC_SAMPLE_URL\}/)
 assert.match(app, /download=\{SYNTHETIC_SAMPLE_FILENAME\}/)
 
-for (const event of ['sample_conversion_started', 'sample_conversion_completed', 'sample_conversion_failed']) {
+for (const event of ['sample_conversion_started', 'sample_conversion_completed', 'sample_conversion_failed', 'sample_conversion_cancelled']) {
   assert.match(analytics, new RegExp(event))
 }
 
@@ -122,6 +122,7 @@ for (const privacyCopy of [privacyHtml, privacyMarkdown]) {
   assert.match(privacyCopy, /sample_conversion_started/)
   assert.match(privacyCopy, /sample_conversion_completed/)
   assert.match(privacyCopy, /sample_conversion_failed/)
+  assert.match(privacyCopy, /sample_conversion_cancelled/)
   assert.match(privacyCopy, /demo-only events carry no properties/i)
   assert.match(privacyCopy, /no filenames or statement contents/i)
 }
