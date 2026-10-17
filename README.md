@@ -26,10 +26,43 @@ Elegant static SaaS prototype for converting bank statements, receipts, scans, P
 npm install
 npm run dev
 npm run build
+npm run benchmark:statements
 npm run test:agent
 npm run preview
 npm run deploy:vercel
 ```
+
+## Statement extraction benchmark
+
+Run the offline statement benchmark with:
+
+```bash
+npm run benchmark:statements
+```
+
+It generates digital PDFs in memory from the invented fixtures in
+`benchmarks/statements/fixtures.mjs` and sends them through the same
+`convertFiles` path used by the app. No statement files are uploaded, and the
+benchmark does not call an external service. To save a machine-readable report:
+
+```bash
+npm run benchmark:statements -- --json /tmp/extractmint-statement-report.json
+```
+
+The terminal and JSON reports identify this as synthetic data. Each fixture
+reports expected and extracted transaction counts, one-to-one matched rows,
+precision (matched rows divided by extracted rows), recall (matched rows
+divided by expected rows), exact field rates, and the converter's balance
+validation status. Field rates compare date, description, reference, amount,
+withdrawal, deposit, tax, and balance with the labeled expected rows. The
+overall rates pool counts across the included fixtures. A row, expected-field,
+or balance mismatch makes the command exit with a non-zero status.
+
+These results describe only the included synthetic text-PDF fixtures and the
+specific layouts they exercise. They do not establish real-bank coverage,
+scanned-PDF/OCR performance, or production accuracy, and should not be compared
+to another converter as a general accuracy claim. Real-world measurements need
+an authorized, consented, redacted corpus with labeled expected transactions.
 
 ## Ask ExtractMint agent
 
