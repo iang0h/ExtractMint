@@ -17,7 +17,7 @@ Let visitors run invented statement data through the real browser converter, exp
 - Generate one digital PDF from the existing English fixture in `benchmarks/statements/fixtures.mjs` using the same PDF-generation helper as the offline benchmark.
 - Store the reproducible asset at `public/samples/synthetic-bank-statement.pdf`. It contains only invented names, references, and amounts and visibly identifies itself as synthetic.
 - Add a “Try the synthetic sample” action next to the existing upload control. Fetch that public asset, wrap it as a `File`, then pass it through the same `processFiles` and `convertFiles` path used for user files.
-- Do not let the sample count as a user upload or a real conversion. Track `sample_conversion_started`, `sample_conversion_completed`, and `sample_conversion_failed` separately, with event names only.
+- Do not let the sample count as a user upload or a real conversion. Track `sample_conversion_started`, `sample_conversion_completed`, `sample_conversion_failed`, and `sample_conversion_cancelled` separately, with event names only. If a real upload supersedes a pending sample, close the sample attempt with the cancellation event.
 - Keep the sample workflow browser-side. On an asset fetch or conversion error, show the existing progress error state and keep user-upload behavior unchanged.
 - Offer a download link to the synthetic PDF so visitors can inspect the input themselves.
 
@@ -49,7 +49,7 @@ Let visitors run invented statement data through the real browser converter, exp
 
 - The sample PDF can be regenerated offline from the existing fixture and is labeled synthetic.
 - The app sample action runs that PDF through the actual browser converter and presents the parsed output.
-- Sample analytics are separately named and include no properties; ordinary upload, conversion, and export events remain unchanged.
+- Sample analytics are separately named and include no properties; a superseded sample has a cancellation event, and ordinary upload, conversion, and export events remain unchanged.
 - The primary guide accurately explains sample math, review steps, privacy, outputs, and benchmark limits.
 - Bank-specific unvalidated routes redirect to the guide's limitations section and are absent from the sitemap and `llms.txt`.
 - The deployed canonical metadata no longer advertises a non-existent site search.

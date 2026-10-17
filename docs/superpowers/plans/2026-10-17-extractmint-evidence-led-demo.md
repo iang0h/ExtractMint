@@ -60,7 +60,7 @@
 
 - [ ] Add `tests/synthetic-sample-loader.test.mjs` for `fetchSyntheticSample`, covering a successful `application/pdf` response and a 404 response. Run it and confirm the tests fail because the loader does not yet exist.
 - [ ] Create `src/lib/syntheticSample.mjs` with the fixed sample URL and filename plus `fetchSyntheticSample(fetcher = fetch)`, which rejects non-OK responses and returns the PDF `Blob`; add `src/lib/syntheticSample.d.mts` declarations for the TypeScript app import.
-- [ ] Extend the analytics event union with `sample_conversion_started`, `sample_conversion_completed`, and `sample_conversion_failed`; update both privacy-page versions to list the three demo-only events and state that they carry no properties.
+- [ ] Extend the analytics event union with `sample_conversion_started`, `sample_conversion_completed`, `sample_conversion_failed`, and `sample_conversion_cancelled`; emit cancellation when a real upload supersedes an in-flight sample. Update both privacy-page versions to list the four demo-only events and state that they carry no properties.
 - [ ] Update `processFiles` so normal input keeps `upload_started` and `conversion_completed`; sample mode emits only the sample event names and uses `forceOcr: false` for this text-PDF fixture.
 - [ ] Add `loadSyntheticSample` with an in-flight guard, `fetch('/samples/synthetic-bank-statement.pdf')`, an HTTP status check, conversion through `processFiles([sampleFile], 'sample')`, and a visible error in the existing progress state if fetch fails.
 - [ ] Add an accessible button and download link near the upload control. Label the action as a synthetic example, explain that it uses invented figures and runs in the browser, and disable the button during conversion.
