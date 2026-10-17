@@ -34,7 +34,7 @@
 - `createStatementPdf(statementCase)` returns a `Uint8Array` containing a generated digital PDF.
 - `npm run sample:statement` writes the English synthetic fixture to `public/samples/synthetic-bank-statement.pdf`.
 
-- [ ] Write `tests/synthetic-sample.test.mjs` first. Assert the sample generator writes a file beginning with `%PDF-`, and that the generated PDF contains the synthetic title text when decoded as Latin-1. Run `node --test tests/synthetic-sample.test.mjs` and confirm it fails because the generator/helper do not exist yet.
+- [ ] Write `tests/synthetic-sample.test.mjs` first. Spawn `scripts/generate-synthetic-sample.mjs` with the current Node executable, then assert the generated file begins with `%PDF-`, ends with `%%EOF`, and exceeds 1 KB. Run `node --test tests/synthetic-sample.test.mjs` and confirm it fails because the generator does not exist yet.
 - [ ] Move the current `pdfBytesFor` renderer from `scripts/benchmark-statements.mjs` into `benchmarks/statements/pdf-generator.mjs` as the named export `createStatementPdf` without changing column positions or fixture layout.
 - [ ] Import the shared renderer in the benchmark script and replace its local generator calls.
 - [ ] Create `scripts/generate-synthetic-sample.mjs` to select `synthetic-english-ledger`, call `createStatementPdf`, create `public/samples/` if missing, and write the bytes to the fixed output path.
@@ -57,7 +57,7 @@
 - Add `loadSyntheticSample(): Promise<void>` for fetching and converting the static asset.
 
 - [ ] Add `tests/synthetic-sample-loader.test.mjs` for `fetchSyntheticSample`, covering a successful `application/pdf` response and a 404 response. Run it and confirm the tests fail because the loader does not yet exist.
-- [ ] Create `src/lib/syntheticSample.ts` with the fixed sample URL and filename plus `fetchSyntheticSample(fetcher = fetch)`, which rejects non-OK responses and returns the PDF `Blob`.
+- [ ] Create `src/lib/syntheticSample.mjs` with the fixed sample URL and filename plus `fetchSyntheticSample(fetcher = fetch)`, which rejects non-OK responses and returns the PDF `Blob`; add `src/lib/syntheticSample.d.mts` declarations for the TypeScript app import.
 - [ ] Extend the analytics event union with `sample_conversion_started`, `sample_conversion_completed`, and `sample_conversion_failed`.
 - [ ] Update `processFiles` so normal input keeps `upload_started` and `conversion_completed`; sample mode emits only the sample event names and uses `forceOcr: false` for this text-PDF fixture.
 - [ ] Add `loadSyntheticSample` with an in-flight guard, `fetch('/samples/synthetic-bank-statement.pdf')`, an HTTP status check, conversion through `processFiles([sampleFile], 'sample')`, and a visible error in the existing progress state if fetch fails.
