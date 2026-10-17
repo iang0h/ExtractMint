@@ -11,6 +11,15 @@
     />
     <link rel="canonical" href="https://extractmint.iangoh.com/convert/bank-statement-to-excel/" />
     <link rel="stylesheet" href="/seo.css" />
+    <style>
+      .sample-table-wrap { overflow-x: auto; margin-top: 18px; }
+      .sample-table { width: 100%; border-collapse: collapse; min-width: 660px; font-variant-numeric: tabular-nums; }
+      .sample-table th, .sample-table td { padding: 12px; border-bottom: 1px solid #dfe8de; text-align: left; }
+      .sample-table th { background: #eaf7ef; color: #087a65; }
+      .sample-table td:nth-child(n + 4), .sample-table th:nth-child(n + 4) { text-align: right; }
+      .sample-table caption { text-align: left; padding-bottom: 8px; color: #49616a; }
+      .equation { font-weight: 800; font-variant-numeric: tabular-nums; }
+    </style>
     <meta property="og:title" content="Bank Statement to Excel Converter | ExtractMint" />
     <meta
       property="og:description"
@@ -55,22 +64,33 @@
               clean Excel or CSV files for accounting, bookkeeping, and review.
             </p>
             <div class="cta-row">
-              <a class="button" href="/#converter">Upload a statement</a>
+              <a class="button" href="/#load-synthetic-sample">Try a synthetic example</a>
+              <a class="button secondary" href="/#converter">Upload a statement</a>
               <a class="button secondary" href="/convert/pdf-bank-statement-to-excel/">PDF statement guide</a>
             </div>
+            <p>This example is invented and contains three synthetic English transactions. <a href="/samples/synthetic-bank-statement.pdf">Inspect the sample PDF</a> before trying it.</p>
           </div>
-          <aside class="demo-card" aria-label="ExtractMint output preview">
-            <div class="drop">
-              <strong>Drop bank statement PDF</strong>
-              <div class="progress"><span></span></div>
-            </div>
-            <div class="sheet">
-              <div class="sheet-head"><span>Date</span><span>Description</span><span>Debit</span><span>Balance</span></div>
-              <div class="sheet-row"><span>13/03</span><span>POS DEBIT</span><span>8.18</span><span>3,272.50</span></div>
-              <div class="sheet-row highlight"><span>24/03</span><span>TR IBG</span><span>1,000.00</span><span>2,275.58</span></div>
-              <div class="sheet-row"><span>29/03</span><span>SERVICE FEE</span><span>4.00</span><span>2,271.58</span></div>
-            </div>
+          <aside class="demo-card" aria-label="Synthetic sample overview">
+            <div class="drop"><strong>Invented statement sample</strong><p>Opening balance: 1,000.00</p><p>Three synthetic English transactions</p><p>Closing balance: 1,112.50</p></div>
           </aside>
+        </section>
+
+        <section class="panel" id="synthetic-example">
+          <h2>See the invented transaction rows</h2>
+          <p>The downloadable synthetic PDF contains this generated ledger. Amounts and descriptions below are invented; they do not describe a real account or bank statement.</p>
+          <div class="sample-table-wrap">
+            <table class="sample-table">
+              <caption>Three synthetic English transactions from the sample PDF</caption>
+              <thead><tr><th>Date</th><th>Description</th><th>Reference</th><th>Withdrawal</th><th>Deposit</th><th>Balance</th></tr></thead>
+              <tbody>
+                <tr><td>03/04/2026</td><td>Studio supplies</td><td>SYN-EN-001</td><td>125.50</td><td>—</td><td>874.50</td></tr>
+                <tr><td>05/04/2026</td><td>Project credit</td><td>SYN-EN-002</td><td>—</td><td>300.00</td><td>1,174.50</td></tr>
+                <tr><td>07/04/2026</td><td>Service charge</td><td>SYN-EN-003</td><td>62.00</td><td>—</td><td>1,112.50</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="equation">Opening 1,000.00 + deposits 300.00 − withdrawals 125.50 − 62.00 = closing 1,112.50.</p>
+          <p>Use the <a href="/#load-synthetic-sample">synthetic sample action</a> to load this PDF into the converter, then compare the extracted rows with the source.</p>
         </section>
 
         <section class="grid">
@@ -89,6 +109,26 @@
         </section>
 
         <section class="panel">
+          <h2>Review before accounting use</h2>
+          <ol>
+            <li>Confirm the statement period and each transaction date against the source PDF.</li>
+            <li>Compare descriptions and references with the original rows; watch for rows split across pages.</li>
+            <li>Check debit and credit direction so withdrawals and deposits land in the right columns.</li>
+            <li>Check each running balance against the previous balance and transaction amount.</li>
+            <li>Reconcile opening balance, all deposits and withdrawals, and closing balance before export or accounting use.</li>
+          </ol>
+        </section>
+
+        <section class="panel">
+          <h2>Available outputs</h2>
+          <ul>
+            <li>Excel XLSX and CSV transaction files.</li>
+            <li>Google Docs-ready DOCX and PDF summaries.</li>
+            <li>QuickBooks-ready QBO, review JSON, and review-pack ZIP.</li>
+          </ul>
+        </section>
+
+        <section class="panel">
           <h2>Best fit</h2>
           <ul>
             <li>Text-based PDF bank statements with transaction tables.</li>
@@ -99,8 +139,18 @@
         </section>
 
         <section class="panel">
-          <h2>What the current test covers</h2>
-          <p>ExtractMint's local regression benchmark uses two generated digital PDFs with invented English and Malay statement layouts. It checks six synthetic transaction rows. The benchmark is not based on real bank statements and does not measure real-bank coverage, scanned-PDF OCR, or production accuracy.</p>
+          <h2>Evidence and limitations</h2>
+          <p>The try-it sample is one generated digital PDF with three synthetic English transactions. Separately, ExtractMint's local regression benchmark uses two generated digital PDFs with invented English and Malay layouts and checks six synthetic transaction rows total. These checks do not prove real-bank coverage, scanned-PDF OCR quality, or production accuracy.</p>
+        </section>
+
+        <section class="panel" id="bank-format-limitations">
+          <h2>Bank-format limitations</h2>
+          <p>No bank-specific format has been independently validated against real statements, including CIMB, Maybank, or Singapore bank formats. Layouts vary, and scans can introduce OCR errors. Check statement dates, transaction content, and balances against each export before using it for accounting.</p>
+        </section>
+
+        <section class="panel">
+          <h2>How your data moves</h2>
+          <p>Core PDF conversion and OCR run in your browser. If you use Ask ExtractMint, your question, file name, document details, and up to five extracted rows go to the agent endpoint; a configured AI provider may receive that context. The original PDF is not sent with that request. Read the <a href="/privacy/">privacy data-flow details</a>.</p>
         </section>
 
         <section class="faq">
@@ -117,9 +167,6 @@
         <section class="related" aria-label="Related converters">
           <a href="/convert/pdf-bank-statement-to-excel/">PDF bank statement to Excel</a>
           <a href="/convert/scanned-bank-statement-to-excel/">Scanned bank statement to Excel</a>
-          <a href="/convert/cimb-bank-statement-to-excel/">CIMB statement to Excel</a>
-          <a href="/convert/maybank-bank-statement-to-excel/">Maybank statement to Excel</a>
-          <a href="/convert/singapore-bank-statement-to-excel/">Singapore bank statement to Excel</a>
         </section>
       </main>
 

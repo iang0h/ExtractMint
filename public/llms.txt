@@ -8,7 +8,7 @@ Website: https://extractmint.iangoh.com/
 
 ExtractMint is a web-based financial document extraction product for founders, operators, accountants, and bookkeepers who need statement tables and business documents converted into structured working files.
 
-Primary service area: global web app, with guides for bank statement conversion, PDF statement conversion, scanned statement OCR, and review checklists for CIMB, Maybank, and Singapore statement PDFs. The regional guides are not bank-certified integrations; real bank layouts have not yet been independently validated.
+Primary service area: global web app, with guides for bank statement conversion, PDF statement conversion, and scanned statement OCR. No bank-specific format has been independently validated against real statements.
 
 ## What ExtractMint Does
 
@@ -58,9 +58,6 @@ Primary service area: global web app, with guides for bank statement conversion,
 - Bank statement to Excel: https://extractmint.iangoh.com/convert/bank-statement-to-excel/
 - PDF bank statement to Excel: https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/
 - Scanned bank statement to Excel: https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/
-- CIMB bank statement to Excel: https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/
-- Maybank statement to Excel: https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/
-- Singapore bank statement to Excel: https://extractmint.iangoh.com/convert/singapore-bank-statement-to-excel/
 
 ## Markdown Mirrors
 
@@ -71,9 +68,6 @@ Primary service area: global web app, with guides for bank statement conversion,
 - Bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/bank-statement-to-excel/index.md
 - PDF bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/index.md
 - Scanned bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/index.md
-- CIMB bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/index.md
-- Maybank statement to Excel Markdown: https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/index.md
-- Singapore bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/singapore-bank-statement-to-excel/index.md
 
 ## Machine-Readable API Contract
 

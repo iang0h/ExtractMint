@@ -48,9 +48,6 @@ ExtractMint is a browser-based financial document extraction product for operato
 - [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
 - [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
 - [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)
-- [CIMB bank statement to Excel](https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/)
-- [Maybank statement to Excel](https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/)
-- [Singapore bank statement to Excel](https://extractmint.iangoh.com/convert/singapore-bank-statement-to-excel/)
 
 ## FAQ
 

@@ -23,6 +23,21 @@
       "has": [{ "type": "host", "value": "https-bankstatementconverter-com-bu\\.vercel\\.app" }],
       "destination": "https://extractmint.iangoh.com/:path*",
       "permanent": true
+    },
+    {
+      "source": "/convert/cimb-bank-statement-to-excel/",
+      "destination": "/convert/bank-statement-to-excel/#bank-format-limitations",
+      "permanent": true
+    },
+    {
+      "source": "/convert/maybank-bank-statement-to-excel/",
+      "destination": "/convert/bank-statement-to-excel/#bank-format-limitations",
+      "permanent": true
+    },
+    {
+      "source": "/convert/singapore-bank-statement-to-excel/",
+      "destination": "/convert/bank-statement-to-excel/#bank-format-limitations",
+      "permanent": true
     }
   ],
   "headers": [
