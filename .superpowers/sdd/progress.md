@@ -19,3 +19,4 @@
 # ExtractMint evidence-led demo progress
 
 - Task 1: complete — shared renderer, reproducible synthetic sample PDF, generation command, and focused checks committed as `273952a`; task review passed. Benchmark matched 6/6 rows through the real converter.
+- Task 2: complete — browser sample conversion, privacy-disclosed sample analytics, and upload-precedence race fix committed as `a4c2033` and `256ee03`; task review approved after the focused race fix. Sample mode keeps OCR settings unchanged, runs the fixture through the real converter, and produces five parsed rows with a validated balance trail.
