@@ -35,6 +35,7 @@ import {
   setPersistentPdfPageText,
 } from './lib/pdfTextIndexCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
+import { fetchSyntheticSample, SYNTHETIC_SAMPLE_FILENAME, SYNTHETIC_SAMPLE_URL } from './lib/syntheticSample.mjs'
 
 type ParsedPage = { pageNumber: number; text: string }
 type AgentMessage = {
@@ -441,6 +442,8 @@ function App() {
   )
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isSampleLoading, setIsSampleLoading] = useState(false)
+  const sampleLoadingRef = useRef(false)
   const [forceOcr, setForceOcr] = useState(() => storedValue('extractmint.forceOcr') === '1')
   const [ocrLanguage, setOcrLanguage] = useState(() => storedValue('extractmint.ocrLanguage') || 'eng')
   const [persistOcrCache, setPersistOcrCache] = useState(() => storedValue('extractmint.persistOcrCache') !== '0')
@@ -1017,12 +1020,11 @@ function App() {
     }
   }, [results])
 
-  const processFiles = async (fileList: FileList | File[]) => {
+  const processFiles = async (fileList: FileList | File[], source: 'upload' | 'sample' = 'upload') => {
     const files = Array.from(fileList)
     if (files.length === 0) return
-    files.forEach(() => trackExtractMintEvent('upload_started'))
+    if (source === 'upload') files.forEach(() => trackExtractMintEvent('upload_started'))
 
-    const converter = await loadConverter()
     const signatureUrls: Record<string, string> = {}
     const reviewJsonFiles = files.filter((file) =>
       file.name.toLowerCase().endsWith('.extractmint-review.json'),
@@ -1045,6 +1047,7 @@ function App() {
     setIsProcessing(true)
     setActiveIndex(0)
     try {
+      const converter = await loadConverter()
       const imported: ConversionResult[] = []
       for (let index = 0; index < reviewPackZipFiles.length; index += 1) {
         const file = reviewPackZipFiles[index]
@@ -1118,13 +1121,13 @@ function App() {
         normalFiles.length === 0
           ? []
           : await converter.convertFiles(normalFiles, onConversionProgress, {
-              forceOcr,
+              forceOcr: source === 'sample' ? false : forceOcr,
               ocrLanguage,
               persistOcrCache,
             })
 
       if (converted.length > 0) {
-        converted.forEach(() => trackExtractMintEvent('conversion_completed'))
+        if (source === 'upload') converted.forEach(() => trackExtractMintEvent('conversion_completed'))
         setPdfUrlsBySha((previous) => {
           const next: Record<string, string> = { ...previous }
           for (const result of converted) {
@@ -1149,8 +1152,9 @@ function App() {
       }
 
       const combined = [...imported, ...converted]
+      if (source === 'sample' && combined.length === 0) throw new Error('The synthetic sample produced no results.')
       if (combined.length === 0) return
-      if (converted.length > 0) {
+      if (source === 'upload' && converted.length > 0) {
         const usedOcr = forceOcr || conversionSawOcrRef.current
         appendTelemetry(
           converted.map((result) => {
@@ -1183,7 +1187,9 @@ function App() {
         percent: 100,
         detail: 'Conversion package is ready',
       })
+      if (source === 'sample') trackExtractMintEvent('sample_conversion_completed')
     } catch (error) {
+      if (source === 'sample') trackExtractMintEvent('sample_conversion_failed')
       setProgress({
         fileName: files.length === 1 ? files[0].name : `${files.length} files`,
         stage: 'error',
@@ -1199,6 +1205,35 @@ function App() {
       })
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  const loadSyntheticSample = async (): Promise<void> => {
+    if (sampleLoadingRef.current || isProcessing) return
+    sampleLoadingRef.current = true
+    setIsSampleLoading(true)
+    trackExtractMintEvent('sample_conversion_started')
+    setProgress({
+      fileName: SYNTHETIC_SAMPLE_FILENAME,
+      stage: 'reading',
+      percent: 0,
+      detail: 'Loading synthetic example',
+    })
+    try {
+      const blob = await fetchSyntheticSample()
+      const sampleFile = new File([blob], SYNTHETIC_SAMPLE_FILENAME, { type: 'application/pdf' })
+      await processFiles([sampleFile], 'sample')
+    } catch (error) {
+      trackExtractMintEvent('sample_conversion_failed')
+      setProgress({
+        fileName: SYNTHETIC_SAMPLE_FILENAME,
+        stage: 'error',
+        percent: 100,
+        detail: error instanceof Error ? error.message : 'Could not load the synthetic example',
+      })
+    } finally {
+      sampleLoadingRef.current = false
+      setIsSampleLoading(false)
     }
   }
 
@@ -1607,6 +1642,26 @@ function App() {
               <small>PDF, scan, receipt, spreadsheet, DOCX, or ExtractMint review pack</small>
             </label>
 
+            <div className="synthetic-sample-action">
+              <div>
+                <strong>Try a synthetic example</strong>
+                <p>Uses invented figures and runs in your browser.</p>
+              </div>
+              <div className="synthetic-sample-controls">
+                <button
+                  id="load-synthetic-sample"
+                  type="button"
+                  onClick={() => void loadSyntheticSample()}
+                  disabled={isProcessing || isSampleLoading}
+                >
+                  Load synthetic example
+                </button>
+                <a href={SYNTHETIC_SAMPLE_URL} download={SYNTHETIC_SAMPLE_FILENAME}>
+                  Download sample PDF
+                </a>
+              </div>
+            </div>
+
             <div className="ocr-settings" aria-label="Processing settings">
               <label>
                 <input
@@ -1804,7 +1859,7 @@ function App() {
                   </details>
 			            </div>
 
-	            <div className="progress-panel">
+	            <div className="progress-panel" role="status" aria-live="polite">
 	              <div>
 	                <span>{progress.stage}</span>
 	                <strong>{progress.fileName}</strong>

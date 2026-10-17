@@ -11,6 +11,7 @@ const vercel = JSON.parse(readText('vercel.json'))
 const openapi = JSON.parse(readText('public/openapi.json'))
 const homepage = readText('index.html')
 const app = readText('src/App.tsx')
+const analytics = readText('src/lib/analytics.ts')
 const packageJson = JSON.parse(readText('package.json'))
 const privacyHtml = readText('public/privacy/index.html')
 const privacyMarkdown = readText('public/privacy/index.md')
@@ -100,6 +101,16 @@ assert.equal(packageJson.scripts['sample:statement'], 'node scripts/generate-syn
 assert.doesNotMatch(app, /40\+['"], 'file and table patterns'/)
 assert.match(app, /When you click Ask, your question and the file name/)
 assert.match(app, /up to five extracted rows/)
+assert.match(app, /id="load-synthetic-sample"/)
+assert.match(app, /Load synthetic example/)
+assert.match(app, /invented figures/i)
+assert.match(app, /runs in your browser/i)
+assert.match(app, /href=\{SYNTHETIC_SAMPLE_URL\}/)
+assert.match(app, /download=\{SYNTHETIC_SAMPLE_FILENAME\}/)
+
+for (const event of ['sample_conversion_started', 'sample_conversion_completed', 'sample_conversion_failed']) {
+  assert.match(analytics, new RegExp(event))
+}
 
 for (const privacyCopy of [privacyHtml, privacyMarkdown]) {
   assert.match(privacyCopy, /Ask ExtractMint/)
@@ -108,6 +119,10 @@ for (const privacyCopy of [privacyHtml, privacyMarkdown]) {
   assert.match(privacyCopy, /upload_started/)
   assert.match(privacyCopy, /conversion_completed/)
   assert.match(privacyCopy, /export_started/)
+  assert.match(privacyCopy, /sample_conversion_started/)
+  assert.match(privacyCopy, /sample_conversion_completed/)
+  assert.match(privacyCopy, /sample_conversion_failed/)
+  assert.match(privacyCopy, /demo-only events carry no properties/i)
   assert.match(privacyCopy, /no filenames or statement contents/i)
 }
 
