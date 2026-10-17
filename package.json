@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "benchmark:statements": "node scripts/benchmark-statements.mjs",
+    "sample:statement": "node scripts/generate-synthetic-sample.mjs",
     "test:agent": "node tests/agent-core.test.mjs",
     "test:seo": "node tests/seo-artifacts.test.mjs",
     "preview": "vite preview",
