@@ -103,11 +103,38 @@ function pdfBytesFor(statementCase) {
 function normalizeDate(value) {
   const text = String(value ?? '').trim()
   const iso = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
-  if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`
+  if (iso) {
+    const month = Number(iso[2])
+    const day = Number(iso[3])
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${iso[1]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
+  }
 
-  const slash = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
+  const slash = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
   if (slash) {
-    return `${slash[3]}-${slash[2].padStart(2, '0')}-${slash[1].padStart(2, '0')}`
+    const first = Number(slash[1])
+    const second = Number(slash[2])
+    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
+    const [month, day] = first > 12 ? [second, first] : [first, second]
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
+  }
+
+  const monthName = text.match(
+    /^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2}),?\s+(\d{2,4})$/i,
+  )
+  if (monthName) {
+    const monthKey = monthName[1].slice(0, 3).toLowerCase()
+    const day = Number(monthName[2])
+    const year = monthName[3].length === 2 ? `20${monthName[3]}` : monthName[3]
+    const month = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(
+      monthKey,
+    ) + 1
+    if (month >= 1 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
   }
 
   return text.toLocaleLowerCase('en-US').replace(/\s+/g, ' ')
