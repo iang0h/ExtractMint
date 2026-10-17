@@ -1,12 +1,22 @@
 # ExtractMint Privacy
 
-ExtractMint is designed to be **private by default** in the current static build.
+ExtractMint processes documents in your browser by default. The optional Ask ExtractMint assistant and site analytics have separate data flows described below.
 
-## What happens to my file?
+## File conversion
 
-- **No upload by default:** Conversions run in your browser.
-- **No account required:** There is no sign-in and no server-side storage in this static prototype.
-- **You control persistence:** Optional browser caches can speed repeat work, and can be cleared at any time.
+- Core PDF, image, and document conversion runs in your browser; the original file is not sent to a conversion server.
+- No account or sign-in is required.
+- Optional browser caches can speed repeat work. You can clear them in the app.
+
+## Ask ExtractMint
+
+When you submit a question with a converted document active, the browser sends the question and a compact context to ExtractMint's `/api/agent/` endpoint. That context includes the file name, document type, currency, statement period, row count, confidence and validation details, plus up to five extracted rows with dates, descriptions, amounts, deposits, withdrawals, and balances. The original PDF is not included.
+
+If an AI provider is configured for the agent, the question and context are forwarded to that provider to generate a reply. If no provider is configured, the endpoint uses built-in guidance. Avoid asking about a document if you do not want these selected details sent to the endpoint and, when configured, the AI provider. Review the provider's own privacy terms for its handling and retention.
+
+## Website analytics
+
+ExtractMint uses Vercel Web Analytics for page views and three fixed product events: `upload_started`, `conversion_completed`, and `export_started`. These events include no custom properties, so no filenames or statement contents are sent with them. Vercel describes Web Analytics as cookie-free and based on anonymized data.
 
 ## What may be stored locally on my device?
 
@@ -32,5 +42,5 @@ Use the in-app **Trust & privacy** panel and click **Clear all local caches**. T
 
 ## Contact
 
-Home: https://extractmint.vercel.app/
+Home: https://extractmint.iangoh.com/
 

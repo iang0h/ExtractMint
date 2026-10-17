@@ -1,30 +1,30 @@
-# Maybank Statement to Excel
+# Maybank Statement to Excel: Review Guide
 
-> ExtractMint prepares Maybank-style and similar Malaysian bank statement PDFs for Excel and CSV review.
+> Try a Maybank statement PDF in a browser-based converter. Maybank-specific layouts are not independently validated, so review each row before export.
 
-## Use Case
+This is a general statement-conversion workflow, not an official Maybank integration. ExtractMint has not been independently validated against real Maybank statements.
 
-Use this workflow when converting Malaysian bank statements into spreadsheet rows for bookkeeping, reconciliation, and finance operations.
+## Convert and review
 
-## What To Check
+1. Open the [bank statement converter](https://extractmint.iangoh.com/#converter) and choose a statement PDF.
+2. Compare dates, descriptions, debit and credit values, and running balances with the PDF.
+3. Resolve flagged rows before exporting the working spreadsheet.
 
-- Date formats.
-- Debit and credit columns.
-- Page breaks.
-- Opening and closing balance movements.
-- Large or unusual transactions.
+Text-based PDFs are the strongest input. Scans can use browser OCR, but unclear text should be reviewed manually.
 
-## Exports
+## What the current test covers
 
-ExtractMint exports Maybank-style statement data to XLSX, CSV, DOCX, PDF, QBO, review JSON, review-pack ZIP, and combined workbooks.
+The local regression benchmark uses invented English and Malay digital-PDF layouts. It does not include real Maybank statements and does not establish bank-specific or scanned-PDF accuracy.
 
-## Accuracy Notes
+## Review checklist
 
-Use the exported workbook as a review surface before importing statement data into accounting workflows.
+- Confirm day-first or month-first dates, particularly ambiguous dates.
+- Verify the source's debit and credit labels and check whether refunds use the opposite sign.
+- Inspect wrapped descriptions, references, and page breaks.
+- Reconcile opening and closing balances before bookkeeping use.
 
 ## Related Pages
 
-- [CIMB statement to Excel](https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/)
-- [Scanned bank statement to Excel](https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/)
-- [Singapore bank statement to Excel](https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/)
-
+- [CIMB statement to Excel](https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/)
+- [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)
+- [Singapore bank statement to Excel](https://extractmint.iangoh.com/convert/singapore-bank-statement-to-excel/)

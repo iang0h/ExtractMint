@@ -4,15 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Maybank Statement to Excel | ExtractMint</title>
+    <title>Maybank Statement to Excel: Review Guide | ExtractMint</title>
     <meta
       name="description"
-      content="Convert Maybank bank statement PDFs and similar Malaysian bank statements into Excel or CSV for bookkeeping and reconciliation."
+      content="Try a Maybank statement PDF in a browser-based converter. Maybank-specific layouts are not independently validated, so review each row before export."
     />
-    <link rel="canonical" href="https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/" />
+    <link rel="canonical" href="https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/" />
     <link rel="stylesheet" href="/seo.css" />
-    <meta property="og:title" content="Maybank Statement to Excel | ExtractMint" />
-    <meta property="og:image" content="https://extractmint.vercel.app/og-image.png" />
+    <meta property="og:title" content="Maybank Statement to Excel: Review Guide | ExtractMint" />
+    <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
@@ -24,11 +24,10 @@
       <main>
         <section class="hero">
           <div>
-            <span class="eyebrow">Malaysia bank statements</span>
-            <h1>Prepare Maybank-style statement PDFs for Excel review.</h1>
+            <span class="eyebrow">Maybank statement review guide</span>
+            <h1>Try a Maybank statement PDF in your browser.</h1>
             <p class="lede">
-              ExtractMint is being built around bank-statement-to-spreadsheet workflows for
-              bookkeepers, founders, and operators who need clean reconciliation files.
+              ExtractMint uses a general PDF parser. It has not been independently validated against real Maybank statements, so check extracted dates, debit and credit values, and balances before export.
             </p>
             <div class="cta-row">
               <a class="button" href="/#converter">Try a statement</a>
@@ -36,7 +35,7 @@
             </div>
           </div>
           <aside class="demo-card">
-            <div class="drop"><strong>Statement PDF</strong><div class="progress"><span></span></div></div>
+            <div class="drop"><strong>Maybank PDF statement</strong><small>Illustrative rows, not a real Maybank statement</small><div class="progress"><span></span></div></div>
             <div class="sheet">
               <div class="sheet-head"><span>Date</span><span>Description</span><span>Amount</span><span>Balance</span></div>
               <div class="sheet-row"><span>05/03</span><span>TRANSFER</span><span>-500.00</span><span>4,120.00</span></div>
@@ -46,10 +45,11 @@
           </aside>
         </section>
         <section class="grid">
-          <article class="panel"><h2>What to check</h2><p>Confirm date formats, debit and credit columns, page breaks, and opening and closing balance movements.</p></article>
-          <article class="panel"><h2>Exports</h2><p>Export to XLSX or CSV for spreadsheet work, and DOCX or PDF when a summary file is needed.</p></article>
-          <article class="panel"><h2>Accuracy matters</h2><p>Use the exported workbook as a review surface before importing statement data into accounting workflows.</p></article>
+          <article class="panel"><h2>Confirm date order</h2><p>Check whether the PDF uses day-first or month-first dates, especially when both values are 12 or lower.</p></article>
+          <article class="panel"><h2>Review debit and credit</h2><p>Compare each amount and sign with the source columns, then check the running balance after every transaction.</p></article>
+          <article class="panel"><h2>Choose an export</h2><p>Download XLSX or CSV for spreadsheet review. The export is a working file; verify flagged rows before accounting use.</p></article>
         </section>
+        <section class="panel"><h2>Coverage note</h2><p>This is not an official Maybank integration. We have not been independently validated against real Maybank statements. The current local benchmark uses invented English and Malay PDF layouts; it does not certify Maybank support or scanned-PDF accuracy.</p></section>
         <section class="related">
           <a href="/convert/cimb-bank-statement-to-excel/">CIMB statement to Excel</a>
           <a href="/convert/scanned-bank-statement-to-excel/">Scanned bank statement to Excel</a>

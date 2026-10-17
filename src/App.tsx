@@ -7,7 +7,6 @@ import {
   Bot,
   CheckCircle2,
   ChevronRight,
-  Cloud,
   Copy,
   FileArchive,
   FileSpreadsheet,
@@ -22,11 +21,11 @@ import {
   Table2,
   UploadCloud,
 } from 'lucide-react'
-import { type ComponentType, type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import './components/TopoFieldBackdrop.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
+import { trackExtractMintEvent } from './lib/analytics'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
@@ -133,9 +132,9 @@ const workflow = [
 ]
 
 const metrics = [
-  ['40+', 'file and table patterns'],
+  ['8', 'export options'],
   ['Local', 'browser-side processing'],
-  ['5', 'export formats'],
+  ['No sign-up', 'free to use'],
 ]
 
 const faqItems = [
@@ -145,14 +144,14 @@ const faqItems = [
       'It converts bank statements, receipts, invoices, PDFs, DOCX files, CSV files, spreadsheets, and image scans into structured outputs.',
   },
   {
-    question: 'Does it work with bank statement tables?',
+    question: 'What statement PDFs work best?',
     answer:
-      'Yes. For text-based PDFs it reads table positions, separates withdrawal, deposit, tax, balance, reference, date, and description columns, then exports them to Excel.',
+      'Text-based PDFs are the strongest input. Results depend on each statement layout, so review dates, descriptions, debit and credit values, and running balances before using an export.',
   },
   {
     question: 'Are my files uploaded to a server?',
     answer:
-      'This static version processes files in your browser. The file stays on your device unless you later add a backend conversion queue.',
+      'Core conversion and OCR run in your browser. If you ask the assistant, your question, filename, document details, and up to five extracted rows are sent to our agent endpoint; a configured AI provider may also receive them. The PDF itself is not sent.',
   },
   {
     question: 'What files can I download?',
@@ -162,7 +161,7 @@ const faqItems = [
   {
     question: 'Will scanned statements always work?',
     answer:
-      'Yes — when a PDF has little embedded text, ExtractMint falls back to browser OCR per page. Clean scans work best; extremely noisy scans may still need manual review.',
+      'Scanned statements can use browser OCR, but results depend on scan quality. Review extracted dates, amounts, and balances against the original before using an export.',
   },
   {
     question: 'Can this become a paid SaaS?',
@@ -177,7 +176,7 @@ const faqItems = [
   {
     question: 'Can I ask questions about the conversion?',
     answer:
-      'Yes. Ask ExtractMint can explain validation issues, export choices, missing balances, and next review steps. It uses a built-in fallback by default and can connect to FreeLLMAPI through Vercel environment variables.',
+      'Yes. Ask ExtractMint can explain validation issues and export choices. Submitting a question sends it with the filename, document details, and up to five extracted rows to the agent endpoint; a configured AI provider may receive that context. The original PDF is not sent.',
   },
 ]
 
@@ -423,7 +422,6 @@ const TELEMETRY_STORAGE_KEY = 'extractmint.telemetry.v1'
 
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [TopoFieldBackdrop, setTopoFieldBackdrop] = useState<ComponentType | null>(null)
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL ?? '').trim()
   const [results, setResults] = useState<ConversionResult[]>([createSampleResultLite()])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -609,33 +607,6 @@ function App() {
   useEffect(() => {
     pdfUrlRef.current = pdfUrlsBySha
   }, [pdfUrlsBySha])
-
-  useEffect(() => {
-    let mounted = true
-    const loadBackdrop = () => {
-      void import('./components/TopoFieldBackdrop')
-        .then(({ TopoFieldBackdrop: Component }) => {
-          if (mounted) setTopoFieldBackdrop(() => Component)
-        })
-        .catch(() => {
-          // The static CSS field remains visible if the optional shader cannot load.
-        })
-    }
-
-    if (typeof window.requestIdleCallback === 'function') {
-      const idleId = window.requestIdleCallback(loadBackdrop, { timeout: 2000 })
-      return () => {
-        mounted = false
-        window.cancelIdleCallback(idleId)
-      }
-    }
-
-    const timerId = setTimeout(loadBackdrop, 200)
-    return () => {
-      mounted = false
-      clearTimeout(timerId)
-    }
-  }, [])
 
   useEffect(() => {
     return () => {
@@ -1049,6 +1020,7 @@ function App() {
   const processFiles = async (fileList: FileList | File[]) => {
     const files = Array.from(fileList)
     if (files.length === 0) return
+    files.forEach(() => trackExtractMintEvent('upload_started'))
 
     const converter = await loadConverter()
     const signatureUrls: Record<string, string> = {}
@@ -1152,6 +1124,7 @@ function App() {
             })
 
       if (converted.length > 0) {
+        converted.forEach(() => trackExtractMintEvent('conversion_completed'))
         setPdfUrlsBySha((previous) => {
           const next: Record<string, string> = { ...previous }
           for (const result of converted) {
@@ -1253,6 +1226,7 @@ function App() {
     anchor.href = url
     anchor.download = `${baseName}.${format}`
     anchor.click()
+    trackExtractMintEvent('export_started')
     URL.revokeObjectURL(url)
   }
 
@@ -1267,6 +1241,7 @@ function App() {
       anchor.href = url
       anchor.download = `${baseName}.extractmint-review.json`
       anchor.click()
+      trackExtractMintEvent('export_started')
       URL.revokeObjectURL(url)
     })()
   }
@@ -1324,6 +1299,7 @@ function App() {
       anchor.href = url
       anchor.download = `extractmint-review-pack-${stamp}.zip`
       anchor.click()
+      trackExtractMintEvent('export_started')
       URL.revokeObjectURL(url)
       setProgress({
         fileName: `${results.length} files`,
@@ -1355,6 +1331,7 @@ function App() {
       anchor.href = url
       anchor.download = `extractmint-diagnostic-${sha ? sha.slice(0, 10) : stamp}.json`
       anchor.click()
+      trackExtractMintEvent('export_started')
       URL.revokeObjectURL(url)
     })()
   }
@@ -1431,6 +1408,7 @@ function App() {
       anchor.href = url
       anchor.download = `extractmint-combined-${stamp}.xlsx`
       anchor.click()
+      trackExtractMintEvent('export_started')
       URL.revokeObjectURL(url)
       setProgress({
         fileName: `${results.length} files`,
@@ -1533,101 +1511,54 @@ function App() {
           </span>
           <span className="brand-copy">
             <strong>ExtractMint</strong>
-            <small>Ledger-grade exports</small>
           </span>
         </a>
         <nav aria-label="Primary navigation">
           <a href="#converter">Converter</a>
           <a href="#formats">Formats</a>
-          <a href="#agent">Agent</a>
-          <a href="#video">Demo</a>
+          <a href="/pricing/">Pricing</a>
           <a href="#faq">FAQ</a>
         </nav>
         <a className="header-action" href="#converter">
-          Try it
+          Get started
           <ChevronRight size={16} />
         </a>
       </header>
 
       <section id="top" className="hero-section">
-        {TopoFieldBackdrop ? <TopoFieldBackdrop /> : <div className="topo-field-backdrop" aria-hidden="true" />}
         <div className="hero-copy">
-          <motion.p
-            className="eyebrow"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            Ledger-grade document extraction
-          </motion.p>
-          <motion.h1
-            className="animated-headline"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-          >
-            <motion.span
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.08 }}
-            >
-              Turn statements into
-            </motion.span>
-            <motion.span
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.18 }}
-            >
-              clean data.
-            </motion.span>
-          </motion.h1>
-          <motion.p
-            className="hero-lede"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            Upload a statement or receipt. ExtractMint structures transactions,
-            checks the balance trail, and exports useful files in your browser.
-          </motion.p>
-          <motion.div
-            className="hero-actions"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.14 }}
-          >
+          <p className="eyebrow">Bank statement converter</p>
+          <h1 className="animated-headline">
+            <span>Turn statements into</span>
+            <span>clean data.</span>
+          </h1>
+          <p className="hero-lede">
+            Convert statement PDFs in your browser, review transactions and balance checks, then export to Excel, CSV, or accounting formats.
+          </p>
+          <div className="hero-actions">
             <button className="primary-button" onClick={() => inputRef.current?.click()}>
               <UploadCloud size={18} />
               Upload files
             </button>
             <a className="secondary-button" href="#video">
               <PlayCircle size={18} />
-              Watch flow
+              See how it works
             </a>
-            <a className="secondary-button" href="/pricing/">
-              <Tag size={18} />
-              Pricing
-            </a>
-          </motion.div>
-          <motion.div
-            className="hero-proof"
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.18 }}
-            aria-label="Product trust signals"
-          >
+          </div>
+          <div className="hero-proof" aria-label="Product trust signals">
             <span>
               <LockKeyhole size={16} />
-              Browser-side processing
+              Private by default
             </span>
             <span>
               <BadgeCheck size={16} />
-              Balance trail checks
+              Balance checks
             </span>
             <span>
               <FileSpreadsheet size={16} />
-              Excel and QBO exports
+              Excel and QBO
             </span>
-          </motion.div>
+          </div>
           <div className="support-strip" id="formats">
             {supportItems.map((item) => (
               <span key={item.label}>
@@ -1649,12 +1580,7 @@ function App() {
             id="converter"
           >
             <div className="converter-toolbar">
-              <span>Document workbench</span>
-              <div>
-                <i />
-                <i />
-                <i />
-              </div>
+              <span>Upload a statement</span>
             </div>
             <label
               className={`dropzone ${isDragging ? 'is-dragging' : ''}`}
@@ -1674,13 +1600,9 @@ function App() {
                   if (event.target.files) void processFiles(event.target.files)
                 }}
               />
-              <motion.span
-                className="drop-icon"
-                animate={{ scale: [1, 1.08, 1], rotate: [0, -2, 0] }}
-                transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <Cloud size={28} />
-              </motion.span>
+              <span className="drop-icon">
+                <UploadCloud size={24} />
+              </span>
               <strong>Drop a document or choose a file</strong>
               <small>PDF, scan, receipt, spreadsheet, DOCX, or ExtractMint review pack</small>
             </label>
@@ -2655,6 +2577,10 @@ function App() {
               The agent answers questions about the active file, validation status,
               sample rows, export choices, and reconciliation steps.
             </p>
+            <p className="agent-privacy-note">
+              When you click Ask, your question and the file name, document details, and up to five extracted rows are sent to our agent endpoint. If an AI provider is configured, it may receive that context. The PDF itself is not sent.{' '}
+              <a href="/privacy/">Privacy details</a>
+            </p>
             <div className="agent-source">
               <Sparkles size={16} />
               <span>FreeLLMAPI-ready via Vercel environment variables</span>
@@ -2758,25 +2684,15 @@ function App() {
 
 function LogoMark() {
   return (
-    <svg viewBox="0 0 32 32" role="img" aria-label="ExtractMint mark">
+    <svg viewBox="0 0 32 32" aria-hidden="true">
       <path
-        d="M7.5 5.5h12.25L24.5 10.25v16.25h-17z"
+        d="M7 4.5h12l6 6v17H7z"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.8"
         strokeLinejoin="round"
       />
-      <path d="M19.5 6v5h5" fill="none" stroke="currentColor" strokeWidth="2" />
-      <path d="M11.5 15.25h8.25M11.5 19h5.75" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M11.5 22.75h3.25M17.25 22.75h3.25" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M18.25 20.5l2.05 2.05 4.45-5"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2.2"
-      />
+      <path d="M19 4.5v6h6M11 16h10M11 20h7" fill="none" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   )
 }

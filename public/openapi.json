@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://extractmint.vercel.app",
+      "url": "https://extractmint.iangoh.com",
       "description": "Production"
     }
   ],
