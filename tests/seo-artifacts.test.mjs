@@ -134,7 +134,7 @@ assert.ok(openapi.paths['/api/agent/']?.post, 'OpenAPI must document POST /api/a
 assert.match(llms, /OpenAPI/)
 assert.ok(llms.includes(`${origin}/openapi.json`))
 
-assert.match(homepage, /<title>Bank Statement Converter: PDF to Excel &amp; CSV \| ExtractMint<\/title>/)
+assert.match(homepage, /<title>Free Bank Statement Converter: PDF to Excel &amp; CSV \| ExtractMint<\/title>/)
 assert.equal(packageJson.scripts['sample:statement'], 'node scripts/generate-synthetic-sample.mjs')
 assert.doesNotMatch(app, /40\+['"], 'file and table patterns'/)
 assert.match(app, /When you click Ask, your question and the file name/)
@@ -147,6 +147,10 @@ assert.match(app, /href=\{SYNTHETIC_SAMPLE_URL\}/)
 assert.match(app, /download=\{SYNTHETIC_SAMPLE_FILENAME\}/)
 
 for (const event of ['sample_conversion_started', 'sample_conversion_completed', 'sample_conversion_failed', 'sample_conversion_cancelled']) {
+  assert.match(analytics, new RegExp(event))
+}
+
+for (const event of ['upload_started', 'conversion_completed', 'export_started']) {
   assert.match(analytics, new RegExp(event))
 }
 
