@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@remotion/player": "^4.0.460",
+    "@vercel/analytics": "^2.0.1",
     "docx": "^9.6.1",
     "exceljs": "^4.4.0",
     "framer-motion": "^12.38.0",
