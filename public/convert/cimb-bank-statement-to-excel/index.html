@@ -4,15 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>CIMB Bank Statement to Excel | ExtractMint</title>
+    <title>CIMB Bank Statement to Excel: Review Guide | ExtractMint</title>
     <meta
       name="description"
-      content="Convert CIMB-style bank statement PDFs into Excel or CSV rows with dates, descriptions, withdrawals, deposits, tax, and balances."
+      content="Try a CIMB statement PDF in a browser-based converter. CIMB-specific layouts are not independently validated, so review each row before export."
     />
-    <link rel="canonical" href="https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/" />
+    <link rel="canonical" href="https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/" />
     <link rel="stylesheet" href="/seo.css" />
-    <meta property="og:title" content="CIMB Bank Statement to Excel | ExtractMint" />
-    <meta property="og:image" content="https://extractmint.vercel.app/og-image.png" />
+    <meta property="og:title" content="CIMB Bank Statement to Excel: Review Guide | ExtractMint" />
+    <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
@@ -24,11 +24,10 @@
       <main>
         <section class="hero">
           <div>
-            <span class="eyebrow">CIMB statement workflow</span>
-            <h1>Convert CIMB-style statement PDFs into Excel rows.</h1>
+            <span class="eyebrow">CIMB statement review guide</span>
+            <h1>Try a CIMB statement PDF in your browser.</h1>
             <p class="lede">
-              ExtractMint includes parser logic for CIMB-style transaction tables, including date,
-              description, reference, withdrawal, deposit, tax, and balance columns.
+              ExtractMint uses a general PDF parser. It has not been independently validated against real CIMB statements, so check the extracted rows and balances before you export.
             </p>
             <div class="cta-row">
               <a class="button" href="/#converter">Convert a CIMB statement</a>
@@ -36,7 +35,7 @@
             </div>
           </div>
           <aside class="demo-card">
-            <div class="drop"><strong>CIMB PDF statement</strong><div class="progress"><span></span></div></div>
+            <div class="drop"><strong>CIMB PDF statement</strong><small>Illustrative rows, not a real CIMB statement</small><div class="progress"><span></span></div></div>
             <div class="sheet">
               <div class="sheet-head"><span>Date</span><span>Description</span><span>Withdrawal</span><span>Balance</span></div>
               <div class="sheet-row"><span>13/03</span><span>POS DEBIT</span><span>8.18</span><span>3,272.50</span></div>
@@ -46,10 +45,11 @@
           </aside>
         </section>
         <section class="grid">
-          <article class="panel"><h2>Columns preserved</h2><p>For supported layouts, withdrawals, deposits, tax, and balances are exported as separate spreadsheet columns.</p></article>
-          <article class="panel"><h2>Useful for review</h2><p>Accountants can use running balances to check whether rows were skipped or debit and credit fields were misread.</p></article>
-          <article class="panel"><h2>Privacy-first static app</h2><p>The current implementation runs in the browser and is suitable for testing statement conversion before adding a SaaS backend.</p></article>
+          <article class="panel"><h2>Check every column</h2><p>Review the date, description, reference, withdrawal, deposit, tax, and balance columns against the original PDF.</p></article>
+          <article class="panel"><h2>Reconcile the balance trail</h2><p>Compare opening and closing balances and inspect flagged rows before using the spreadsheet for bookkeeping.</p></article>
+          <article class="panel"><h2>Text PDF or scan?</h2><p>Text-based PDFs are the strongest input. Scans can use browser OCR, but unclear dates and amounts need manual review.</p></article>
         </section>
+        <section class="panel"><h2>Coverage note</h2><p>This is not an official CIMB integration. We have not been independently validated against real CIMB statements. The current local benchmark uses invented English and Malay PDF layouts; it does not certify CIMB support or scanned-PDF accuracy.</p></section>
         <section class="related">
           <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
           <a href="/convert/pdf-bank-statement-to-excel/">PDF bank statement to Excel</a>

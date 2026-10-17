@@ -7,24 +7,24 @@
     <title>Security | ExtractMint</title>
     <meta
       name="description"
-      content="ExtractMint’s static build processes files in the browser with optional local caches. Learn the current security posture and accountant workflow checklist."
+      content="ExtractMint converts documents in your browser. Learn about the separate assistant context flow, local caches, and accountant review checklist."
     />
-    <link rel="canonical" href="https://extractmint.vercel.app/security/" />
+    <link rel="canonical" href="https://extractmint.iangoh.com/security/" />
     <link rel="stylesheet" href="/seo.css" />
     <meta property="og:title" content="Security | ExtractMint" />
     <meta
       property="og:description"
-      content="Local-first browser processing with optional caches you can clear. Accountant workflow checklist included."
+      content="Browser-side document conversion, limited assistant context sharing, optional local caches, and review guidance."
     />
-    <meta property="og:image" content="https://extractmint.vercel.app/og-image.png" />
+    <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "ExtractMint Security",
-        "url": "https://extractmint.vercel.app/security/",
-        "isPartOf": { "@type": "WebSite", "name": "ExtractMint", "url": "https://extractmint.vercel.app/" }
+        "url": "https://extractmint.iangoh.com/security/",
+        "isPartOf": { "@type": "WebSite", "name": "ExtractMint", "url": "https://extractmint.iangoh.com/" }
       }
     </script>
   </head>
@@ -47,9 +47,9 @@
         <section class="hero">
           <div>
             <span class="eyebrow">Security</span>
-            <h1>Designed for local-first conversion in the static build.</h1>
+            <h1>Core conversion runs locally in your browser.</h1>
             <p class="lede">
-              ExtractMint processes documents in your browser. Optional local caches can speed repeat exports, and can be cleared in-app.
+              The original document is not sent to a conversion server. The optional assistant sends a limited extracted context only when you submit a question.
             </p>
             <div class="cta-row">
               <a class="button" href="/#converter">Try the converter</a>
@@ -61,8 +61,10 @@
         <section class="panel">
           <h2>Current posture (static build)</h2>
           <ul>
-            <li>Browser-side processing for conversions.</li>
-            <li>No account system or server-side storage in this prototype.</li>
+            <li>Browser-side processing for document conversion.</li>
+            <li>The original document is not sent to a conversion server.</li>
+            <li>No account or sign-in is required.</li>
+            <li>Asking the assistant sends your question, file name, document details, and up to five extracted rows to the agent endpoint; a configured AI provider may receive them. The original PDF is not included.</li>
             <li>Optional local caches (OCR + PDF review index) that can be cleared.</li>
           </ul>
         </section>
@@ -71,7 +73,7 @@
           <h2>Accountant workflow checklist</h2>
           <ul>
             <li>Use a dedicated browser profile with minimal extensions.</li>
-            <li>Confirm the domain is <code>extractmint.vercel.app</code> before processing client documents.</li>
+            <li>Confirm the domain is <code>extractmint.iangoh.com</code> before processing client documents.</li>
             <li>After export, validate opening/closing balances and review low-confidence rows.</li>
             <li>Clear all local caches after completing a client batch if required.</li>
           </ul>

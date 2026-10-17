@@ -23,7 +23,7 @@ OCR-based conversions can be exported to Excel XLSX, CSV, DOCX, PDF, review JSON
 
 ## Related Pages
 
-- [Bank statement to Excel](https://extractmint.vercel.app/convert/bank-statement-to-excel/)
-- [PDF bank statement to Excel](https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/)
-- [Maybank statement to Excel](https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/)
+- [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
+- [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
+- [Maybank statement to Excel](https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/)
 

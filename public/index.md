@@ -44,13 +44,13 @@ ExtractMint is a browser-based financial document extraction product for operato
 
 ## Key Pages
 
-- [Home and converter](https://extractmint.vercel.app/)
-- [Bank statement to Excel](https://extractmint.vercel.app/convert/bank-statement-to-excel/)
-- [PDF bank statement to Excel](https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/)
-- [Scanned bank statement to Excel](https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/)
-- [CIMB bank statement to Excel](https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/)
-- [Maybank statement to Excel](https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/)
-- [Singapore bank statement to Excel](https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/)
+- [Home and converter](https://extractmint.iangoh.com/)
+- [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
+- [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
+- [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)
+- [CIMB bank statement to Excel](https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/)
+- [Maybank statement to Excel](https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/)
+- [Singapore bank statement to Excel](https://extractmint.iangoh.com/convert/singapore-bank-statement-to-excel/)
 
 ## FAQ
 
@@ -60,7 +60,7 @@ ExtractMint converts bank statements, receipts, invoices, PDFs, DOCX files, spre
 
 ### Are files uploaded to a server?
 
-The current static version processes files in the browser. A future SaaS backend can add accounts, credits, server OCR, retention controls, and audit logs.
+Core conversion and OCR run in the browser. If you ask the ExtractMint assistant, your question, file name, document details, and up to five extracted rows are sent to the agent endpoint. A configured AI provider may receive that context; the original PDF is not included. See the [privacy page](https://extractmint.iangoh.com/privacy/) for the data flow.
 
 ### Should scanned statements be reviewed?
 

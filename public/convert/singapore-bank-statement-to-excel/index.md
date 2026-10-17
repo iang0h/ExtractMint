@@ -1,26 +1,30 @@
-# Singapore Bank Statement to Excel
+# Singapore Bank Statement to Excel: Review Guide
 
-> ExtractMint converts Singapore bank statement PDFs into Excel-ready rows for bookkeeping and reconciliation.
+> Try a Singapore bank statement PDF in a browser-based converter. Singapore-specific layouts are not independently validated, so review each row before export.
 
-## Use Case
+This is a general statement-conversion workflow, not an official bank integration. ExtractMint has not been independently validated against real Singapore bank statements.
 
-This workflow is for operators and accountants who need Singapore bank statement transaction tables extracted into spreadsheet columns for monthly review.
+## Convert and review
 
-## For Accountants
+1. Open the [bank statement converter](https://extractmint.iangoh.com/#converter) and choose a statement PDF.
+2. Check dates, currency, descriptions, debit and credit values, and balances against the source.
+3. Review fees, reversals, and any value dates before exporting.
 
-ExtractMint reduces manual statement entry by exporting transaction tables into rows that can be reviewed in Excel and checked against running balances.
+Text-based PDFs are the strongest input. Scans can use browser OCR, but unclear text should be reviewed manually.
 
-## For Operators
+## What the current test covers
 
-ExtractMint helps prepare cash movement and reconciliation files without rebuilding statement tables by hand.
+The local regression benchmark uses invented English and Malay digital-PDF layouts. It does not include real Singapore bank statements and does not establish bank-specific or scanned-PDF accuracy.
 
-## Outputs
+## Review checklist
 
-Export Singapore statement data to XLSX, CSV, DOCX, PDF, QBO, review JSON, review-pack ZIP, or combined workbooks.
+- Confirm the currency and date order before interpreting amounts.
+- Check transaction and value dates separately when both appear.
+- Verify fees and reversals against the statement's debit/credit columns.
+- Compare opening and closing balances before accounting use.
 
 ## Related Pages
 
-- [Bank statement to Excel](https://extractmint.vercel.app/convert/bank-statement-to-excel/)
-- [PDF bank statement to Excel](https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/)
-- [Scanned bank statement to Excel](https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/)
-
+- [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
+- [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
+- [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)

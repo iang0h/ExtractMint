@@ -5,6 +5,26 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "trailingSlash": true,
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "extractmint\\.vercel\\.app" }],
+      "destination": "https://extractmint.iangoh.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "extractmint-iango\\.vercel\\.app" }],
+      "destination": "https://extractmint.iangoh.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "https-bankstatementconverter-com-bu\\.vercel\\.app" }],
+      "destination": "https://extractmint.iangoh.com/:path*",
+      "permanent": true
+    }
+  ],
   "headers": [
     {
       "source": "/llms.txt",
@@ -28,7 +48,7 @@
         },
         {
           "key": "X-Robots-Tag",
-          "value": "index, follow"
+          "value": "noindex, follow"
         }
       ]
     },

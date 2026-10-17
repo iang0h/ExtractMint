@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import JSZip from 'jszip'
 
 import type { PdfDocumentProxy } from './PdfCanvasViewer'
+import { trackExtractMintEvent } from '../lib/analytics'
 
 type RedactionRectPx = { x: number; y: number; width: number; height: number }
 type RedactionRectPct = { x: number; y: number; width: number; height: number }
@@ -305,6 +306,7 @@ export function PdfRedactionTool({
       anchor.href = url
       anchor.download = `${safeBaseName}-redacted-p${currentPage}.png`
       anchor.click()
+      trackExtractMintEvent('export_started')
       URL.revokeObjectURL(url)
     }, 'image/png')
   }
@@ -339,6 +341,7 @@ export function PdfRedactionTool({
         anchor.href = url
         anchor.download = `${safeBaseName}-redacted-pages.zip`
         anchor.click()
+        trackExtractMintEvent('export_started')
         URL.revokeObjectURL(url)
         setZipStatus('ZIP downloaded.')
       } catch (error) {

@@ -7,24 +7,24 @@
     <title>Privacy | ExtractMint</title>
     <meta
       name="description"
-      content="ExtractMint is private by default: this static build processes files in the browser with optional local-only caches you can clear."
+      content="Learn how ExtractMint processes files in your browser, what the optional AI assistant sends, how site analytics work, and how to clear local caches."
     />
-    <link rel="canonical" href="https://extractmint.vercel.app/privacy/" />
+    <link rel="canonical" href="https://extractmint.iangoh.com/privacy/" />
     <link rel="stylesheet" href="/seo.css" />
     <meta property="og:title" content="Privacy | ExtractMint" />
     <meta
       property="og:description"
-      content="Private by default. Browser-side processing with optional local caches you can clear."
+      content="Browser-side conversion, optional AI context sharing, privacy-safe event names, and local cache controls."
     />
-    <meta property="og:image" content="https://extractmint.vercel.app/og-image.png" />
+    <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebPage",
         "name": "ExtractMint Privacy",
-        "url": "https://extractmint.vercel.app/privacy/",
-        "isPartOf": { "@type": "WebSite", "name": "ExtractMint", "url": "https://extractmint.vercel.app/" }
+        "url": "https://extractmint.iangoh.com/privacy/",
+        "isPartOf": { "@type": "WebSite", "name": "ExtractMint", "url": "https://extractmint.iangoh.com/" }
       }
     </script>
   </head>
@@ -47,9 +47,9 @@
         <section class="hero">
           <div>
             <span class="eyebrow">Privacy</span>
-            <h1>Private by default in the current static build.</h1>
+            <h1>What stays in your browser—and what you choose to send.</h1>
             <p class="lede">
-              ExtractMint runs conversions in your browser. Optional local caches can speed repeat work, and can be cleared at any time.
+              Core conversion runs in your browser. The optional assistant and site analytics use separate, limited data flows.
             </p>
             <div class="cta-row">
               <a class="button" href="/#converter">Try the converter</a>
@@ -59,12 +59,23 @@
         </section>
 
         <section class="panel">
-          <h2>What happens to my file?</h2>
+          <h2>File conversion</h2>
           <ul>
-            <li>No upload by default: the static app processes files locally in the browser.</li>
-            <li>No sign-in: there is no account system in this prototype.</li>
-            <li>You control persistence: optional caches can be enabled or cleared.</li>
+            <li>Core PDF, image, and document conversion runs in your browser; the original file is not sent to a conversion server.</li>
+            <li>No account or sign-in is required.</li>
+            <li>Optional browser caches can speed repeat work and can be cleared in the app.</li>
           </ul>
+        </section>
+
+        <section class="panel">
+          <h2>Ask ExtractMint</h2>
+          <p>When you submit a question with a converted document active, the browser sends the question and a compact context to ExtractMint’s <code>/api/agent/</code> endpoint. The context includes the file name, document type, currency, statement period, row count, confidence and validation details, plus up to five extracted rows with dates, descriptions, amounts, deposits, withdrawals, and balances. The original PDF is not included.</p>
+          <p>If an AI provider is configured for the assistant, the question and context are forwarded to that provider. Otherwise, the endpoint uses built-in guidance. Avoid asking about a document if you do not want these selected details sent to the endpoint and, when configured, the AI provider. Review the provider’s privacy terms for its handling and retention.</p>
+        </section>
+
+        <section class="panel">
+          <h2>Website analytics</h2>
+          <p>ExtractMint uses Vercel Web Analytics for page views and three fixed product events: <code>upload_started</code>, <code>conversion_completed</code>, and <code>export_started</code>. These events have no custom properties, so no filenames or statement contents are sent with them. Vercel describes Web Analytics as cookie-free and based on anonymized data.</p>
         </section>
 
         <section class="grid">

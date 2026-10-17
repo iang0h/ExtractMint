@@ -2,13 +2,13 @@
 
 > ExtractMint converts bank statements, receipts, invoices, scans, PDFs, DOCX files, spreadsheets, CSV, and plain text into clean Excel, CSV, DOCX, PDF, QBO, and review-pack exports.
 
-Website: https://extractmint.vercel.app/
+Website: https://extractmint.iangoh.com/
 
 ## Business Summary
 
 ExtractMint is a web-based financial document extraction product for founders, operators, accountants, and bookkeepers who need statement tables and business documents converted into structured working files.
 
-Primary service area: global web app, with current SEO pages focused on bank statement conversion, PDF statement conversion, scanned statement OCR, CIMB-style statements, Maybank-style statements, and Singapore bank statement workflows.
+Primary service area: global web app, with guides for bank statement conversion, PDF statement conversion, scanned statement OCR, and review checklists for CIMB, Maybank, and Singapore statement PDFs. The regional guides are not bank-certified integrations; real bank layouts have not yet been independently validated.
 
 ## What ExtractMint Does
 
@@ -18,6 +18,7 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 - Uses browser-side parsing and OCR in the current static implementation.
 - Preserves transaction fields such as date, description, reference, withdrawal, deposit, tax, amount, category, and balance where available.
 - Adds balance validation, reconciliation sheets, source PDF side-by-side review, OCR cache controls, and an Ask ExtractMint agent for conversion questions.
+- Current local extraction benchmark: two synthetic digital PDFs with six invented transaction rows. It does not establish accuracy on real bank statements, scans, or production files.
 
 ## Primary Use Cases
 
@@ -38,6 +39,8 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 - Optional local caches (OCR + PDF review index) can be persisted in the browser and cleared in-app.
 - Review JSON import/export so a conversion can be resumed later.
 - FreeLLMAPI-ready agent route for explaining validation issues and export choices.
+- Asking the agent sends the question, filename, document details, and up to five extracted rows to the agent endpoint; a configured AI provider may receive this context. The original PDF is not included.
+- Vercel Web Analytics records page views and fixed `upload_started`, `conversion_completed`, and `export_started` events with no filenames or statement contents in custom event properties.
 
 ## Important Product Notes
 
@@ -48,37 +51,37 @@ Primary service area: global web app, with current SEO pages focused on bank sta
 
 ## HTML Pages
 
-- Home and converter: https://extractmint.vercel.app/
-- Pricing: https://extractmint.vercel.app/pricing/
-- Privacy: https://extractmint.vercel.app/privacy/
-- Security: https://extractmint.vercel.app/security/
-- Bank statement to Excel: https://extractmint.vercel.app/convert/bank-statement-to-excel/
-- PDF bank statement to Excel: https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/
-- Scanned bank statement to Excel: https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/
-- CIMB bank statement to Excel: https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/
-- Maybank statement to Excel: https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/
-- Singapore bank statement to Excel: https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/
+- Home and converter: https://extractmint.iangoh.com/
+- Pricing: https://extractmint.iangoh.com/pricing/
+- Privacy: https://extractmint.iangoh.com/privacy/
+- Security: https://extractmint.iangoh.com/security/
+- Bank statement to Excel: https://extractmint.iangoh.com/convert/bank-statement-to-excel/
+- PDF bank statement to Excel: https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/
+- Scanned bank statement to Excel: https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/
+- CIMB bank statement to Excel: https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/
+- Maybank statement to Excel: https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/
+- Singapore bank statement to Excel: https://extractmint.iangoh.com/convert/singapore-bank-statement-to-excel/
 
 ## Markdown Mirrors
 
-- Home Markdown: https://extractmint.vercel.app/index.md
-- Pricing Markdown: https://extractmint.vercel.app/pricing/index.md
-- Privacy Markdown: https://extractmint.vercel.app/privacy/index.md
-- Security Markdown: https://extractmint.vercel.app/security/index.md
-- Bank statement to Excel Markdown: https://extractmint.vercel.app/convert/bank-statement-to-excel/index.md
-- PDF bank statement to Excel Markdown: https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/index.md
-- Scanned bank statement to Excel Markdown: https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/index.md
-- CIMB bank statement to Excel Markdown: https://extractmint.vercel.app/convert/cimb-bank-statement-to-excel/index.md
-- Maybank statement to Excel Markdown: https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/index.md
-- Singapore bank statement to Excel Markdown: https://extractmint.vercel.app/convert/singapore-bank-statement-to-excel/index.md
+- Home Markdown: https://extractmint.iangoh.com/index.md
+- Pricing Markdown: https://extractmint.iangoh.com/pricing/index.md
+- Privacy Markdown: https://extractmint.iangoh.com/privacy/index.md
+- Security Markdown: https://extractmint.iangoh.com/security/index.md
+- Bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/bank-statement-to-excel/index.md
+- PDF bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/index.md
+- Scanned bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/index.md
+- CIMB bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/cimb-bank-statement-to-excel/index.md
+- Maybank statement to Excel Markdown: https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/index.md
+- Singapore bank statement to Excel Markdown: https://extractmint.iangoh.com/convert/singapore-bank-statement-to-excel/index.md
 
 ## Machine-Readable API Contract
 
-- OpenAPI: https://extractmint.vercel.app/openapi.json
-- Agent endpoint: https://extractmint.vercel.app/api/agent/
+- OpenAPI: https://extractmint.iangoh.com/openapi.json
+- Agent endpoint: https://extractmint.iangoh.com/api/agent/
 
 ## Contact
 
-- Website: https://extractmint.vercel.app/
-- Product route: https://extractmint.vercel.app/#converter
-- Agent route: https://extractmint.vercel.app/#agent
+- Website: https://extractmint.iangoh.com/
+- Product route: https://extractmint.iangoh.com/#converter
+- Agent route: https://extractmint.iangoh.com/#agent

@@ -1,27 +1,31 @@
-# CIMB Bank Statement to Excel
+# CIMB Bank Statement to Excel: Review Guide
 
-> ExtractMint supports CIMB-style bank statement workflows with spreadsheet exports for transaction review.
+> Try a CIMB statement PDF in a browser-based converter. CIMB-specific layouts are not independently validated, so review each row before export.
 
-## Use Case
+This is a general statement-conversion workflow, not an official CIMB integration. ExtractMint has not been independently validated against real CIMB statements.
 
-Use ExtractMint to prepare CIMB-style statement PDFs for Excel review, bookkeeping, and monthly reconciliation.
+## Convert and review
 
-## Columns Preserved
+1. Open the [bank statement converter](https://extractmint.iangoh.com/#converter) and choose a statement PDF.
+2. Check the extracted dates, descriptions, references, withdrawals, deposits, tax fields, and balances against the original.
+3. Compare opening and closing balances and resolve flagged rows before exporting.
 
-For supported layouts, ExtractMint separates transaction dates, descriptions, references, withdrawals, deposits, tax fields, and balances into structured columns.
+Text-based PDFs are the strongest input. Scans can use browser OCR, but unclear text should be reviewed manually.
 
-## Review Guidance
+## What the current test covers
 
-Check date ordering, debit and credit placement, page breaks, and running balances before using the export in accounting workflows.
+The local regression benchmark uses invented English and Malay digital-PDF layouts. It does not include real CIMB statements and does not establish bank-specific or scanned-PDF accuracy.
 
-## Outputs
+## Review checklist
 
-Export CIMB-style statements as XLSX, CSV, DOCX, PDF, QBO, review JSON, review-pack ZIP, or combined workbooks.
+- Confirm the statement period and date order.
+- Compare withdrawal and deposit signs with the original column labels.
+- Check descriptions and references that wrap across lines or pages.
+- Reconcile opening and closing balances before accounting use.
 
 ## Related Pages
 
-- [Bank statement to Excel](https://extractmint.vercel.app/convert/bank-statement-to-excel/)
-- [PDF bank statement to Excel](https://extractmint.vercel.app/convert/pdf-bank-statement-to-excel/)
-- [Maybank statement to Excel](https://extractmint.vercel.app/convert/maybank-bank-statement-to-excel/)
-- [Scanned bank statement to Excel](https://extractmint.vercel.app/convert/scanned-bank-statement-to-excel/)
-
+- [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
+- [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
+- [Maybank statement to Excel](https://extractmint.iangoh.com/convert/maybank-bank-statement-to-excel/)
+- [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)
