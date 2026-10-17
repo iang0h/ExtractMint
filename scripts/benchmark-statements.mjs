@@ -25,7 +25,7 @@ if (!globalThis.DOMMatrix) {
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const projectRoot = resolve(scriptDirectory, '..')
 const moneyFields = ['amount', 'withdrawal', 'deposit', 'balance']
-const scoredFields = ['date', 'description', ...moneyFields]
+const scoredFields = ['date', 'description', 'reference', ...moneyFields, 'tax']
 const disclaimer =
   'Synthetic digital-PDF fixtures only. These scores do not represent real-bank coverage, scanned-PDF/OCR performance, or production accuracy.'
 
@@ -107,7 +107,7 @@ function normalizeDate(value) {
 
   const slash = text.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
   if (slash) {
-    return `${slash[1].padStart(2, '0')}/${slash[2].padStart(2, '0')}/${slash[3]}`
+    return `${slash[3]}-${slash[2].padStart(2, '0')}-${slash[1].padStart(2, '0')}`
   }
 
   return text.toLocaleLowerCase('en-US').replace(/\s+/g, ' ')
@@ -208,6 +208,9 @@ function fieldValuesEqual(field, expected, actual) {
   if (actualValue === undefined || actualValue === null) return false
 
   if (field === 'date') return normalizeDate(expectedValue) === normalizeDate(actualValue)
+  if (field === 'reference') {
+    return normalizedReference(expectedValue) === normalizedReference(actualValue)
+  }
   if (field === 'description') {
     return String(expectedValue).trim().replace(/\s+/g, ' ') ===
       String(actualValue).trim().replace(/\s+/g, ' ')
