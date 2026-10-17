@@ -16,7 +16,7 @@ If an AI provider is configured for the agent, the question and context are forw
 
 ## Website analytics
 
-ExtractMint uses Vercel Web Analytics for page views and three fixed product events: `upload_started`, `conversion_completed`, and `export_started`. These events include no custom properties, so no filenames or statement contents are sent with them. Vercel describes Web Analytics as cookie-free and based on anonymized data.
+ExtractMint uses Vercel Web Analytics for page views and three fixed product events: `upload_started`, `conversion_completed`, and `export_started`. The synthetic example has three separate demo-only events: `sample_conversion_started`, `sample_conversion_completed`, and `sample_conversion_failed`. These demo-only events carry no properties. All six events include no custom properties, so no filenames or statement contents are sent with them. Vercel describes Web Analytics as cookie-free and based on anonymized data.
 
 ## What may be stored locally on my device?
 

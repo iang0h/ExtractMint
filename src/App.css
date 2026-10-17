@@ -2509,6 +2509,69 @@ footer strong {
   font-size: 12px;
 }
 
+.synthetic-sample-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 0 18px 18px;
+  padding: 12px 14px;
+  border: 1px solid #e8e6df;
+  border-radius: 10px;
+  background: #fafaf8;
+}
+
+.synthetic-sample-action strong {
+  color: #262624;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.synthetic-sample-action p {
+  margin: 3px 0 0;
+  color: #777772;
+  font-size: 12px;
+}
+
+.synthetic-sample-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.synthetic-sample-controls button {
+  padding: 8px 12px;
+  border: 1px solid #c7c5bd;
+  border-radius: 7px;
+  background: #fff;
+  color: #262624;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.synthetic-sample-controls button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.synthetic-sample-controls a {
+  color: #4c5c55;
+  font-size: 12px;
+  text-underline-offset: 2px;
+}
+
+.synthetic-sample-controls :is(button, a):focus-visible {
+  outline: 2px solid var(--mint-dark);
+  outline-offset: 3px;
+}
+
+.progress-panel strong {
+  color: #262624;
+}
+
 .summary-band {
   margin-top: 44px;
   border: 0;
@@ -2696,6 +2759,12 @@ footer strong {
 
   .dropzone strong {
     font-size: 18px;
+  }
+
+  .synthetic-sample-action {
+    align-items: flex-start;
+    flex-direction: column;
+    margin: 0 12px 18px;
   }
 
   .summary-band {
