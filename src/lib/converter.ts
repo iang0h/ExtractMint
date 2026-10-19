@@ -2287,12 +2287,25 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     const before = totalLine?.slice(0, matchIndex) ?? ''
     const openParen = before.lastIndexOf('(')
     const closeParen = before.lastIndexOf(')')
-    if (openParen <= closeParen) return false
-    const annotationPrefix = before.slice(openParen + 1)
-    const prefixWithoutRates = annotationPrefix.replace(/\b\d+(?:[.,]\d+)?\s*%\s*/g, '')
-    return inclusiveTaxQualifier.test(annotationPrefix)
-      && /\b(?:tax|vat|gst|sst)\b/i.test(annotationPrefix)
-      && !/[\d$€£]/.test(prefixWithoutRates)
+    const isParenthesized = openParen > closeParen
+    const annotationPrefix = isParenthesized ? before.slice(openParen + 1) : before
+    if (!inclusiveTaxQualifier.test(annotationPrefix)
+      || !/\b(?:tax|vat|gst|sst)\b/i.test(annotationPrefix)) return false
+    if (isParenthesized) {
+      const prefixWithoutRates = annotationPrefix.replace(/\b\d+(?:[.,]\d+)?\s*%\s*/g, '')
+      return !/[\d$€£]/.test(prefixWithoutRates)
+    }
+
+    const qualifier = inclusiveTaxQualifier.exec(annotationPrefix)
+    if (!qualifier) return false
+    const qualifierEnd = qualifier.index + qualifier[0].length
+    const beforeQualifier = annotationPrefix.slice(0, qualifier.index)
+    const hasPayableAmountBeforeQualifier = eligibleTotalMatches.some((candidate) => {
+      const candidateEnd = (candidate.index ?? 0) + candidate[0].length
+      return candidateEnd <= beforeQualifier.length
+    })
+    const afterQualifier = annotationPrefix.slice(qualifierEnd).replace(/\b\d+(?:[.,]\d+)?\s*%\s*/g, '')
+    return hasPayableAmountBeforeQualifier && !/[\d$€£]/.test(afterQualifier)
   }
   const payableLabelMatch = totalLine?.match(selectedPayableLabel ?? /\b(?:balance\s+due|grand\s+total|amount\s+due|total\s+paid|amount\s+paid|total)\b/i)
   const payableLabelEnd = payableLabelMatch ? (payableLabelMatch.index ?? 0) + payableLabelMatch[0].length : 0
