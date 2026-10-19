@@ -73,7 +73,7 @@ export type ConversionResult = {
   summary: {
     title: string
     documentKind: string
-    total: number
+    total?: number
     vendor?: string
     notes: string[]
   }
@@ -1170,7 +1170,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
     fileMeta,
     rawText: '',
     rows,
-    confidence: asFiniteNumber(payload.confidence) ?? Math.round(summary.total > 0 ? 84 : 0),
+    confidence: asFiniteNumber(payload.confidence) ?? Math.round((summary.total ?? 0) > 0 ? 84 : 0),
     validation,
     processedAt,
     summary,
@@ -1712,7 +1712,7 @@ function parseRawText(
     ? {
         title: fileName.replace(/\.[^.]+$/, '') || fileName,
         documentKind: 'Receipt',
-        total: fallbackRows[0]?.amount ?? 0,
+        total: fallbackRows[0]?.amount,
         vendor: fallbackRows[0]?.description === 'Receipt' ? undefined : fallbackRows[0]?.description,
         notes: fallbackRows[0]?.amount === undefined ? ['Receipt total not found; review required'] : [],
       }
@@ -2253,17 +2253,25 @@ function looksLikeReceipt(lines: string[], fileName: string) {
 }
 
 function parseReceipt(lines: string[], fileName: string, _currencyCode: string, currencyCodeDetected: boolean): ExtractedRow {
+  const normalizeLabel = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
   const dateLine = lines.find((line) => datePattern.test(line))
   const date = dateLine?.match(datePattern)?.[0]
   const labeledMerchantLine = lines.find((line) => /^\s*merchant\s*[:#-]\s*\S/i.test(line))
   const merchantLine = labeledMerchantLine ?? lines.find((line) => {
     const stripped = line.replace(datePattern, '').replace(amountPattern, '').trim()
+    if (/^\s*(?:date|time|payment)\s*$/i.test(line)) return false
     const metadataLine = /^\s*(?:date|time|invoice(?:\s*(?:no|number|#))?|receipt(?:\s*(?:no|number|#))?|(?:tax|vat|gst|sst)\s*(?:id|identification|number|no\.?|registration(?:\s+(?:id|number|no\.?))?)|(?:company\s+)?registration\s*(?:id|no\.?|number|#)?|taxpayer\s*(?:id|number)|tin|cashier|operator|terminal|pos|register|payment(?:\s+method)?|(?:credit|debit)?\s*card(?:\s+(?:number|no))?|cash|transaction\s*(?:id|no|number)|authorization\s*code|approval\s*code|reference\s*(?:no|number|#)?|phone|tel|email|address)(?!\w)\s*(?:[:#.-]\s*)?\S/i
     return stripped.length > 1 && stripped.length <= 80 && !metadataLine.test(line) && !/\b(receipt|invoice|subtotal|tax|vat|gst|sst|total|amount paid|amount due|thank you|change|cashier|merchant|pos)\b/i.test(stripped)
   })
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
-  const excludedTotalLabel = /\b(?:sub[\s-]*total|tax\s+total|total\s+tax|(?:vat|gst|sst)\s+total|total\s+(?:vat|gst|sst)|total\s+(?:(?:pre[\s-]?tax)|(?:before|excluding)[\s-]*tax)|(?:(?:pre[\s-]?tax)|(?:before|excluding)[\s-]*tax)\s+total|taxable\s+amount|(?:total\s+(?:savings?|discounts?)|(?:savings?|discounts?)\s+total|total\s+(?:discounted|items?|quantity|units?)))\b/i
-  const totalLines = lines.filter((line) => /\b(grand\s+total|total\s+paid|amount\s+paid|amount\s+due|balance\s+due|total)\b/i.test(line) && !excludedTotalLabel.test(line))
+  const excludedTotalLabel = /\b(?:sub total|tax total|total tax|(?:vat|gst|sst) total|total (?:vat|gst|sst)|total (?:pre tax|before tax|excluding tax|savings?|discounts?|discounted|items?|quantity|units?)|(?:pre tax|before tax|excluding tax) total|(?:savings?|discounts?) total|taxable amount)\b/
+  const totalLines = lines.filter((line) => {
+    const label = normalizeLabel(line)
+    const nonPayableQualifier = /\b(?:before|excluding|pre) tax\b/.test(label) || /\b(?:savings?|discounts?)\b/.test(label)
+    return /\b(grand total|total paid|amount paid|amount due|balance due|total)\b/.test(label)
+      && !excludedTotalLabel.test(label)
+      && !nonPayableQualifier
+  })
   const payablePriority = [/\bbalance\s+due\b/i, /\bgrand\s+total\b/i, /\bamount\s+due\b/i, /\btotal\s+paid\b/i, /\bamount\s+paid\b/i, /\btotal\b/i]
   const totalLine = payablePriority.map((label) => totalLines.find((line) => label.test(line))).find(Boolean) ?? totalLines[0]
   const totalAmountMatches = totalLine ? [...totalLine.matchAll(new RegExp(amountPattern.source, amountPattern.flags))] : []
@@ -2271,10 +2279,10 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     const suffix = totalLine?.slice((match.index ?? 0) + match[0].length) ?? ''
     return !/^\s*(?:\)?\s*%|%\s*\)?)/.test(suffix)
   }).at(-1)?.[0]
-  const taxMetadataLabel = /^\s*(?:tax|vat|gst|sst)\s*(?:id|identification|number|no\.?|registration(?:\s+(?:id|number|no\.?))?)\s*(?:[:#-]\s*)?\S/i
-  const nonTaxAmountLabel = /\b(?:sub[\s-]*total|total\s+(?:(?:pre[\s-]?tax)|(?:before|excluding)[\s-]*tax|(?:including|incl\.?|with|inclusive\s+of|included\s+in)\s+(?:tax|vat|gst|sst))|(?:tax|vat|gst|sst)\s+(?:included|inclusive)(?:\s+of)?|(?:before|excluding)[\s-]*tax\s+total|pre[\s-]?tax\s+total|taxable\s+amount|(?:tax|vat|gst|sst)\s+rate|rate\s+(?:of\s+)?(?:tax|vat|gst|sst))\b/i
+  const taxMetadataLabel = /\b(?:tax|vat|gst|sst)\b.{0,30}\b(?:id|identification|number|no|registration|registered)\b|\b(?:id|identification|number|registration|registered)\b.{0,30}\b(?:tax|vat|gst|sst)\b/i
+  const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
   const taxLabel = /\b(?:total\s+(?:tax|vat|gst|sst)|tax\s+total|(?:vat|gst|sst)\s+(?:amount|total)|(?:tax|vat|gst|sst)\s*(?:amount|:|#|-)|tax\s+[$€£]|(?:vat|gst|sst)\s+[$€£]|\b(?:vat|gst|sst)\b|\btax\b)/i
-  const taxLines = lines.filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(line) && !taxMetadataLabel.test(line) && !/^\s*(?:company\s+)?registration\s*(?:id|no\.?|number|#)?\s*(?:[:#-]\s*)?\S/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line))
+  const taxLines = lines.filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:incl(?:uding)?|inclusive)\b/i.test(line) && /\b(?:tax|vat|gst|sst)\b/i.test(line)) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
   const monetaryTaxLines = taxLines.filter((line) => {
     const amountMatches = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
     return amountMatches.some((match) => {
