@@ -2417,7 +2417,8 @@ function hasGenericStatementTable(lines: string[], fileName: string) {
 
 function hasStrongStatementEvidence(lines: string[], fileName: string) {
   const text = `${fileName}\n${lines.join('\n')}`
-  if (/\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account|statement[\s_-]+period|account[\s_-]+number|opening[\s_-]+balance|closing[\s_-]+balance|running[\s_-]+balance|transaction[\s_-]+history)\b/i.test(text)) return true
+  // Account-number metadata also occurs on receipts; it needs table/context evidence.
+  if (/\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account|statement[\s_-]+period|opening[\s_-]+balance|closing[\s_-]+balance|running[\s_-]+balance|transaction[\s_-]+history)\b/i.test(text)) return true
   const statementAmountHeader = /^(?:balance|debit|credit|withdrawals?|deposits?)(?:\s+(?:baki|pengeluaran|deposit))?(?:\s*\([^)]*\))?$/i
   const statementDetailHeader = /^(?:date|description|ref(?:erence)?)(?:\s+(?:tarikh|diskripsi|no))?$/i
   if (lines.some((line) => {
@@ -2429,7 +2430,23 @@ function hasStrongStatementEvidence(lines: string[], fileName: string) {
   if (lines.some((line) => /\bdate\b/i.test(line) && /\b(?:description|reference)\b/i.test(line)
     && /\b(?:balance|debit|credit|withdrawals?|deposits?)\b/i.test(line))) return true
   const runningBalancePattern = lines.some((line) => datePattern.test(line) && (line.match(amountPattern)?.length ?? 0) >= 2 && /\b(balance|debit|credit|withdrawal|deposit)\b/i.test(line))
-  return runningBalancePattern
+  if (runningBalancePattern) return true
+  // Repeated date/description/amount/balance rows identify headerless statements.
+  // A single dated receipt total, or separate undated tax lines, cannot satisfy this.
+  return lines.filter((line) => {
+    const text = line.trim()
+    const date = text.match(datePattern)
+    if (!date || date.index !== 0) return false
+    const detail = text.slice(date[0].length).trim()
+    const amounts = [...detail.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
+    if (amounts.length !== 2) return false
+    const [amount, balance] = amounts
+    const amountEnd = (amount.index ?? 0) + amount[0].length
+    const balanceEnd = (balance.index ?? 0) + balance[0].length
+    return /[a-z]/i.test(detail.slice(0, amount.index))
+      && /^[\s|]*(?:(?:[A-Z]{3}|RM)\s*)?$/i.test(detail.slice(amountEnd, balance.index))
+      && detail.slice(balanceEnd).trim() === ''
+  }).length >= 2
 }
 
 function looksLikeReceipt(lines: string[], fileName: string) {
@@ -2446,10 +2463,43 @@ function looksLikeReceipt(lines: string[], fileName: string) {
   })
 }
 
+function selectReceiptDate(lines: string[]) {
+  const nonExpenseDate = /\b(?:valid(?:ity)?|exp(?:iry|iration|ires?)?|best\s+before|use\s+by)\b/i
+  const expenseDateLabel = /\b(?:(?:receipt|transaction|purchase|sale)\s+date|date\s+of\s+(?:receipt|transaction|purchase|sale)|purchased\s+on)\s*[:#-]?\s*$/i
+  const genericDateLabel = /^\s*date(?:\s*[/&]\s*time)?\s*[:#-]?\s*$/i
+  const labeled: { date: string; priority: number }[] = []
+  const fallback = new Set<string>()
+  for (const [lineIndex, line] of lines.entries()) {
+    const matches = [...line.matchAll(new RegExp(datePattern.source, 'gi'))]
+    matches.forEach((match, index) => {
+      const date = match[0]
+      if (!parseDateToIso(date)) return
+      const start = match.index ?? 0
+      const previous = matches[index - 1]
+      const inlinePrefix = line.slice(previous ? (previous.index ?? 0) + previous[0].length : 0, start)
+      const precedingLine = lines[lineIndex - 1] ?? ''
+      const splitLabel = !datePattern.test(precedingLine)
+        && (expenseDateLabel.test(precedingLine) || genericDateLabel.test(precedingLine) || nonExpenseDate.test(precedingLine))
+      const prefix = inlinePrefix.trim() === '' && splitLabel ? precedingLine : inlinePrefix
+      // Bind inline or OCR-split labels to their following date, so expiry cannot win.
+      if (nonExpenseDate.test(prefix)) return
+      if (expenseDateLabel.test(prefix)) labeled.push({ date, priority: 2 })
+      else if (genericDateLabel.test(prefix)) labeled.push({ date, priority: 1 })
+      else if (!nonExpenseDate.test(line) && matches.length === 1 && prefix.trim() === '') {
+        const suffix = line.slice(start + date.length).trim()
+        if (/^(?:[T, -]*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?)?$/i.test(suffix)) fallback.add(date)
+      }
+    })
+  }
+  const priority = Math.max(0, ...labeled.map((candidate) => candidate.priority))
+  const preferred = new Set(labeled.filter((candidate) => candidate.priority === priority).map((candidate) => candidate.date))
+  if (preferred.size > 0) return preferred.size === 1 ? [...preferred][0] : undefined
+  return fallback.size === 1 ? [...fallback][0] : undefined
+}
+
 function parseReceipt(lines: string[], fileName: string, _currencyCode: string, currencyCodeDetected: boolean): ExtractedRow {
   const normalizeLabel = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
-  const dateLine = lines.find((line) => datePattern.test(line))
-  const date = dateLine?.match(datePattern)?.[0]
+  const date = selectReceiptDate(lines)
   const labeledMerchantLine = lines.find((line) => /^\s*merchant\s*[:#-]\s*\S/i.test(line))
   const merchantLine = labeledMerchantLine ?? lines.find((line) => {
     const stripped = line.replace(datePattern, '').replace(amountPattern, '').trim()
@@ -2512,8 +2562,16 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
       && !nonPayableQualifier
   })
   const payablePriority = [/\bamount\s+paid\b/i, /\btotal\s+paid\b/i, /\bgrand\s+total\b/i, /\btotal\b/i, /\bamount\s+due\b/i, /\bbalance\s+due\b/i]
-  const selectedPayableLabel = payablePriority.find((label) => totalLines.some(({ text }) => label.test(text)))
-  const totalSegment = (selectedPayableLabel ? totalLines.find(({ text }) => selectedPayableLabel.test(text)) : undefined) ?? totalLines[0]
+  const hasOwnedPayableAmount = (line: string, label: RegExp) => {
+    const amounts = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))].filter((match) =>
+      !/^\s*(?:\)?\s*%|%\s*\)?)/.test(line.slice((match.index ?? 0) + match[0].length)))
+    return amountsInLabelSegment(line, line.match(label), amounts).length > 0
+  }
+  // Rank only labels that own a monetary amount; e.g. Total Sales Tax owns none.
+  const selectedPayableLabel = payablePriority.find((label) => totalLines.some(({ text }) => hasOwnedPayableAmount(text, label)))
+  const totalSegment = selectedPayableLabel
+    ? totalLines.find(({ text }) => hasOwnedPayableAmount(text, selectedPayableLabel))
+    : undefined
   const totalLine = totalSegment?.text
   const totalAmountMatches = totalLine ? [...totalLine.matchAll(new RegExp(amountPattern.source, amountPattern.flags))] : []
   const eligibleTotalMatches = totalAmountMatches.filter((match) => {
