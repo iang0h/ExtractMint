@@ -461,7 +461,6 @@ h3 {
   border-radius: 14px;
   border: 1px solid rgba(16, 32, 41, 0.12);
   background: rgba(255, 255, 255, 0.92);
-  overflow: hidden;
 }
 
 .privacy-panel summary {
@@ -2761,14 +2760,19 @@ footer strong {
 .review-pack-source-option {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
+  min-height: 42px;
+  padding: 13px 0;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.35;
+  cursor: pointer;
 }
 
 .review-pack-source-option input {
-  flex: 0 0 auto;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
   margin: 1px 0 0;
 }
 
