@@ -2265,7 +2265,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   })
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
   const taxQualifier = /\b(?:before|excluding|excl|pre)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/
-  const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/
+  const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/i
   const excludedTotalLabel = /\b(?:sub total|tax total|total tax|(?:vat|gst|sst) total|total (?:vat|gst|sst)|total (?:pre tax|before tax|excluding tax|savings?|discounts?|discounted|items?|quantity|units?)|(?:pre tax|before tax|excluding tax) total|(?:savings?|discounts?) total|taxable amount)\b/
   const totalLines = lines.filter((line) => {
     const label = normalizeLabel(line)
@@ -2329,7 +2329,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     const suffix = taxLine?.slice((match.index ?? 0) + match[0].length) ?? ''
     return !/^\s*(?:\)?\s*%|%\s*\)?)/.test(suffix)
   }).at(-1)?.[0]
-  const inlineTaxMatch = totalAmountMatches.find((match) => inlineTaxAnnotationAmount(match))
+  const inlineTaxMatch = eligibleTotalMatches.find((match) => inlineTaxAnnotationAmount(match))
   const categorySource = `${merchant ?? ''} ${lines.join(' ')}`.toLowerCase()
   let category = 'Uncategorized'
   if (/\b(cafe|coffee|restaurant|food|grocery|market|bakery)\b/.test(categorySource)) category = 'Meals'
@@ -2340,8 +2340,8 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   return {
     date,
     description: merchant || 'Receipt',
-    amount: totalMatch ? parseAmount(totalMatch) : undefined,
-    tax: taxMatch ? parseAmount(taxMatch) : inlineTaxMatch ? parseAmount(inlineTaxMatch) : undefined,
+    amount: totalMatch ? parseAmount(totalMatch[0]) : undefined,
+    tax: taxMatch ? parseAmount(taxMatch) : inlineTaxMatch ? parseAmount(inlineTaxMatch[0]) : undefined,
     category,
     confidence: Math.max(20, Math.min(96, 96 - [date, merchant, totalMatch, currencyCodeDetected].filter((value) => !value).length * 16)),
     source: totalLine ? `Line ${lines.indexOf(totalLine) + 1}` : fileName || 'Receipt text',
