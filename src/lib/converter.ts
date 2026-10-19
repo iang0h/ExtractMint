@@ -1793,8 +1793,9 @@ function parseRawText(
     .filter((line) => line.replace(/\t/g, '').trim())
 
   const structuredRows = parseStatementTable(lines)
+  const genericStatementTable = structuredRows.length === 0 && hasGenericStatementTable(lines, fileName)
   const currency = detectCurrencyCode(normalized, fileName)
-  const receipt = structuredRows.length === 0 && looksLikeReceipt(lines, fileName)
+  const receipt = structuredRows.length === 0 && !genericStatementTable && looksLikeReceipt(lines, fileName)
   const rows = structuredRows.length > 0
     ? structuredRows
     : receipt
@@ -1816,7 +1817,7 @@ function parseRawText(
       }
     : {
         ...summarize(lines, fallbackRows, fileName, validation),
-        ...(structuredRows.length > 0 ? { documentKind: 'Statement' } : {}),
+        ...(structuredRows.length > 0 || genericStatementTable ? { documentKind: 'Statement' } : {}),
       }
   const confidence = receipt
     ? fallbackRows[0]?.confidence ?? 0
@@ -2342,6 +2343,30 @@ function detectCurrencyCode(rawText: string, fileName: string): { code: string; 
   if (/\bcad\b/.test(combined) || combined.includes('c$')) return { code: 'CAD', detected: true }
   if (/\busd\b|\$/.test(combined)) return { code: 'USD', detected: true }
   return { code: 'USD', detected: false }
+}
+
+function hasGenericStatementTable(lines: string[], fileName: string) {
+  const text = `${fileName}\n${lines.join('\n')}`
+  const statementContext = /\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account)\b/i.test(text)
+  return lines.some((line, headerIndex) => {
+    if (!line.includes('\t')) return false
+    const headers = line.split('\t').map((column) => column.trim())
+    const dateIndex = headers.findIndex((column) => /^date$/i.test(column))
+    const descriptionIndex = headers.findIndex((column) => /^description$/i.test(column))
+    const amountIndex = headers.findIndex((column) => /^amount(?:\s*\([^)]*\))?$/i.test(column))
+    if (dateIndex < 0 || descriptionIndex < 0 || amountIndex < 0) return false
+    if (statementContext) return true
+
+    // A receipt's tabbed date metadata is not a table of dated transactions.
+    const transactionRows = lines.slice(headerIndex + 1).filter((row) => {
+      const columns = row.split('\t').map((column) => column.trim())
+      const dateCell = columns[dateIndex] ?? ''
+      return dateCell !== '' && dateCell.match(datePattern)?.[0] === dateCell
+        && Boolean(columns[descriptionIndex])
+        && parseMoneyCell(columns[amountIndex] ?? '') !== undefined
+    })
+    return transactionRows.length >= 2
+  })
 }
 
 function looksLikeReceipt(lines: string[], fileName: string) {
