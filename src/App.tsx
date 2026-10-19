@@ -133,6 +133,27 @@ const exportSanitySnapshot = (result: ConversionResult): ExportSanitySnapshot =>
   }
 }
 
+const receiptCurrencies = ['USD', 'MYR', 'SGD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD']
+
+function receiptReviewFields(result: ConversionResult, row: ConversionResult['rows'][number]) {
+  const missing = [
+    !row.date && 'Date',
+    !row.description.trim() && 'Merchant',
+    row.amount === undefined && 'Total',
+    row.tax === undefined && 'Tax',
+    result.currencyCodeDetected !== true && 'Currency',
+    (!row.category || row.category === 'Uncategorized') && 'Category',
+  ].filter((field): field is string => Boolean(field))
+  return missing
+}
+
+function receiptAmount(value: number | undefined, result: ConversionResult) {
+  if (value === undefined) return 'Not found'
+  return result.currencyCodeDetected === true
+    ? formatAmount(value, result.currencyCode)
+    : new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value)
+}
+
 const supportItems = [
   { icon: FileText, label: 'PDF statements' },
   { icon: ReceiptText, label: 'Receipts' },
@@ -423,6 +444,8 @@ function App() {
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null)
   const [pdfThumbUrls, setPdfThumbUrls] = useState<Record<string, string>>({})
   const [pdfThumbStatus, setPdfThumbStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [imageSources, setImageSources] = useState<Record<string, Blob>>({})
+  const [receiptImage, setReceiptImage] = useState<{ source: Blob; url: string } | null>(null)
   const [pdfUrlsBySha, setPdfUrlsBySha] = useState<Record<string, string>>({})
   const pdfUrlRef = useRef<Record<string, string>>({})
   const pdfDocumentsRef = useRef(new Map<string, CachedPdfDocumentProxy>())
@@ -479,6 +502,7 @@ function App() {
   }
 
   const activeResult = results[activeIndex] ?? results[0]
+  const isReceipt = activeResult?.summary.documentKind === 'Receipt'
   const showProgressPanel =
     isProcessing || progress.stage === 'error' || progress.detail === 'Conversion canceled'
   const activeSha = activeResult?.fileMeta?.sha256
@@ -486,6 +510,21 @@ function App() {
   const activePdfSignature = activeResult
     ? fileSignatureParts(activeResult.fileName, activeResult.fileMeta.size, activeResult.fileMeta.lastModified)
     : undefined
+  const activeImageSource = isReceipt
+    ? imageSources[activeSha ?? ''] ?? imageSources[activePdfSignature ?? '']
+    : undefined
+  const activeImageUrl = receiptImage?.source === activeImageSource ? receiptImage?.url : undefined
+
+  useEffect(() => {
+    if (!activeImageSource) {
+      setReceiptImage(null)
+      return
+    }
+    const url = URL.createObjectURL(activeImageSource)
+    setReceiptImage({ source: activeImageSource, url })
+    return () => URL.revokeObjectURL(url)
+  }, [activeImageSource])
+
   const supportMailtoHref = useMemo(() => {
     if (!supportEmail) return null
     const subject = 'ExtractMint support request'
@@ -551,7 +590,7 @@ function App() {
     [pdfHighlightQueries],
   )
   const agentContext = useMemo(() => {
-    if (!activeResult) return null
+    if (!activeResult || activeResult.summary.documentKind === 'Receipt') return null
     return {
       fileName: activeResult.fileName,
       documentKind: activeResult.summary.documentKind,
@@ -902,6 +941,8 @@ function App() {
       | 'withdrawal'
       | 'deposit'
       | 'amount'
+      | 'tax'
+      | 'category'
       | 'balance',
     rawValue: string,
   ) => {
@@ -917,7 +958,7 @@ function App() {
       if (field === 'date') {
         nextRow.date = rawValue.trim() ? rawValue.trim() : undefined
       } else if (field === 'description') {
-        nextRow.description = rawValue.trim() || nextRow.description
+        nextRow.description = target.summary.documentKind === 'Receipt' ? rawValue.trim() : rawValue.trim() || nextRow.description
       } else if (field === 'reference') {
         nextRow.reference = rawValue.trim() ? rawValue.trim() : undefined
       } else if (field === 'withdrawal') {
@@ -935,17 +976,30 @@ function App() {
           nextRow.amount = Math.abs(nextRow.deposit)
         }
       } else if (field === 'amount') {
-        const parsed = parseMoneyInput(rawValue)
+        const parsed = target.summary.documentKind === 'Receipt' && !/\d/.test(rawValue) ? undefined : parseMoneyInput(rawValue)
         nextRow.amount = parsed
         if (parsed !== undefined) {
           nextRow.withdrawal = undefined
           nextRow.deposit = undefined
         }
+      } else if (field === 'tax') {
+        nextRow.tax = /\d/.test(rawValue) ? parseMoneyInput(rawValue) : undefined
+      } else if (field === 'category') {
+        nextRow.category = rawValue.trim()
       } else if (field === 'balance') {
         nextRow.balance = parseMoneyInput(rawValue)
       }
 
       nextRows[rowIndex] = nextRow
+
+      if (target.summary.documentKind === 'Receipt') {
+        const nextResults = [...previous]
+        nextResults[resultIndex] = {
+          ...target, rows: nextRows,
+          summary: { ...target.summary, vendor: nextRows[0]?.description || undefined, total: nextRows[0]?.amount },
+        }
+        return nextResults
+      }
 
       const converter = getConverterIfLoaded()
       const nextValidation = converter
@@ -964,12 +1018,22 @@ function App() {
     })
   }
 
+  const updateReceiptCurrency = (value: string) => {
+    if (value && !receiptCurrencies.includes(value)) return
+    setResults((previous) => previous.map((result, index) =>
+      index === activeIndex && result.summary.documentKind === 'Receipt'
+        ? { ...result, currencyCode: value || 'USD', currencyCodeDetected: Boolean(value) }
+        : result,
+    ))
+  }
+
   const visibleRows = useMemo(() => {
     const result = activeResult
     if (!result) return []
     const indexed = result.rows.map((row, index) => ({ row, index }))
     const filteredIssues = onlyIssues
-      ? indexed.filter(({ index }) => {
+      ? indexed.filter(({ row, index }) => {
+          if (result.summary.documentKind === 'Receipt') return receiptReviewFields(result, row).length > 0 || rowConfidencePercent(row.confidence) < 85
           const review = rowReview(result.validation, index)
           return review.status === 'Review' || review.status === 'Check'
         })
@@ -1077,7 +1141,11 @@ function App() {
       return !name.endsWith('.extractmint-review.json') && !name.endsWith('.zip')
     })
 
+    const nextImageSources: Record<string, Blob> = {}
     normalFiles.forEach((file) => {
+      if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(file.name)) {
+        nextImageSources[fileSignatureParts(file.name, file.size, file.lastModified)] = file
+      }
       if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         const sig = fileSignatureParts(file.name, file.size, file.lastModified)
         if (!signatureUrls[sig]) {
@@ -1105,6 +1173,10 @@ function App() {
           imported.push(...bundle.results)
           const sources = bundle.sourcesBySha
           const sourceShas = Object.keys(sources)
+          for (const sha of sourceShas) {
+            const image = sources[sha]
+            if (image && (image.mimeType.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(image.fileName))) nextImageSources[sha] = image.blob
+          }
           if (sourceShas.length > 0) {
             setPdfUrlsBySha((previous) => {
               const next: Record<string, string> = { ...previous }
@@ -1205,6 +1277,7 @@ function App() {
       }
 
       const combined = [...imported, ...converted]
+      setImageSources(nextImageSources)
       if (source === 'sample' && combined.length === 0) throw new Error('The synthetic sample produced no results.')
       if (combined.length === 0) return
       if (source === 'upload' && converted.length > 0) {
@@ -1542,7 +1615,7 @@ function App() {
 
   const askAgent = async () => {
     const question = agentQuestion.trim()
-    if (!question || isAgentThinking) return
+    if (activeResult?.summary.documentKind === 'Receipt' || !question || isAgentThinking) return
 
     setAgentMessages((previous) => [...previous, { role: 'user', content: question }])
     setAgentQuestion('')
@@ -1811,7 +1884,7 @@ function App() {
               </div>
             ) : null}
 
-            {activeResult && !isProcessing ? (
+            {activeResult && !isReceipt && !isProcessing ? (
               <div className="export-sanity" aria-label="Export sanity checks">
                 {(() => {
                   const snapshot = exportSanitySnapshot(activeResult)
@@ -2219,6 +2292,18 @@ function App() {
                     {activeResult?.confidence ?? 0}% match
                   </div>
                 </div>
+                {isReceipt && activeResult ? (
+                  <div className="summary-cards receipt-summary">
+                    {[
+                      ['Merchant', activeResult.rows[0]?.description || 'Not found'],
+                      ['Date', activeResult.rows[0]?.date || 'Not found'],
+                      ['Total', receiptAmount(activeResult.summary.total, activeResult)],
+                      ['Tax', receiptAmount(activeResult.rows[0]?.tax, activeResult)],
+                      ['Currency', activeResult.currencyCodeDetected === true ? activeResult.currencyCode : 'Confirm currency'],
+                      ['Category', activeResult.rows[0]?.category || 'Not found'],
+                    ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+                  </div>
+                ) : (
                 <div className="summary-cards">
                   <div>
                     <span>Total detected</span>
@@ -2243,10 +2328,11 @@ function App() {
                     <small>{validationDescription(activeResult?.validation)}</small>
                   </div>
                 </div>
+                )}
 
                 <div
                   className={
-                    showSourcePreview && activeResult?.fileType === 'application/pdf' ? 'review-split' : undefined
+                    (isReceipt && activeImageSource) || (showSourcePreview && activeResult?.fileType === 'application/pdf') ? 'review-split' : undefined
                   }
                 >
                   <div className="table-wrap">
@@ -2343,13 +2429,60 @@ function App() {
                         </label>
                       ) : null}
                       <span className="table-hint">
-                        {editRows
+                        {isReceipt
+                          ? 'Review missing fields and compare values with the original receipt. Edits stay in this browser.'
+                          : editRows
                           ? 'Edits instantly re-check the running balance trail.'
                           : activeResult?.fileType === 'application/pdf' && !showSourcePreview
                             ? 'Tip: enable “Show source PDF” to audit rows faster.'
                             : 'Click a row to jump to the most likely page.'}
                       </span>
                     </div>
+                    {isReceipt && activeResult ? (
+                      <table className="receipt-table">
+                        <thead><tr>{['Date', 'Merchant', 'Total', 'Tax', 'Currency', 'Category', 'Review'].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
+                        <tbody>
+                          {visibleRows.map(({ row, index }) => {
+                            const missing = receiptReviewFields(activeResult, row)
+                            const lowConfidence = rowConfidencePercent(row.confidence) < 85
+                            const fields = [
+                              ['Date', 'date', row.date],
+                              ['Merchant', 'description', row.description],
+                              ['Total', 'amount', row.amount],
+                              ['Tax', 'tax', row.tax],
+                              ['Category', 'category', row.category],
+                            ] as const
+                            const fieldCell = ([label, field, value]: typeof fields[number]) => (
+                              <td key={field} data-label={label} className={missing.includes(label) || lowConfidence ? 'receipt-field-review' : undefined}>
+                                {editRows ? <input
+                                  key={`${activeIndex}-${index}-${field}-${String(value ?? '')}`}
+                                  aria-label={`Receipt ${index + 1} ${label}`}
+                                  defaultValue={value ?? ''}
+                                  inputMode={field === 'amount' || field === 'tax' ? 'decimal' : undefined}
+                                  onBlur={(event) => updateRow(activeIndex, index, field, event.target.value)}
+                                /> : <span>{typeof value === 'number' ? receiptAmount(value, activeResult) : value || <span className="receipt-blank" aria-label={`${label} not found`}>—</span>}</span>}
+                                {missing.includes(label) ? <small>Review: {label === 'Category' ? 'confirm category' : 'not found'}</small> : lowConfidence ? <small>Review: low confidence</small> : null}
+                              </td>
+                            )
+                            return <tr key={`${activeIndex}-${index}`} onClick={() => {
+                              setSelectedRowIndex(index)
+                              setPdfPage(bestMatchingPage(activePages, row))
+                            }}>
+                              {fields.slice(0, 4).map(fieldCell)}
+                              <td data-label="Currency" className={activeResult.currencyCodeDetected !== true || lowConfidence ? 'receipt-field-review' : undefined}>
+                                <select aria-label={`Receipt ${index + 1} currency`} value={activeResult.currencyCodeDetected === true ? activeResult.currencyCode : ''} onChange={(event) => updateReceiptCurrency(event.target.value)}>
+                                  <option value="">Confirm currency</option>
+                                  {Array.from(new Set([...receiptCurrencies, ...(activeResult.currencyCodeDetected === true ? [activeResult.currencyCode] : [])])).map((code) => <option key={code} value={code}>{code}</option>)}
+                                </select>
+                                {activeResult.currencyCodeDetected !== true ? <small>Review: confirm currency</small> : lowConfidence ? <small>Review: low confidence</small> : null}
+                              </td>
+                              {fields.slice(4).map(fieldCell)}
+                              <td data-label="Review"><span className={`review-pill ${missing.length || lowConfidence ? 'review' : 'check'}`}>{missing.length || lowConfidence ? 'Review' : 'Check source'}</span><small>{rowConfidencePercent(row.confidence)}% confidence</small></td>
+                            </tr>
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
                     <table>
                       <thead>
                         <tr>
@@ -2478,7 +2611,15 @@ function App() {
                         })}
                       </tbody>
                     </table>
+                    )}
                   </div>
+
+                  {isReceipt && activeImageSource && activeResult ? (
+                    <aside className="source-preview receipt-source" aria-label="Source receipt image preview">
+                      <div className="source-header"><div><span>Source receipt</span><strong>{activeResult.fileName}</strong></div></div>
+                      {activeImageUrl ? <img src={activeImageUrl} alt={`Original receipt: ${activeResult.fileName}`} /> : <p>Loading receipt preview…</p>}
+                    </aside>
+                  ) : null}
 
                   {showSourcePreview && activeResult?.fileType === 'application/pdf' ? (
                     <aside className="source-preview" aria-label="Source PDF preview">
@@ -2756,6 +2897,7 @@ function App() {
         </div>
       </section>
 
+      {!isReceipt ? (
       <section className="agent-section" id="agent">
         <div className="section-heading">
           <span className="eyebrow">Ask ExtractMint</span>
@@ -2822,6 +2964,8 @@ function App() {
           </div>
         </div>
       </section>
+
+      ) : null}
 
       <section className="faq-section" id="faq">
         <div className="section-heading">
