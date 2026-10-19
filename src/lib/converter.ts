@@ -54,6 +54,7 @@ export type ConversionResult = {
   fileName: string
   fileType: string
   currencyCode: string
+  currencyCodeDetected?: boolean
   statementPeriod?: {
     start?: string
     end?: string
@@ -907,6 +908,9 @@ export function createReviewJsonBlob(result: ConversionResult) {
     fileName: result.fileName,
     fileType: result.fileType,
     currencyCode: result.currencyCode,
+    ...(result.summary.documentKind === 'Receipt'
+      ? { currencyCodeDetected: result.currencyCodeDetected ?? false }
+      : {}),
     statementPeriod: result.statementPeriod,
     fileMeta: result.fileMeta,
     processedAt: result.processedAt,
@@ -1100,6 +1104,9 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   const fileName = asString(payload.fileName) ?? file.name
   const fileType = asString(payload.fileType) ?? 'application/json'
   const currencyCode = asString(payload.currencyCode) ?? 'USD'
+  const currencyCodeDetected = typeof payload.currencyCodeDetected === 'boolean'
+    ? payload.currencyCodeDetected
+    : undefined
   const processedAt = asString(payload.processedAt) ?? asString(payload.createdAt) ?? new Date().toISOString()
 
   const summary =
@@ -1158,6 +1165,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
     fileName,
     fileType,
     currencyCode,
+    currencyCodeDetected,
     statementPeriod,
     fileMeta,
     rawText: '',
@@ -1687,21 +1695,37 @@ function parseRawText(
     .filter((line) => line.replace(/\t/g, '').trim())
 
   const structuredRows = parseStatementTable(lines)
-  const rows =
-    structuredRows.length > 0
-      ? structuredRows
+  const currency = detectCurrencyCode(normalized, fileName)
+  const receipt = structuredRows.length === 0 && looksLikeReceipt(lines, fileName)
+  const rows = structuredRows.length > 0
+    ? structuredRows
+    : receipt
+      ? [parseReceipt(lines, fileName, currency.code, currency.detected)]
       : lines.flatMap((line, index) => parseLine(line, index + 1))
   const fallbackRows = rows.length > 0 ? rows : buildFallbackRows(lines)
-  const statementPeriod = detectStatementPeriod(lines, fallbackRows)
-  const currencyCode = detectCurrencyCode(normalized, fileName)
-  const validation = validateBalances(fallbackRows, currencyCode)
-  const summary = summarize(lines, fallbackRows, fileName, validation)
-  const confidence = scoreConfidence(fileType, fallbackRows, normalized, validation)
+  const statementPeriod = receipt ? undefined : detectStatementPeriod(lines, fallbackRows)
+  const currencyCode = currency.code
+  const validation = receipt
+    ? { status: 'missing' as const, checkedRows: 0, issueCount: 0, issues: [] }
+    : validateBalances(fallbackRows, currencyCode)
+  const summary = receipt
+    ? {
+        title: fileName.replace(/\.[^.]+$/, '') || fileName,
+        documentKind: 'Receipt',
+        total: fallbackRows[0]?.amount ?? 0,
+        vendor: fallbackRows[0]?.description === 'Receipt' ? undefined : fallbackRows[0]?.description,
+        notes: fallbackRows[0]?.amount === undefined ? ['Receipt total not found; review required'] : [],
+      }
+    : summarize(lines, fallbackRows, fileName, validation)
+  const confidence = receipt
+    ? fallbackRows[0]?.confidence ?? 0
+    : scoreConfidence(fileType, fallbackRows, normalized, validation)
 
   return {
     fileName,
     fileType,
     currencyCode,
+    currencyCodeDetected: currency.detected,
     statementPeriod,
     fileMeta,
     rawText: normalized,
@@ -2206,17 +2230,58 @@ function money(value?: number, currencyCode = 'USD') {
   }).format(value)
 }
 
-function detectCurrencyCode(rawText: string, fileName: string) {
+function detectCurrencyCode(rawText: string, fileName: string): { code: string; detected: boolean } {
   const combined = `${fileName}\n${rawText}`.toLowerCase()
-  if (/\bmyr\b|\brm\b/.test(combined) || combined.includes('rm ')) return 'MYR'
-  if (/\bsgd\b/.test(combined) || combined.includes('s$')) return 'SGD'
-  if (/\beur\b|€/.test(combined)) return 'EUR'
-  if (/\bgbp\b|£/.test(combined)) return 'GBP'
-  if (/\bjpy\b|¥/.test(combined)) return 'JPY'
-  if (/\baud\b/.test(combined) || combined.includes('a$')) return 'AUD'
-  if (/\bcad\b/.test(combined) || combined.includes('c$')) return 'CAD'
-  if (/\busd\b|\$/.test(combined)) return 'USD'
-  return 'USD'
+  if (/\bmyr\b|\brm\b/.test(combined) || combined.includes('rm ')) return { code: 'MYR', detected: true }
+  if (/\bsgd\b/.test(combined) || combined.includes('s$')) return { code: 'SGD', detected: true }
+  if (/\beur\b|€/.test(combined)) return { code: 'EUR', detected: true }
+  if (/\bgbp\b|£/.test(combined)) return { code: 'GBP', detected: true }
+  if (/\bjpy\b|¥/.test(combined)) return { code: 'JPY', detected: true }
+  if (/\baud\b/.test(combined) || combined.includes('a$')) return { code: 'AUD', detected: true }
+  if (/\bcad\b/.test(combined) || combined.includes('c$')) return { code: 'CAD', detected: true }
+  if (/\busd\b|\$/.test(combined)) return { code: 'USD', detected: true }
+  return { code: 'USD', detected: false }
+}
+
+function looksLikeReceipt(lines: string[], fileName: string) {
+  const text = `${fileName}\n${lines.join('\n')}`
+  if (/\b(statement period|account number|opening balance|closing balance|running balance|transaction history)\b/i.test(text)) return false
+  if (lines.some((line) => line.includes('\t') && /\b(date|description|withdrawal|deposit|balance)\b/i.test(line))) return false
+  const runningBalancePattern = lines.some((line) => datePattern.test(line) && (line.match(amountPattern)?.length ?? 0) >= 2 && /\b(balance|debit|credit|withdrawal|deposit)\b/i.test(line))
+  if (runningBalancePattern) return false
+  return /\b(subtotal|tax|vat|gst|sst|total\s+paid|amount\s+paid|grand\s+total|merchant|pos|receipt|amount\s+due)\b/i.test(text)
+}
+
+function parseReceipt(lines: string[], fileName: string, _currencyCode: string, currencyCodeDetected: boolean): ExtractedRow {
+  const dateLine = lines.find((line) => datePattern.test(line))
+  const date = dateLine?.match(datePattern)?.[0]
+  const labeledMerchantLine = lines.find((line) => /^\s*merchant\s*[:#-]\s*\S/i.test(line))
+  const merchantLine = labeledMerchantLine ?? lines.find((line) => {
+    const stripped = line.replace(datePattern, '').replace(amountPattern, '').trim()
+    return stripped.length > 1 && stripped.length <= 80 && !/\b(receipt|invoice|subtotal|tax|vat|gst|sst|total|amount paid|amount due|thank you|change|cashier|merchant|pos)\b/i.test(stripped)
+  })
+  const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
+  const totalLines = lines.filter((line) => /\b(grand\s+total|total\s+paid|amount\s+paid|amount\s+due|balance\s+due|total)\b/i.test(line) && !/\b(subtotal|tax total)\b/i.test(line))
+  const totalLine = totalLines.find((line) => /\b(grand\s+total|total\s+paid|amount\s+paid)\b/i.test(line)) ?? totalLines[0]
+  const totalMatch = totalLine?.match(amountPattern)?.at(-1)
+  const taxLine = lines.find((line) => /\b(tax|vat|gst|sst)\b/i.test(line) && !/\b(subtotal|tax invoice)\b/i.test(line))
+  const taxMatch = taxLine?.match(amountPattern)?.at(-1)
+  const categorySource = `${merchant ?? ''} ${lines.join(' ')}`.toLowerCase()
+  let category = 'Uncategorized'
+  if (/\b(cafe|coffee|restaurant|food|grocery|market|bakery)\b/.test(categorySource)) category = 'Meals'
+  else if (/\b(taxi|uber|grab|fuel|petrol|parking|transit|airline)\b/.test(categorySource)) category = 'Transport'
+  else if (/\b(hotel|lodging|accommodation)\b/.test(categorySource)) category = 'Travel'
+  else if (/\b(pharmacy|clinic|medical|dental)\b/.test(categorySource)) category = 'Healthcare'
+  else if (/\b(software|cloud|hosting|subscription)\b/.test(categorySource)) category = 'Software'
+  return {
+    date,
+    description: merchant || 'Receipt',
+    amount: totalMatch ? parseAmount(totalMatch) : undefined,
+    tax: taxMatch ? parseAmount(taxMatch) : undefined,
+    category,
+    confidence: Math.max(20, Math.min(96, 96 - [date, merchant, totalMatch, currencyCodeDetected].filter((value) => !value).length * 16)),
+    source: totalLine ? `Line ${lines.indexOf(totalLine) + 1}` : fileName || 'Receipt text',
+  }
 }
 
 function qboFormatDate(date: Date) {
