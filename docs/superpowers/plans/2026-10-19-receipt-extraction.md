@@ -80,6 +80,6 @@
 **Files:**
 - No additional files expected beyond the tasks above.
 
-- [ ] **Step 1: Run the production compile.** Run `npm run build` from the project root. Expected: exit code 0; existing Vite chunk-size warning may remain.
-- [ ] **Step 2: Check the final diff.** Run `git diff --check` and review the diff against `docs/superpowers/specs/2026-10-19-receipt-extraction-design.md`. Confirm statement parsing and exports have no unrelated changes, and analytics carry no receipt fields, filenames, or contents.
-- [ ] **Step 3: Record the review.** Update `.superpowers/sdd/progress.md` with completed task commits and review outcomes.
+- [x] **Step 1: Run the production compile.** `npm run build` exits 0. The existing Vite chunk-size advisory remains.
+- [x] **Step 2: Check the final diff.** `git diff --check` passes. The final branch review against this spec found no actionable issues; statement parsing/exports retain their existing paths, analytics accept action names only, and receipt data is excluded from the remote assistant request and UI.
+- [x] **Step 3: Record the review.** `.superpowers/sdd/progress.md` records completed implementation, build, source review, and limitations.
