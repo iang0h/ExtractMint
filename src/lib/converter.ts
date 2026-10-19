@@ -2282,6 +2282,17 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     const suffix = totalLine?.slice((match.index ?? 0) + match[0].length) ?? ''
     return !/^\s*(?:\)?\s*%|%\s*\)?)/.test(suffix)
   })
+  const inlineTaxAnnotationAmount = (match: RegExpMatchArray) => {
+    const matchIndex = match.index ?? 0
+    const before = totalLine?.slice(0, matchIndex) ?? ''
+    const openParen = before.lastIndexOf('(')
+    const closeParen = before.lastIndexOf(')')
+    if (openParen <= closeParen) return false
+    const annotationPrefix = before.slice(openParen + 1)
+    return inclusiveTaxQualifier.test(annotationPrefix)
+      && /\b(?:tax|vat|gst|sst)\b/i.test(annotationPrefix)
+      && !/[\d$€£]/.test(annotationPrefix)
+  }
   const payableLabelMatch = totalLine?.match(selectedPayableLabel ?? /\b(?:balance\s+due|grand\s+total|amount\s+due|total\s+paid|amount\s+paid|total)\b/i)
   const payableLabelEnd = payableLabelMatch ? (payableLabelMatch.index ?? 0) + payableLabelMatch[0].length : 0
   const inlineTaxAmount = (match: RegExpMatchArray) => {
@@ -2291,9 +2302,16 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     return hasLaterAmount && inclusiveTaxQualifier.test(prefix.toLowerCase())
       && /\b(?:tax|vat|gst|sst)\b/i.test(prefix)
   }
-  const followingPayableAmount = eligibleTotalMatches.find((match) => (match.index ?? 0) >= payableLabelEnd && !inlineTaxAmount(match))
-  const totalMatch = (followingPayableAmount
-    ?? eligibleTotalMatches.filter((match) => (match.index ?? 0) < (payableLabelMatch?.index ?? 0)).at(-1))?.[0]
+  const payableCandidates = eligibleTotalMatches.filter((match) => !inlineTaxAmount(match) && !inlineTaxAnnotationAmount(match))
+  const labelIndex = payableLabelMatch?.index ?? 0
+  const totalMatch = payableCandidates.sort((a, b) => {
+    const distance = (match: RegExpMatchArray) => {
+      const start = match.index ?? 0
+      const end = start + match[0].length
+      return end < labelIndex ? labelIndex - end : start > payableLabelEnd ? start - payableLabelEnd : 0
+    }
+    return distance(a) - distance(b)
+  })[0]
   const taxMetadataLabel = /\b(?:tax|vat|gst|sst)\b.{0,30}\b(?:id|identification|number|no|registration|registered)\b|\b(?:id|identification|number|registration|registered)\b.{0,30}\b(?:tax|vat|gst|sst)\b/i
   const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
   const taxLabel = /\b(?:total\s+(?:tax|vat|gst|sst)|tax\s+total|(?:vat|gst|sst)\s+(?:amount|total)|(?:tax|vat|gst|sst)\s*(?:amount|:|#|-)|tax\s+[$€£]|(?:vat|gst|sst)\s+[$€£]|\b(?:vat|gst|sst)\b|\btax\b)/i
@@ -2311,6 +2329,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     const suffix = taxLine?.slice((match.index ?? 0) + match[0].length) ?? ''
     return !/^\s*(?:\)?\s*%|%\s*\)?)/.test(suffix)
   }).at(-1)?.[0]
+  const inlineTaxMatch = totalAmountMatches.find((match) => inlineTaxAnnotationAmount(match))
   const categorySource = `${merchant ?? ''} ${lines.join(' ')}`.toLowerCase()
   let category = 'Uncategorized'
   if (/\b(cafe|coffee|restaurant|food|grocery|market|bakery)\b/.test(categorySource)) category = 'Meals'
@@ -2322,7 +2341,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     date,
     description: merchant || 'Receipt',
     amount: totalMatch ? parseAmount(totalMatch) : undefined,
-    tax: taxMatch ? parseAmount(taxMatch) : undefined,
+    tax: taxMatch ? parseAmount(taxMatch) : inlineTaxMatch ? parseAmount(inlineTaxMatch) : undefined,
     category,
     confidence: Math.max(20, Math.min(96, 96 - [date, merchant, totalMatch, currencyCodeDetected].filter((value) => !value).length * 16)),
     source: totalLine ? `Line ${lines.indexOf(totalLine) + 1}` : fileName || 'Receipt text',
