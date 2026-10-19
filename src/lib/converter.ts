@@ -2175,11 +2175,13 @@ function summarize(
     rows.reduce((sum, row) => sum + Math.abs(row.amount ?? 0), 0)
   const lower = `${fileName} ${lines.slice(0, 15).join(' ')}`.toLowerCase()
   // Receipt routing is decided by parseRawText before this document-only summary.
-  const documentKind = lower.includes('invoice')
-    ? 'Invoice'
-    : lower.includes('statement') || hasStrongStatementEvidence(lines, fileName) || rows.some((row) => row.balance !== undefined)
-      ? 'Statement'
-      : 'Document'
+  const documentKind = hasStrongStatementEvidence(lines, fileName)
+    ? 'Statement'
+    : lower.includes('invoice')
+      ? 'Invoice'
+      : lower.includes('statement') || rows.some((row) => row.balance !== undefined)
+        ? 'Statement'
+        : 'Document'
 
   return {
     title: firstMeaningful.slice(0, 72),
@@ -2380,7 +2382,7 @@ function detectCurrencyCode(rawText: string, fileName: string): { code: string; 
 
 function hasGenericStatementTable(lines: string[], fileName: string) {
   const text = `${fileName}\n${lines.join('\n')}`
-  const statementContext = /\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account|statement[\s_-]+period|account[\s_-]+number|opening[\s_-]+balance|closing[\s_-]+balance|running[\s_-]+balance|transaction[\s_-]+history)\b/i.test(text)
+  const statementContext = /\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account|statement[\s_-]+period|opening[\s_-]+balance|closing[\s_-]+balance|running[\s_-]+balance|transaction[\s_-]+history)\b/i.test(text)
   return lines.some((line, headerIndex) => {
     if (!line.includes('\t')) {
       if (!/^date\s+description\s+amount(?:\s*\([^)]*\))?$/i.test(line)) return false
@@ -2403,7 +2405,7 @@ function hasGenericStatementTable(lines: string[], fileName: string) {
     if (dateIndex < 0 || descriptionIndex < 0 || amountIndex < 0) return false
     if (statementContext) return true
 
-    // A receipt's tabbed date metadata is not a table of dated transactions.
+    // Account-number metadata also appears on receipts; require repeated transactions.
     const transactionRows = lines.slice(headerIndex + 1).filter((row) => {
       const columns = row.split('\t').map((column) => column.trim())
       const dateCell = columns[dateIndex] ?? ''
@@ -2467,6 +2469,7 @@ function selectReceiptDate(lines: string[]) {
   const nonExpenseDate = /\b(?:valid(?:ity)?|exp(?:iry|iration|ires?)?|best\s+before|use\s+by)\b/i
   const expenseDateLabel = /\b(?:(?:receipt|transaction|purchase|sale)\s+date|date\s+of\s+(?:receipt|transaction|purchase|sale)|purchased\s+on)\s*[:#-]?\s*$/i
   const genericDateLabel = /^\s*date(?:\s*[/&]\s*time)?\s*[:#-]?\s*$/i
+  const dateContextFragment = /^\s*(?:(?:date|time|valid(?:ity)?|exp(?:iry|iration|ires?)?|best|before|use|by|until|from)\b[\s:/&#-]*)+$/i
   const labeled: { date: string; priority: number }[] = []
   const fallback = new Set<string>()
   for (const [lineIndex, line] of lines.entries()) {
@@ -2480,9 +2483,19 @@ function selectReceiptDate(lines: string[]) {
       const precedingLine = lines[lineIndex - 1] ?? ''
       const splitLabel = !datePattern.test(precedingLine)
         && (expenseDateLabel.test(precedingLine) || genericDateLabel.test(precedingLine) || nonExpenseDate.test(precedingLine))
-      const prefix = inlinePrefix.trim() === '' && splitLabel ? precedingLine : inlinePrefix
+      const usesSplitLabel = inlinePrefix.trim() === '' && splitLabel
+      const prefix = usesSplitLabel ? precedingLine : inlinePrefix
+      let dateContext = prefix
+      // Collect contiguous OCR label fragments, e.g. Expiry / Date / 2027-10-19.
+      if (genericDateLabel.test(prefix) || prefix.trim() === '') {
+        let contextIndex = lineIndex - (usesSplitLabel ? 2 : 1)
+        while (contextIndex >= 0 && dateContextFragment.test(lines[contextIndex])) {
+          dateContext = `${lines[contextIndex]} ${dateContext}`
+          contextIndex -= 1
+        }
+      }
       // Bind inline or OCR-split labels to their following date, so expiry cannot win.
-      if (nonExpenseDate.test(prefix)) return
+      if (nonExpenseDate.test(dateContext)) return
       if (expenseDateLabel.test(prefix)) labeled.push({ date, priority: 2 })
       else if (genericDateLabel.test(prefix)) labeled.push({ date, priority: 1 })
       else if (!nonExpenseDate.test(line) && matches.length === 1 && prefix.trim() === '') {
@@ -2511,7 +2524,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
   const taxQualifier = /\b(?:before|excluding|excl|pre)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/
   const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/i
-  const amountLabelPattern = /\b(?:total\s+(?:tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst)\b/gi
+  const amountLabelPattern = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst)\b/gi
   const labelsInAmountLine = (line: string) =>
     [...line.matchAll(new RegExp(amountLabelPattern.source, amountLabelPattern.flags))].filter((candidate) => {
       // Tax qualifiers remain part of their label rather than starting another value span.
@@ -2553,7 +2566,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     if (labels.some((candidate) => (candidate.index ?? 0) < labelStart)) return []
     return amounts.filter((amount) => (amount.index ?? 0) + amount[0].length <= labelStart)
   }
-  const excludedTotalLabel = /\b(?:sub total|tax total|total tax|(?:vat|gst|sst) total|total (?:vat|gst|sst)|total (?:pre tax|before tax|excluding tax|savings?|discounts?|discounted|items?|quantity|units?)|(?:pre tax|before tax|excluding tax) total|(?:savings?|discounts?) total|taxable amount)\b/
+  const excludedTotalLabel = /\b(?:sub total|tax total|total (?:sales )?tax|(?:vat|gst|sst) total|total (?:vat|gst|sst)|total (?:pre tax|before tax|excluding tax|savings?|discounts?|discounted|items?|quantity|units?)|(?:pre tax|before tax|excluding tax) total|(?:savings?|discounts?) total|taxable amount)\b/
   const totalLines = amountLines.filter(({ text: line }) => {
     const label = normalizeLabel(line)
     const nonPayableQualifier = taxQualifier.test(label) || /\b(?:savings?|discounts?)\b/.test(label)
@@ -2567,7 +2580,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
       !/^\s*(?:\)?\s*%|%\s*\)?)/.test(line.slice((match.index ?? 0) + match[0].length)))
     return amountsInLabelSegment(line, line.match(label), amounts).length > 0
   }
-  // Rank only labels that own a monetary amount; e.g. Total Sales Tax owns none.
+  // Rank only payable labels that own a monetary amount.
   const selectedPayableLabel = payablePriority.find((label) => totalLines.some(({ text }) => hasOwnedPayableAmount(text, label)))
   const totalSegment = selectedPayableLabel
     ? totalLines.find(({ text }) => hasOwnedPayableAmount(text, selectedPayableLabel))
@@ -2626,7 +2639,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   })[0]
   const taxMetadataLabel = /\b(?:tax|vat|gst|sst)\b.{0,30}\b(?:id|identification|number|no|registration|registered)\b|\b(?:id|identification|number|registration|registered)\b.{0,30}\b(?:tax|vat|gst|sst)\b/i
   const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
-  const taxLabel = /\b(?:total\s+(?:tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|tax|vat|gst|sst)\b/i
+  const taxLabel = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|tax|vat|gst|sst)\b/i
   const taxLines = amountLines.map(({ text }) => text).filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxQualifier.test(normalizeLabel(line)) && !inclusiveTaxQualifier.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
   const monetaryTaxLines = taxLines.filter((line) => {
     const amountMatches = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
