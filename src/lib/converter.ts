@@ -2258,13 +2258,23 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const labeledMerchantLine = lines.find((line) => /^\s*merchant\s*[:#-]\s*\S/i.test(line))
   const merchantLine = labeledMerchantLine ?? lines.find((line) => {
     const stripped = line.replace(datePattern, '').replace(amountPattern, '').trim()
-    return stripped.length > 1 && stripped.length <= 80 && !/\b(receipt|invoice|subtotal|tax|vat|gst|sst|total|amount paid|amount due|thank you|change|cashier|merchant|pos)\b/i.test(stripped)
+    const metadataLabel = /^(?:date|time|invoice(?:\s*(?:no|number|#))?|receipt(?:\s*(?:no|number|#))?|tax\s*(?:id|number)|cashier|terminal|register|phone|tel|email|address)\s*[:#-]?$/i
+    return stripped.length > 1 && stripped.length <= 80 && !metadataLabel.test(stripped) && !/\b(receipt|invoice|subtotal|tax|vat|gst|sst|total|amount paid|amount due|thank you|change|cashier|merchant|pos)\b/i.test(stripped)
   })
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
-  const totalLines = lines.filter((line) => /\b(grand\s+total|total\s+paid|amount\s+paid|amount\s+due|balance\s+due|total)\b/i.test(line) && !/\b(subtotal|tax total)\b/i.test(line))
+  const excludedTotalLabel = /\b(?:sub\s*total|tax\s+total|total\s+tax|(?:vat|gst|sst)\s+total|total\s+(?:vat|gst|sst))\b/i
+  const totalLines = lines.filter((line) => /\b(grand\s+total|total\s+paid|amount\s+paid|amount\s+due|balance\s+due|total)\b/i.test(line) && !excludedTotalLabel.test(line))
   const totalLine = totalLines.find((line) => /\b(grand\s+total|total\s+paid|amount\s+paid)\b/i.test(line)) ?? totalLines[0]
   const totalMatch = totalLine?.match(amountPattern)?.at(-1)
-  const taxLine = lines.find((line) => /\b(tax|vat|gst|sst)\b/i.test(line) && !/\b(subtotal|tax invoice)\b/i.test(line))
+  const taxLines = lines.filter((line) => /\b(tax|vat|gst|sst)\b/i.test(line) && !/\b(subtotal|tax invoice|total\s+(?:tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+total)\b/i.test(line))
+  const monetaryTaxLines = taxLines.filter((line) => {
+    const amountMatches = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
+    return amountMatches.some((match) => {
+      const suffix = line.slice((match.index ?? 0) + match[0].length)
+      return !/^\s*%/.test(suffix)
+    })
+  })
+  const taxLine = monetaryTaxLines.find((line) => /\b(?:tax|vat|gst|sst)\s*(?:amount|:|#|-)?\s*[$€£]|\b(?:tax|vat|gst|sst)\b.*(?:\b(?:rm|myr|sgd|usd|eur|gbp|aud|cad)\b|[$€£])/i.test(line)) ?? monetaryTaxLines[0]
   const taxMatch = taxLine?.match(amountPattern)?.at(-1)
   const categorySource = `${merchant ?? ''} ${lines.join(' ')}`.toLowerCase()
   let category = 'Uncategorized'
