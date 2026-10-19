@@ -205,6 +205,71 @@ Ending balance 38,268.10
   })
 }
 
+const receiptExportColumns = [
+  { header: 'Date', key: 'date', width: 18 },
+  { header: 'Merchant', key: 'merchant', width: 46 },
+  { header: 'Total', key: 'total', width: 16 },
+  { header: 'Tax', key: 'tax', width: 12 },
+  { header: 'Currency', key: 'currency', width: 12 },
+  { header: 'Currency Status', key: 'currencyStatus', width: 18 },
+  { header: 'Category', key: 'category', width: 18 },
+  { header: 'Confidence', key: 'confidence', width: 16 },
+  { header: 'Source', key: 'source', width: 18 },
+]
+const receiptBatchExportColumns = [
+  ...receiptExportColumns,
+  { header: 'Source Filename', key: 'fileName', width: 34 },
+]
+
+function receiptExportRow(result: ConversionResult) {
+  const row = result.rows[0]
+  const numberOrBlank = (value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? value : ''
+  return {
+    date: row?.date ?? '',
+    merchant: row?.description === 'Receipt' && !result.summary.vendor ? '' : row?.description ?? '',
+    total: numberOrBlank(row?.amount),
+    tax: numberOrBlank(row?.tax),
+    currency: result.currencyCodeDetected === true ? result.currencyCode : '',
+    currencyStatus: result.currencyCodeDetected === true ? 'Confirmed' : 'Needs review',
+    category: row?.category ?? '',
+    confidence: row && Number.isFinite(row.confidence) ? `${row.confidence}%` : '',
+    source: row?.source ?? '',
+    fileName: result.fileName,
+  }
+}
+
+function addReceiptWorksheetRows(
+  sheet: import('exceljs').Worksheet,
+  results: ConversionResult[],
+  includeFileName = false,
+) {
+  sheet.columns = includeFileName ? receiptBatchExportColumns : receiptExportColumns
+  sheet.addRows(results.map(receiptExportRow))
+  ;['total', 'tax'].forEach((key) => {
+    const column = sheet.getColumn(key)
+    column.numFmt = '#,##0.00;[Red]-#,##0.00'
+    column.alignment = { horizontal: 'right' }
+  })
+  sheet.getRow(1).font = { bold: true }
+  sheet.views = [{ state: 'frozen', ySplit: 1 }]
+}
+
+function receiptCsvBlob(results: ConversionResult[], includeFileName: boolean): Blob {
+  const columns = includeFileName ? receiptBatchExportColumns : receiptExportColumns
+  const rows = [
+    columns.map((column) => column.header),
+    ...results.map((result) => {
+      const row = receiptExportRow(result)
+      return columns.map((column) => row[column.key as keyof typeof row])
+    }),
+  ]
+  const csv = rows
+    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+    .join('\n')
+  return new Blob([csv], { type: 'text/csv;charset=utf-8' })
+}
+
 export async function createExcelBlob(result: ConversionResult) {
   const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
@@ -236,7 +301,7 @@ export async function createExcelBlob(result: ConversionResult) {
   summary.addRow({
     file: result.fileName,
     kind: result.summary.documentKind,
-    currency: result.currencyCode,
+    currency: result.summary.documentKind === 'Receipt' && result.currencyCodeDetected !== true ? '' : result.currencyCode,
     statementStart: result.statementPeriod?.start ?? '',
     statementEnd: result.statementPeriod?.end ?? '',
     confidence: `${result.confidence}%`,
@@ -366,43 +431,47 @@ export async function createExcelBlob(result: ConversionResult) {
   ])
 
   const rows = workbook.addWorksheet('Rows')
-  rows.columns = [
-    { header: 'Date', key: 'date', width: 18 },
-    { header: 'Description', key: 'description', width: 46 },
-    { header: 'Reference', key: 'reference', width: 18 },
-    { header: 'Withdrawal', key: 'withdrawal', width: 16 },
-    { header: 'Deposit', key: 'deposit', width: 16 },
-    { header: 'Tax', key: 'tax', width: 12 },
-    { header: 'Amount', key: 'amount', width: 16 },
-    { header: 'Balance', key: 'balance', width: 16 },
-    { header: 'Review Status', key: 'reviewStatus', width: 18 },
-    { header: 'Review Notes', key: 'reviewNotes', width: 42 },
-    { header: 'Category', key: 'category', width: 18 },
-    { header: 'Confidence', key: 'confidence', width: 16 },
-    { header: 'Source', key: 'source', width: 18 },
-  ]
-  ;['withdrawal', 'deposit', 'tax', 'amount', 'balance'].forEach((key) => {
-    const column = rows.getColumn(key)
-    column.numFmt = moneyFmt
-    column.alignment = { horizontal: 'right' }
-  })
-  result.rows.forEach((row, index) => {
-    rows.addRow({
-      date: row.date ?? '',
-      description: row.description,
-      reference: row.reference ?? '',
-      withdrawal: numberOrNull(row.withdrawal),
-      deposit: numberOrNull(row.deposit),
-      tax: numberOrNull(row.tax),
-      amount: numberOrNull(row.amount),
-      balance: numberOrNull(row.balance),
-      reviewStatus: rowReviewStatus(result.validation, index),
-      reviewNotes: rowReviewNotes(result.validation, index),
-      category: row.category,
-      confidence: `${row.confidence}%`,
-      source: row.source,
+  if (result.summary.documentKind === 'Receipt') {
+    addReceiptWorksheetRows(rows, [result])
+  } else {
+    rows.columns = [
+      { header: 'Date', key: 'date', width: 18 },
+      { header: 'Description', key: 'description', width: 46 },
+      { header: 'Reference', key: 'reference', width: 18 },
+      { header: 'Withdrawal', key: 'withdrawal', width: 16 },
+      { header: 'Deposit', key: 'deposit', width: 16 },
+      { header: 'Tax', key: 'tax', width: 12 },
+      { header: 'Amount', key: 'amount', width: 16 },
+      { header: 'Balance', key: 'balance', width: 16 },
+      { header: 'Review Status', key: 'reviewStatus', width: 18 },
+      { header: 'Review Notes', key: 'reviewNotes', width: 42 },
+      { header: 'Category', key: 'category', width: 18 },
+      { header: 'Confidence', key: 'confidence', width: 16 },
+      { header: 'Source', key: 'source', width: 18 },
+    ]
+    ;['withdrawal', 'deposit', 'tax', 'amount', 'balance'].forEach((key) => {
+      const column = rows.getColumn(key)
+      column.numFmt = moneyFmt
+      column.alignment = { horizontal: 'right' }
     })
-  })
+    result.rows.forEach((row, index) => {
+      rows.addRow({
+        date: row.date ?? '',
+        description: row.description,
+        reference: row.reference ?? '',
+        withdrawal: numberOrNull(row.withdrawal),
+        deposit: numberOrNull(row.deposit),
+        tax: numberOrNull(row.tax),
+        amount: numberOrNull(row.amount),
+        balance: numberOrNull(row.balance),
+        reviewStatus: rowReviewStatus(result.validation, index),
+        reviewNotes: rowReviewNotes(result.validation, index),
+        category: row.category,
+        confidence: `${row.confidence}%`,
+        source: row.source,
+      })
+    })
+  }
   ;[summary, rows].forEach((sheet) => {
     sheet.getRow(1).font = { bold: true }
     sheet.views = [{ state: 'frozen', ySplit: 1 }]
@@ -499,7 +568,12 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     })
   })
 
-  const usedSheetNames = new Set<string>(['Summary', 'Issues'])
+  const usedSheetNames = new Set<string>(['Summary', 'Issues', 'Reconciliation'])
+  const receiptResults = results.filter((result) => result.summary.documentKind === 'Receipt')
+  if (receiptResults.length > 0) {
+    const receiptsSheet = workbook.addWorksheet(uniqueSheetName('Receipts', usedSheetNames))
+    addReceiptWorksheetRows(receiptsSheet, receiptResults, true)
+  }
 
   for (const result of results) {
     const totals = totalsForResult(result)
@@ -510,7 +584,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     summary.addRow({
       file: result.fileName,
       kind: result.summary.documentKind,
-      currency: result.currencyCode,
+      currency: result.summary.documentKind === 'Receipt' && result.currencyCodeDetected !== true ? '' : result.currencyCode,
       statementStart: result.statementPeriod?.start ?? '',
       statementEnd: result.statementPeriod?.end ?? '',
       rows: result.rows.length,
@@ -529,7 +603,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     const reconciliation = reconciliationForResult(result)
     reconciliationSheet.addRow({
       file: result.fileName,
-      currency: result.currencyCode,
+      currency: result.summary.documentKind === 'Receipt' && result.currencyCodeDetected !== true ? '' : result.currencyCode,
       statementStart: result.statementPeriod?.start ?? '',
       statementEnd: result.statementPeriod?.end ?? '',
       rows: result.rows.length,
@@ -558,43 +632,47 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     })
 
     const rowsSheet = workbook.addWorksheet(uniqueSheetName(result.fileName, usedSheetNames))
-    rowsSheet.columns = [
-      { header: 'Date', key: 'date', width: 18 },
-      { header: 'Description', key: 'description', width: 46 },
-      { header: 'Reference', key: 'reference', width: 18 },
-      { header: 'Withdrawal', key: 'withdrawal', width: 16 },
-      { header: 'Deposit', key: 'deposit', width: 16 },
-      { header: 'Tax', key: 'tax', width: 12 },
-      { header: 'Amount', key: 'amount', width: 16 },
-      { header: 'Balance', key: 'balance', width: 16 },
-      { header: 'Review Status', key: 'reviewStatus', width: 18 },
-      { header: 'Review Notes', key: 'reviewNotes', width: 42 },
-      { header: 'Category', key: 'category', width: 18 },
-      { header: 'Confidence', key: 'confidence', width: 16 },
-      { header: 'Source', key: 'source', width: 18 },
-    ]
-    ;['withdrawal', 'deposit', 'tax', 'amount', 'balance'].forEach((key) => {
-      const column = rowsSheet.getColumn(key)
-      column.numFmt = moneyFmt
-      column.alignment = { horizontal: 'right' }
-    })
-    result.rows.forEach((row, index) => {
-      rowsSheet.addRow({
-        date: row.date ?? '',
-        description: row.description,
-        reference: row.reference ?? '',
-        withdrawal: numberOrNull(row.withdrawal),
-        deposit: numberOrNull(row.deposit),
-        tax: numberOrNull(row.tax),
-        amount: numberOrNull(row.amount),
-        balance: numberOrNull(row.balance),
-        reviewStatus: rowReviewStatus(result.validation, index),
-        reviewNotes: rowReviewNotes(result.validation, index),
-        category: row.category,
-        confidence: `${row.confidence}%`,
-        source: row.source,
+    if (result.summary.documentKind === 'Receipt') {
+      addReceiptWorksheetRows(rowsSheet, [result])
+    } else {
+      rowsSheet.columns = [
+        { header: 'Date', key: 'date', width: 18 },
+        { header: 'Description', key: 'description', width: 46 },
+        { header: 'Reference', key: 'reference', width: 18 },
+        { header: 'Withdrawal', key: 'withdrawal', width: 16 },
+        { header: 'Deposit', key: 'deposit', width: 16 },
+        { header: 'Tax', key: 'tax', width: 12 },
+        { header: 'Amount', key: 'amount', width: 16 },
+        { header: 'Balance', key: 'balance', width: 16 },
+        { header: 'Review Status', key: 'reviewStatus', width: 18 },
+        { header: 'Review Notes', key: 'reviewNotes', width: 42 },
+        { header: 'Category', key: 'category', width: 18 },
+        { header: 'Confidence', key: 'confidence', width: 16 },
+        { header: 'Source', key: 'source', width: 18 },
+      ]
+      ;['withdrawal', 'deposit', 'tax', 'amount', 'balance'].forEach((key) => {
+        const column = rowsSheet.getColumn(key)
+        column.numFmt = moneyFmt
+        column.alignment = { horizontal: 'right' }
       })
-    })
+      result.rows.forEach((row, index) => {
+        rowsSheet.addRow({
+          date: row.date ?? '',
+          description: row.description,
+          reference: row.reference ?? '',
+          withdrawal: numberOrNull(row.withdrawal),
+          deposit: numberOrNull(row.deposit),
+          tax: numberOrNull(row.tax),
+          amount: numberOrNull(row.amount),
+          balance: numberOrNull(row.balance),
+          reviewStatus: rowReviewStatus(result.validation, index),
+          reviewNotes: rowReviewNotes(result.validation, index),
+          category: row.category,
+          confidence: `${row.confidence}%`,
+          source: row.source,
+        })
+      })
+    }
     rowsSheet.getRow(1).font = { bold: true }
     rowsSheet.views = [{ state: 'frozen', ySplit: 1 }]
   }
@@ -612,7 +690,12 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
   })
 }
 
+export function createReceiptBatchCsvBlob(results: ConversionResult[]): Blob {
+  return receiptCsvBlob(results.filter((result) => result.summary.documentKind === 'Receipt'), true)
+}
+
 export function createCsvBlob(result: ConversionResult) {
+  if (result.summary.documentKind === 'Receipt') return receiptCsvBlob([result], false)
   const rows = [
     [
       'Date',
@@ -696,12 +779,13 @@ function reconciliationForResult(result: ConversionResult) {
 }
 
 function uniqueSheetName(fileName: string, usedNames: Set<string>) {
+  const isUsed = (name: string) => [...usedNames].some((used) => used.toLowerCase() === name.toLowerCase())
   const baseName = (fileName.replace(/\.[^.]+$/, '') || 'Statement')
     .replace(/[\]\\[*?:/]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   const trimmed = baseName.slice(0, 31) || 'Statement'
-  if (!usedNames.has(trimmed)) {
+  if (!isUsed(trimmed)) {
     usedNames.add(trimmed)
     return trimmed
   }
@@ -709,7 +793,7 @@ function uniqueSheetName(fileName: string, usedNames: Set<string>) {
   for (let suffix = 2; suffix < 1000; suffix += 1) {
     const suffixText = ` ${suffix}`
     const candidate = `${trimmed.slice(0, Math.max(0, 31 - suffixText.length))}${suffixText}`.trim()
-    if (!usedNames.has(candidate)) {
+    if (!isUsed(candidate)) {
       usedNames.add(candidate)
       return candidate
     }

@@ -503,6 +503,7 @@ function App() {
 
   const activeResult = results[activeIndex] ?? results[0]
   const isReceipt = activeResult?.summary.documentKind === 'Receipt'
+  const receiptResults = results.filter((result) => result.summary.documentKind === 'Receipt')
   const showProgressPanel =
     isProcessing || progress.stage === 'error' || progress.detail === 'Conversion canceled'
   const activeSha = activeResult?.fileMeta?.sha256
@@ -1613,6 +1614,46 @@ function App() {
     }
   }
 
+  const downloadReceiptBatch = async (format: 'xlsx' | 'csv') => {
+    if (receiptResults.length === 0) return
+    setIsProcessing(true)
+    setProgress({
+      fileName: `${receiptResults.length} receipts`,
+      stage: 'exporting',
+      percent: 92,
+      detail: 'Building receipt export',
+    })
+    try {
+      const converter = await loadConverter()
+      const blob = format === 'xlsx'
+        ? await converter.createCombinedExcelBlob(receiptResults)
+        : converter.createReceiptBatchCsvBlob(receiptResults)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const stamp = new Date().toISOString().slice(0, 10).replaceAll('-', '')
+      anchor.href = url
+      anchor.download = `extractmint-receipts-${stamp}.${format}`
+      anchor.click()
+      trackExtractMintEvent('export_started')
+      URL.revokeObjectURL(url)
+      setProgress({
+        fileName: `${receiptResults.length} receipts`,
+        stage: 'complete',
+        percent: 100,
+        detail: 'Receipt export downloaded',
+      })
+    } catch (error) {
+      setProgress({
+        fileName: `${receiptResults.length} receipts`,
+        stage: 'error',
+        percent: 100,
+        detail: error instanceof Error ? error.message : 'Receipt export failed',
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const askAgent = async () => {
     const question = agentQuestion.trim()
     if (activeResult?.summary.documentKind === 'Receipt' || !question || isAgentThinking) return
@@ -1949,6 +1990,18 @@ function App() {
                 <summary>More export formats</summary>
                 <div className="converter-disclosure-body">
                   <div className="export-row">
+                    {receiptResults.length > 0 ? (
+                      <>
+                        <button type="button" onClick={() => void downloadReceiptBatch('xlsx')}>
+                          <FileSpreadsheet size={16} />
+                          All receipts XLSX
+                        </button>
+                        <button type="button" onClick={() => void downloadReceiptBatch('csv')}>
+                          <ArrowDownToLine size={16} />
+                          All receipts CSV
+                        </button>
+                      </>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => void downloadCombinedWorkbook()}
