@@ -3010,8 +3010,19 @@ footer strong {
 }
 
 @media (max-width: 520px) {
+  .synthetic-sample-action {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
+
   .more-export-options .export-row {
     grid-template-columns: 1fr;
+  }
+
+  .export-sanity-header small {
+    display: none;
   }
 
   .result-primary-action {
