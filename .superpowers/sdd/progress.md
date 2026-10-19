@@ -33,3 +33,4 @@
 # ExtractMint receipt extraction progress
 
 - Task 1: complete — parser implementation `9e73309`; follow-up commits `bd22a83`, `186cd9f`, `d89d41c`, `db1a280`, `c3d39b4`, `984bb1a`, `ec008ca`, `13cf57b`, `e3c75b7`, `5754a68`, `bb2b50a`, `8b02c84`, `fd3c138`, `8d5a695`, `bc6ee80`; final independent spec and quality review approved at `bc6ee80`. Source review and `git diff --check` only; no automated tests were added or run, per developer instruction.
+- Task 2: complete — receipt review UI, currency confirmation, local image preview, responsive fields, and `/api/agent` receipt-data guard committed as `30392ba`; independent static spec and quality review approved. Build/browser verification is deferred to Task 4; no tests were run.
