@@ -1,4 +1,6 @@
+import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { getPersistentOcrText, setPersistentOcrText } from './ocrCache'
+import { attachPdfPasswordPrompt } from './pdfPasswordPrompt.mjs'
 
 export type ProgressStage =
   | 'ready'
@@ -78,10 +80,19 @@ export type ConversionResult = {
 
 type ProgressCallback = (event: ProgressEvent) => void
 
+type PdfPasswordRequestReason = 'required' | 'incorrect'
+
 export type ExtractionOptions = {
   forceOcr?: boolean
   ocrLanguage?: string
   persistOcrCache?: boolean
+  requestPdfPassword?: (
+    fileName: string,
+    reason: PdfPasswordRequestReason,
+    signal?: AbortSignal,
+  ) => Promise<string>
+  onPdfDocumentLoaded?: (file: File, pdf: PDFDocumentProxy) => void
+  signal?: AbortSignal
 }
 
 export type ReviewPackSource = {
@@ -121,6 +132,9 @@ export async function convertFiles(
   const results: ConversionResult[] = []
 
   for (let index = 0; index < files.length; index += 1) {
+    if (options.signal?.aborted) {
+      throw new DOMException('Conversion canceled', 'AbortError')
+    }
     const file = files[index]
     const basePercent = Math.round((index / files.length) * 100)
 
@@ -1369,7 +1383,30 @@ async function extractPdfText(file: File, onProgress: ProgressCallback, options:
   ])
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default
   const buffer = await file.arrayBuffer()
-  const pdf = await pdfjs.getDocument({ data: buffer }).promise
+  if (options.signal?.aborted) {
+    throw new DOMException('Conversion canceled', 'AbortError')
+  }
+  const loadingTask = pdfjs.getDocument({ data: buffer })
+  const requestPdfPassword = options.requestPdfPassword
+  const detachPasswordPrompt = requestPdfPassword
+    ? attachPdfPasswordPrompt(
+        loadingTask,
+        (reason) => requestPdfPassword(file.name, reason, options.signal),
+        pdfjs.PasswordResponses,
+      )
+    : undefined
+  let pdf: PDFDocumentProxy
+  try {
+    pdf = await loadingTask.promise
+  } catch (error) {
+    if (options.signal?.aborted) {
+      throw new DOMException('Conversion canceled', 'AbortError')
+    }
+    throw error
+  } finally {
+    detachPasswordPrompt?.()
+  }
+  options.onPdfDocumentLoaded?.(file, pdf)
   const chunks: string[] = []
   const signature = fileSignature(file)
   const ocrLanguage = normalizeOcrLanguage(options.ocrLanguage)

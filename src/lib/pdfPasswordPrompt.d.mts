@@ -1,5 +1,6 @@
 type PdfPasswordTask = {
-  onPassword: ((updatePassword: (password: string) => void, reason: number) => void) | null
+  // PDF.js declares this as Function; the adapter only assigns its callback.
+  onPassword: unknown
   destroy: () => Promise<unknown> | unknown
 }
 
