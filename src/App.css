@@ -2740,6 +2740,12 @@ footer strong {
   text-underline-offset: 3px;
 }
 
+.synthetic-sample-action button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  text-decoration: none;
+}
+
 .synthetic-sample-action button:focus-visible,
 .synthetic-sample-action a:focus-visible,
 .local-processing-note a:focus-visible {
