@@ -27,3 +27,4 @@
 
 - Task 1: complete — removed the preloaded sample, hides completed-state exports until a result is ready, and keeps progress/password states visible; commits `4a8e9b0`, `d2579bb`, and `8c113bf`; focused state review passed.
 - Task 2: complete — primary Excel flow, collapsible secondary exports/settings/privacy/support, linked privacy note, and processing-state balance gate; commits `df4a8f1`, `cbd9b17`, `8141f9c`, and `45e985d`; spec and quality review passed.
+- Task 3: complete — responsive disclosure, sample, Excel, and secondary-export styling with keyboard focus and 42px review-pack checkbox target; commits `b80cdca`, `86202fa`, `0267772`, and `cd85f22`; CSS review passed.
