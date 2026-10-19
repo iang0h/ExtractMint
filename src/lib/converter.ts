@@ -2471,8 +2471,10 @@ function hasStrongStatementEvidence(lines: string[], fileName: string) {
 function looksLikeReceipt(lines: string[], fileName: string) {
   if (hasStrongStatementEvidence(lines, fileName)) return false
   const text = `${fileName}\n${lines.join('\n')}`
-  const explicitInvoice = lines.some((line) => /^\s*(?:tax\s+)?invoice\b/i.test(line))
-  const receiptOrPaidEvidence = /\b(?:receipt|pos|point[\s-]+of[\s-]+sale|paid)\b/i.test(text)
+  const explicitInvoice = lines.some((line) => /^\s*(?:(?:tax|sales|commercial)\s+)*invoice\b/i.test(line))
+  // Negated payment statuses cannot override an invoice heading; independent paid labels still can.
+  const paymentText = text.replace(/\b(?:(?:not|never|un|non)[\s-]+(?:(?:yet|fully|been)[\s-]+)*paid|unpaid|nonpaid|(?:yet[\s-]+)?to[\s-]+be[\s-]+paid|paid\s*[:=-]\s*(?:no|false))\b/gi, '')
+  const receiptOrPaidEvidence = /\b(?:receipt|pos|point[\s-]+of[\s-]+sale)\b/i.test(text) || /\bpaid\b/i.test(paymentText)
   if (explicitInvoice && !receiptOrPaidEvidence) return false
   if (/\b(subtotal|tax|vat|gst|sst|total\s+paid|amount\s+paid|grand\s+total|merchant|pos|receipt|amount\s+due)\b/i.test(text)) return true
   // A bare payable TOTAL is receipt evidence; invoice/statement totals keep their document route.
