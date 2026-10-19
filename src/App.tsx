@@ -501,6 +501,7 @@ function App() {
   const [pdfUrlsBySha, setPdfUrlsBySha] = useState<Record<string, string>>({})
   const pdfUrlRef = useRef<Record<string, string>>({})
   const pdfDocumentsRef = useRef(new Map<string, CachedPdfDocumentProxy>())
+  const [pdfDocumentsVersion, setPdfDocumentsVersion] = useState(0)
   const pdfDocRef = useRef<unknown>(null)
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null)
   const [pdfMatchInfo, setPdfMatchInfo] = useState<PdfMatchInfo | null>(null)
@@ -730,7 +731,7 @@ function App() {
       cancelled = true
       if (previewPdf) destroyPdfDocument(previewPdf)
     }
-  }, [activePdfUrl, activePdfSignature, results, showSourcePreview])
+  }, [activePdfUrl, activePdfSignature, pdfDocumentsVersion, showSourcePreview])
 
   useEffect(() => {
     if (!showSourcePreview || !activeSha || !selectedRow || selectedRowIndex === null) {
@@ -1306,6 +1307,8 @@ function App() {
       }
       destroyPdfDocuments(pdfDocumentsRef.current)
       pdfDocumentsRef.current = batchPdfDocuments
+      // Invalidate preview loading even when the replacement cache is empty.
+      setPdfDocumentsVersion((version) => version + 1)
       batchDocumentsAdopted = true
       setResults(combined)
       refreshOcrCacheStats()
