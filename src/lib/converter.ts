@@ -2265,7 +2265,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   })
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
   const taxQualifier = /\b(?:before|excluding|excl|pre)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/
-  const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive)\b/
+  const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/
   const excludedTotalLabel = /\b(?:sub total|tax total|total tax|(?:vat|gst|sst) total|total (?:vat|gst|sst)|total (?:pre tax|before tax|excluding tax|savings?|discounts?|discounted|items?|quantity|units?)|(?:pre tax|before tax|excluding tax) total|(?:savings?|discounts?) total|taxable amount)\b/
   const totalLines = lines.filter((line) => {
     const label = normalizeLabel(line)
