@@ -4,14 +4,18 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>PDF Bank Statement to Excel | ExtractMint</title>
+    <title>Convert a PDF Bank Statement to Excel | ExtractMint</title>
     <meta
       name="description"
-      content="Convert PDF bank statements into Excel and CSV files while preserving transaction dates, descriptions, debit, credit, and balance columns."
+      content="Convert text-based PDF bank statements to Excel, CSV, and other review files in your browser. Check extracted transactions and balance checks before using an export."
     />
     <link rel="canonical" href="https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/" />
     <link rel="stylesheet" href="/seo.css" />
-    <meta property="og:title" content="PDF Bank Statement to Excel | ExtractMint" />
+    <meta property="og:title" content="Convert a PDF Bank Statement to Excel | ExtractMint" />
+    <meta
+      property="og:description"
+      content="A practical guide to converting text-based statement PDFs, reviewing transactions, and choosing an export."
+    />
     <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
@@ -19,44 +23,121 @@
     <div class="page">
       <nav class="nav">
         <a class="brand" href="/"><span class="mark" aria-hidden="true">EM</span>ExtractMint</a>
-        <div class="nav-links"><a href="/#converter">Converter</a><a href="/convert/bank-statement-to-excel/">Bank statements</a></div>
+        <div class="nav-links">
+          <a href="/#converter">Converter</a>
+          <a href="/convert/bank-statement-to-excel/">All statement formats</a>
+          <a href="/privacy/">Privacy</a>
+        </div>
       </nav>
       <main>
         <section class="hero">
           <div>
-            <span class="eyebrow">PDF to Excel</span>
-            <h1>Turn PDF statement tables into clean Excel columns.</h1>
+            <span class="eyebrow">PDF statement guide</span>
+            <h1>Convert a text-based bank statement PDF to Excel.</h1>
             <p class="lede">
-              Upload a text-based PDF bank statement and export spreadsheet rows for review,
-              reconciliation, accounting import, or client reporting.
+              ExtractMint reads transaction text from a PDF and turns likely statement rows into a reviewable table.
+              Check the dates, descriptions, debit and credit amounts, and balances against the original before using an export.
             </p>
             <div class="cta-row">
-              <a class="button" href="/#converter">Convert a PDF</a>
-              <a class="button secondary" href="/convert/scanned-bank-statement-to-excel/">Need OCR?</a>
+              <a class="button" href="/#converter">Upload a PDF</a>
+              <a class="button secondary" href="/convert/scanned-bank-statement-to-excel/">Working with a scan?</a>
             </div>
+            <p>Free to use, with no sign-up. Core conversion runs in your browser.</p>
           </div>
-          <aside class="demo-card">
-            <div class="drop"><strong>PDF statement detected</strong><div class="progress"><span></span></div></div>
+          <aside class="demo-card" aria-label="Illustrative statement row preview">
+            <div class="drop">
+              <strong>Review the extracted rows</strong>
+              <p>Illustrative columns only — results vary by statement layout.</p>
+            </div>
             <div class="sheet">
-              <div class="sheet-head"><span>Date</span><span>Description</span><span>Amount</span><span>Balance</span></div>
-              <div class="sheet-row"><span>04/02</span><span>Stripe payout</span><span>8,420.00</span><span>24,991.20</span></div>
-              <div class="sheet-row highlight"><span>04/08</span><span>Client retainer</span><span>12,500.00</span><span>36,649.10</span></div>
-              <div class="sheet-row"><span>04/15</span><span>Payroll run</span><span>-7,840.00</span><span>28,713.10</span></div>
+              <div class="sheet-head"><span>Date</span><span>Description</span><span>Debit / credit</span><span>Balance</span></div>
+              <div class="sheet-row"><span>Statement date</span><span>Transaction text</span><span>Amount</span><span>Running total</span></div>
+              <div class="sheet-row highlight"><span>Review</span><span>Check the source row</span><span>Sign and column</span><span>Compare</span></div>
+              <div class="sheet-row"><span>Before export</span><span>Confirm the full period</span><span>Debit or credit</span><span>Reconcile</span></div>
             </div>
           </aside>
         </section>
-        <section class="grid">
-          <article class="panel"><h2>Clean columns</h2><p>Dates, descriptions, amounts, withdrawals, deposits, and balances are exported as separate spreadsheet fields.</p></article>
-          <article class="panel"><h2>Review before use</h2><p>Use the generated workbook to check rows and balance movement before sending files to accounting systems.</p></article>
-          <article class="panel"><h2>Browser workflow</h2><p>The static version reads documents in the browser, useful for fast testing and privacy-sensitive workflows.</p></article>
+
+        <section class="panel">
+          <h2>Is your PDF text-based?</h2>
+          <p>Open the statement and try to select or copy a transaction description. If you can select the text, the PDF usually contains embedded text and is a good fit for this workflow. A PDF made from page images is a scan; see the <a href="/convert/scanned-bank-statement-to-excel/">scanned statement guide</a>.</p>
+          <p>ExtractMint first reads text from PDF pages. When it finds very little embedded text, it may try browser OCR automatically. OCR depends on scan quality, so a scanned file still needs careful review.</p>
         </section>
-        <section class="related">
+
+        <section class="grid" aria-label="PDF conversion workflow">
+          <article class="panel">
+            <h2>1. Choose the statement</h2>
+            <p>Upload a PDF from the converter. The browser reads its pages and shows conversion progress as it works.</p>
+          </article>
+          <article class="panel">
+            <h2>2. Check the rows</h2>
+            <p>ExtractMint looks for transaction dates, descriptions, references, amounts, withdrawals, deposits, and balances. Fields can be missing or misplaced when a format is unusual.</p>
+          </article>
+          <article class="panel">
+            <h2>3. Export your file</h2>
+            <p>Review flagged rows and balance checks, then choose the spreadsheet or other output that fits your workflow.</p>
+          </article>
+        </section>
+
+        <section class="panel">
+          <h2>Review the statement before relying on a conversion</h2>
+          <ol>
+            <li>Confirm the account and statement period, then compare the first and last transaction dates with the PDF.</li>
+            <li>Check descriptions and references, including rows that wrap across lines or continue on another page.</li>
+            <li>Verify each amount's sign and whether it is a debit or credit. Date order can also be ambiguous across regional formats.</li>
+            <li>Compare opening and closing balances and spot-check running balance changes against the transactions.</li>
+            <li>Resolve review flags and reconcile totals with the source before importing or sharing the exported file.</li>
+          </ol>
+          <p>A matching balance trail is a useful consistency check; it does not prove that every transaction was extracted correctly.</p>
+        </section>
+
+        <section class="grid">
+          <article class="panel">
+            <h2>Spreadsheet exports</h2>
+            <p>Download an Excel XLSX workbook or CSV. The workbook includes summary and reconciliation information as well as detected transaction rows.</p>
+          </article>
+          <article class="panel">
+            <h2>Other formats</h2>
+            <p>Other available exports include a DOCX for Google Docs, a PDF summary, and a QuickBooks-ready QBO file. Check compatibility with your accounting workflow before importing.</p>
+          </article>
+          <article class="panel">
+            <h2>Review and batch files</h2>
+            <p>Review JSON saves extracted row details. A review-pack ZIP can include source PDFs if you enable that option; multiple converted files can also be combined into one workbook.</p>
+          </article>
+        </section>
+
+        <section class="panel" id="format-limitations">
+          <h2>Bank formats and accuracy</h2>
+          <p>ExtractMint uses general text and row extraction; no bank-specific format has been independently validated against real statements. Column order, date notation, wrapped descriptions, currencies, and PDF text encoding vary. An unfamiliar layout may produce incomplete or incorrect fields.</p>
+          <p>Confidence and balance checks are review signals, not a guarantee of accuracy. Verify every material field against the original statement before using the output for bookkeeping, reporting, or an accounting import.</p>
+        </section>
+
+        <section class="panel">
+          <h2>Privacy and exported files</h2>
+          <p>Core PDF conversion and OCR run in your browser; the original PDF is not sent to a conversion server. Optional Ask ExtractMint is a separate feature: submitting a question sends the question, filename, document details, and up to five extracted rows to our agent endpoint and may share that context with a configured AI provider. Review JSON and review-pack downloads contain extracted information, and a review pack may also contain the source PDF if you include it. Read the <a href="/privacy/">privacy and data-flow details</a>.</p>
+        </section>
+
+        <section class="faq" aria-label="PDF statement conversion questions">
+          <details>
+            <summary>What is the difference between a text PDF and a scanned PDF?</summary>
+            <p>A text PDF contains selectable text that the browser can read directly. A scan is typically an image of each page and needs OCR. Some PDFs combine both; ExtractMint may try OCR if little embedded text is found. See the <a href="/convert/scanned-bank-statement-to-excel/">scanned PDF guide</a>.</p>
+          </details>
+          <details>
+            <summary>Does a valid balance check mean every row is correct?</summary>
+            <p>No. It means the balance transitions that could be checked are consistent with the extracted values. Missing transactions, incorrect descriptions, or matching misread values may not be caught, so compare the export with the source.</p>
+          </details>
+          <details>
+            <summary>Which formats can I export?</summary>
+            <p>Excel XLSX, CSV, DOCX, PDF, and QBO are available, along with review JSON and a review-pack ZIP. Combined XLSX is available when you have converted multiple files.</p>
+          </details>
+        </section>
+
+        <section class="related" aria-label="Related guides">
           <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
-          <a href="/convert/cimb-bank-statement-to-excel/">CIMB statement to Excel</a>
-          <a href="/convert/singapore-bank-statement-to-excel/">Singapore bank statement to Excel</a>
+          <a href="/convert/scanned-bank-statement-to-excel/">Scanned bank statement to Excel</a>
         </section>
       </main>
-      <footer class="footer"><span>ExtractMint</span><span>PDF bank statements to spreadsheet-ready exports.</span></footer>
+      <footer class="footer"><span>ExtractMint</span><span>Review every statement export against its original PDF.</span></footer>
     </div>
   </body>
 </html>
