@@ -109,8 +109,9 @@ export type ReviewPackImport = {
 
 const datePattern =
   /(?:\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{2,4}\b)/i
+// Consume whole numeric tokens; explicit euros also support an ungrouped decimal comma.
 const amountPattern =
-  /[-+]?(?:[$€£]\s*)?\(?\d{1,3}(?:,\d{3})+(?:\.\d{2})?\)?|[-+]?(?:[$€£]\s*)?\(?\d+\.\d{2}\)?|[-+]?[$€£]\s*\(?\d+\)?/g
+  /(?<![\d.,])(?:[-+]?€\s*\(?\d+,\d{2}\)?|[-+]?(?:[$€£]\s*)?\(?\d{1,3}(?:,\d{3})+(?:\.\d{2})?\)?|[-+]?(?:[$€£]\s*)?\(?\d+\.\d{2}\)?|[-+]?[$€£]\s*\(?\d+\)?)(?!\d|[.,]\d)/g
 
 export function revalidateRows(rows: ExtractedRow[], currencyCode: string) {
   return validateBalances(rows, currencyCode)
@@ -1919,7 +1920,7 @@ function parseStatementMoneyCell(value: string) {
 }
 
 function parseStatementTable(lines: string[]): ExtractedRow[] {
-  const statementAmountHeader = /^(?:(?:withdrawals?|debit)(?:\s+pengeluaran)?|pengeluaran|(?:deposits?|credit)(?:\s+deposit)?|(?:running\s+)?balance(?:\s+baki)?|baki)(?:\s*\([^)]*\))?$/i
+  const statementAmountHeader = /^(?:(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)\s+)?(?:(?:withdrawals?|debit)(?:\s+pengeluaran)?|pengeluaran|(?:deposits?|credit)(?:\s+deposit)?|(?:running\s+)?balance(?:\s+baki)?|baki)(?:\s+(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)|\s*\([^)]*\))?$/i
   const hasStatementColumns = lines.some(
     (line) => line.includes('\t') && splitStatementColumns(line)
       .filter((_, index) => index === 3 || index === 4 || index === 6)
@@ -2354,7 +2355,10 @@ function classifyLine(line: string) {
 
 function parseAmount(value: string) {
   const isNegative = value.includes('(') || value.trim().startsWith('-')
-  const numeric = Number(value.replace(/[^\d.]/g, ''))
+  const normalized = value.includes('€') && /,\d{2}\)?$/.test(value) && !value.includes('.')
+    ? value.replace(',', '.')
+    : value
+  const numeric = Number(normalized.replace(/[^\d.]/g, ''))
   return isNegative ? -numeric : numeric
 }
 
@@ -2436,7 +2440,7 @@ function hasStrongStatementEvidence(lines: string[], fileName: string) {
   const text = `${fileName}\n${lines.join('\n')}`
   // Account-number metadata also occurs on receipts; it needs table/context evidence.
   if (/\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account|statement[\s_-]+period|opening[\s_-]+balance|closing[\s_-]+balance|running[\s_-]+balance|transaction[\s_-]+history)\b/i.test(text)) return true
-  const statementAmountHeader = /^(?:balance|debit|credit|withdrawals?|deposits?)(?:\s+(?:baki|pengeluaran|deposit))?(?:\s*\([^)]*\))?$/i
+  const statementAmountHeader = /^(?:(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)\s+)?(?:balance|debit|credit|withdrawals?|deposits?)(?:\s+(?:baki|pengeluaran|deposit))?(?:\s+(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)|\s*\([^)]*\))?$/i
   const statementDetailHeader = /^(?:date|description|ref(?:erence)?)(?:\s+(?:tarikh|diskripsi|no))?$/i
   if (lines.some((line) => {
     if (!line.includes('\t')) return false
@@ -2559,6 +2563,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
   const taxQualifier = /\b(?:before|excluding|excl|pre)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/
   const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/i
+  const taxCalculationContext = /\btaxable\s+(?:base|amount)\b|\b(?:tax|vat|gst|sst)\b[^%]*\d+(?:[.,]\d+)?\s*%\s*(?:on|of)\b/i
   const amountLabelPattern = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst|cash(?:\s+tendered)?|(?:(?:credit|debit)\s+)?card|(?:amount\s+)?tendered|change|payment(?:\s+(?:method|received))?|visa|mastercard|amex)\b/gi
   const labelsInAmountLine = (line: string) =>
     [...line.matchAll(new RegExp(amountLabelPattern.source, amountLabelPattern.flags))].filter((candidate) => {
@@ -2636,6 +2641,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     const isParenthesized = openParen > closeParen
     const annotationPrefix = isParenthesized ? before.slice(openParen + 1) : before
     if (!inclusiveTaxQualifier.test(annotationPrefix)
+      || taxCalculationContext.test(annotationPrefix)
       || !/\b(?:tax|vat|gst|sst)\b/i.test(annotationPrefix)) return false
     if (isParenthesized) {
       const prefixWithoutRates = annotationPrefix.replace(/\b\d+(?:[.,]\d+)?\s*%\s*/g, '')
@@ -2669,7 +2675,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const taxMetadataLabel = /\b(?:tax|vat|gst|sst)\b.{0,30}\b(?:id|identification|number|no|registration|registered)\b|\b(?:id|identification|number|registration|registered)\b.{0,30}\b(?:tax|vat|gst|sst)\b/i
   const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive|exempt(?:ed|ion)?)|exempt(?:ed)? (?:tax|vat|gst|sst)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
   const taxLabel = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|tax|vat|gst|sst)\b/i
-  const taxLines = amountLines.map(({ text }) => text).filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxQualifier.test(normalizeLabel(line)) && !inclusiveTaxQualifier.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
+  const taxLines = amountLines.map(({ text }) => text).filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !taxCalculationContext.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxQualifier.test(normalizeLabel(line)) && !inclusiveTaxQualifier.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
   const aggregateTaxLabel = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+total)\b/i
   const taxCandidates = taxLines.map((line) => {
     const amountMatches = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
