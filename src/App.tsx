@@ -1993,6 +1993,7 @@ function App() {
               </form>
             ) : null}
 
+            {activeResult && !isProcessing ? (
             <div className="export-row">
               <h3 className="export-row-label">Export files</h3>
               <button onClick={() => void downloadBlob('xlsx')} disabled={!activeResult}>
@@ -2048,6 +2049,7 @@ function App() {
                 QuickBooks (QBO)
               </button>
             </div>
+            ) : null}
 
             {activeResult ? (
               <div className="export-sanity" aria-label="Export sanity checks">
@@ -2106,6 +2108,7 @@ function App() {
               </div>
             ) : null}
 
+            {activeResult && !isProcessing ? (
             <div className="export-options" aria-label="Review pack options">
               <label title="Include the original statement PDFs inside the review pack ZIP so PDF previews work when you import later (larger download).">
                 <input
@@ -2120,6 +2123,7 @@ function App() {
                 Include source PDFs in review pack ZIP
               </label>
             </div>
+            ) : null}
           </motion.div>
         </motion.div>
       </section>
@@ -2139,7 +2143,7 @@ function App() {
         ))}
       </section>
 
-      {activeResult ? (
+      {activeResult && !isProcessing ? (
       <section className="results-section">
         <div className="section-heading">
           <span className="eyebrow">Converted workspace</span>
