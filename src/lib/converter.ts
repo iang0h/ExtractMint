@@ -1908,10 +1908,11 @@ function parseLine(line: string, lineNumber: number): ExtractedRow[] {
 }
 
 function parseStatementTable(lines: string[]): ExtractedRow[] {
+  const statementAmountHeader = /^(?:withdrawals?(?:\s+pengeluaran)?|pengeluaran|deposits?(?:\s+deposit)?|balance(?:\s+baki)?|baki)(?:\s*\([^)]*\))?$/i
   const hasStatementColumns = lines.some(
-    (line) =>
-      line.includes('\t') &&
-      /Withdrawal|Pengeluaran|Deposits|Deposit|Balance|Baki/i.test(line),
+    (line) => line.includes('\t') && splitStatementColumns(line)
+      .filter((_, index) => index === 3 || index === 4 || index === 6)
+      .some((column) => statementAmountHeader.test(column)),
   )
   if (!hasStatementColumns) return []
 
@@ -1939,6 +1940,7 @@ function parseStatementTable(lines: string[]): ExtractedRow[] {
     if (/^OPENING BALANCE$/i.test(descriptionColumn) || /^CLOSING BALANCE/i.test(descriptionColumn)) {
       finishCurrent()
       const balance = parseMoneyCell(balanceColumn)
+      if (balance === undefined) continue
       rows.push({
         description: descriptionColumn,
         balance,
@@ -1955,6 +1957,8 @@ function parseStatementTable(lines: string[]): ExtractedRow[] {
       const deposit = parseMoneyCell(depositColumn)
       const tax = parseMoneyCell(taxColumn)
       const balance = parseMoneyCell(balanceColumn)
+      // A receipt date/time row has no monetary cells in the statement columns.
+      if ([withdrawal, deposit, tax, balance].every((value) => value === undefined)) continue
       const amount = deposit ?? (withdrawal !== undefined ? -withdrawal : undefined)
       const initialDescription = dateColumn.replace(candidateDate, '').trim()
       current = {
@@ -2524,7 +2528,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
   const taxQualifier = /\b(?:before|excluding|excl|pre)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/
   const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/i
-  const amountLabelPattern = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst)\b/gi
+  const amountLabelPattern = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst|cash(?:\s+tendered)?|(?:(?:credit|debit)\s+)?card|(?:amount\s+)?tendered|change|payment(?:\s+(?:method|received))?|visa|mastercard|amex)\b/gi
   const labelsInAmountLine = (line: string) =>
     [...line.matchAll(new RegExp(amountLabelPattern.source, amountLabelPattern.flags))].filter((candidate) => {
       // Tax qualifiers remain part of their label rather than starting another value span.
@@ -2641,23 +2645,28 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
   const taxLabel = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|tax|vat|gst|sst)\b/i
   const taxLines = amountLines.map(({ text }) => text).filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxQualifier.test(normalizeLabel(line)) && !inclusiveTaxQualifier.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
-  const monetaryTaxLines = taxLines.filter((line) => {
+  const aggregateTaxLabel = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+total)\b/i
+  const taxCandidates = taxLines.map((line) => {
     const amountMatches = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
-    return amountMatches.some((match) => {
+    const eligibleMatches = amountMatches.filter((match) => {
       const suffix = line.slice((match.index ?? 0) + match[0].length)
       return !/^\s*(?:\)?\s*%|%\s*\)?)/.test(suffix)
     })
-  })
-  const taxLine = monetaryTaxLines[0]
-  const taxAmountMatches = taxLine ? [...taxLine.matchAll(new RegExp(amountPattern.source, amountPattern.flags))] : []
-  const eligibleTaxMatches = taxAmountMatches.filter((match) => {
-    const suffix = taxLine?.slice((match.index ?? 0) + match[0].length) ?? ''
-    return !/^\s*(?:\)?\s*%|%\s*\)?)/.test(suffix)
-  })
-  const taxMatch = taxLine
-    ? amountsInLabelSegment(taxLine, taxLine.match(taxLabel), eligibleTaxMatches).at(-1)?.[0]
+    const label = line.match(taxLabel)
+    return {
+      aggregate: Boolean(label && aggregateTaxLabel.test(label[0])),
+      amounts: amountsInLabelSegment(line, label, eligibleMatches),
+    }
+  }).filter((candidate) => candidate.amounts.length > 0)
+  const aggregateTaxes = taxCandidates.filter((candidate) => candidate.aggregate)
+  const preferredTaxes = aggregateTaxes.length > 0 ? aggregateTaxes : taxCandidates
+  // Components cannot stand in for the full tax; conflicting totals also need review.
+  const taxMatch = preferredTaxes.length === 1 && preferredTaxes[0].amounts.length === 1
+    ? preferredTaxes[0].amounts[0][0]
     : undefined
-  const inlineTaxMatch = eligibleTotalMatches.find((match) => inlineTaxAnnotationAmount(match))
+  const inlineTaxMatch = taxCandidates.length === 0
+    ? eligibleTotalMatches.find((match) => inlineTaxAnnotationAmount(match))
+    : undefined
   const categorySource = `${merchant ?? ''} ${lines.join(' ')}`.toLowerCase()
   let category = 'Uncategorized'
   if (/\b(cafe|coffee|restaurant|food|grocery|market|bakery)\b/.test(categorySource)) category = 'Meals'
