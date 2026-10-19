@@ -2264,10 +2264,12 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     return stripped.length > 1 && stripped.length <= 80 && !metadataLine.test(line) && !/\b(receipt|invoice|subtotal|tax|vat|gst|sst|total|amount paid|amount due|thank you|change|cashier|merchant|pos)\b/i.test(stripped)
   })
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
+  const taxQualifier = /\b(?:before|excluding|excl|pre)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/
+  const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive)\b/
   const excludedTotalLabel = /\b(?:sub total|tax total|total tax|(?:vat|gst|sst) total|total (?:vat|gst|sst)|total (?:pre tax|before tax|excluding tax|savings?|discounts?|discounted|items?|quantity|units?)|(?:pre tax|before tax|excluding tax) total|(?:savings?|discounts?) total|taxable amount)\b/
   const totalLines = lines.filter((line) => {
     const label = normalizeLabel(line)
-    const nonPayableQualifier = /\b(?:before|excluding|pre) tax\b/.test(label) || /\b(?:savings?|discounts?)\b/.test(label)
+    const nonPayableQualifier = taxQualifier.test(label) || /\b(?:savings?|discounts?)\b/.test(label)
     return /\b(grand total|total paid|amount paid|amount due|balance due|total)\b/.test(label)
       && !excludedTotalLabel.test(label)
       && !nonPayableQualifier
@@ -2282,7 +2284,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const taxMetadataLabel = /\b(?:tax|vat|gst|sst)\b.{0,30}\b(?:id|identification|number|no|registration|registered)\b|\b(?:id|identification|number|registration|registered)\b.{0,30}\b(?:tax|vat|gst|sst)\b/i
   const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
   const taxLabel = /\b(?:total\s+(?:tax|vat|gst|sst)|tax\s+total|(?:vat|gst|sst)\s+(?:amount|total)|(?:tax|vat|gst|sst)\s*(?:amount|:|#|-)|tax\s+[$€£]|(?:vat|gst|sst)\s+[$€£]|\b(?:vat|gst|sst)\b|\btax\b)/i
-  const taxLines = lines.filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:incl(?:uding)?|inclusive)\b/i.test(line) && /\b(?:tax|vat|gst|sst)\b/i.test(line)) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
+  const taxLines = lines.filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxQualifier.test(normalizeLabel(line)) && !inclusiveTaxQualifier.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
   const monetaryTaxLines = taxLines.filter((line) => {
     const amountMatches = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
     return amountMatches.some((match) => {
