@@ -14,7 +14,7 @@
 - Keep receipt filenames, OCR text, and extracted fields out of optional remote assistant requests. Hide or disable remote assistant support while a receipt is active.
 - Use explicit receipt labels for date, tax/VAT/GST/SST, subtotal, and total where possible. Prefer an explicit grand total or amount paid over subtotal. Never manufacture a missing total.
 - Preserve bank-statement parsing, balance validation, and current export behavior.
-- Receipt XLSX/CSV rows include Date, Merchant, Total, Tax, Currency, Category, Confidence, and Source.
+- Receipt XLSX/CSV rows include Date, Merchant, Total, Tax, Currency, Currency Status, Category, Confidence, and Source. Leave missing extracted values blank; use Currency Status `Confirmed` or `Needs review` so an empty currency is clear.
 - Existing action-only analytics may continue to record upload, conversion, and export actions; receipt contents, filenames, and extracted values must not be added to analytics.
 - Handle one receipt per file. Product line items and multiple receipts inside one file are out of scope.
 - Do not add or run automated tests for this task. Use the production build as the compile check.
@@ -69,9 +69,9 @@
 - Add `createReceiptBatchCsvBlob(results: ConversionResult[]): Blob`, filtering receipt results and writing one row per receipt.
 - `createCombinedExcelBlob` adds one consolidated `Receipts` sheet when a batch contains receipts, while preserving existing per-file sheets and the Issues sheet.
 
-- [ ] **Step 1: Format a single receipt export.** When `result.summary.documentKind === 'Receipt'`, make the Excel Rows sheet and CSV columns Date, Merchant, Total, Tax, Currency, Category, Confidence, and Source. Leave Currency blank when `currencyCodeDetected` is false. Keep bank-statement sheet/CSV columns unchanged.
+- [ ] **Step 1: Format a single receipt export.** When `result.summary.documentKind === 'Receipt'`, make the Excel Rows sheet and CSV columns Date, Merchant, Total, Tax, Currency, Currency Status, Category, Confidence, and Source. Leave Currency blank when `currencyCodeDetected` is false; set Currency Status to `Needs review` when false and `Confirmed` when true. Leave missing extracted values blank. Keep bank-statement sheet/CSV columns unchanged.
 - [ ] **Step 2: Add the consolidated receipt worksheet.** In `createCombinedExcelBlob`, add a `Receipts` sheet containing all receipt results in the batch with the same fields plus source filename. Use safe sheet-name handling already present in the workbook helper.
-- [ ] **Step 3: Add batch CSV export.** Implement `createReceiptBatchCsvBlob` with one row per receipt and proper CSV quoting. Include source filename and keep each receipt's currency detection status visible.
+- [ ] **Step 3: Add batch CSV export.** Implement `createReceiptBatchCsvBlob` with one row per receipt and proper CSV quoting. Include source filename and the Currency Status column (`Confirmed` or `Needs review`).
 - [ ] **Step 4: Wire receipt export actions.** In `App.tsx`, show “All receipts XLSX” and “All receipts CSV” actions when the current batch contains receipt results. Name downloads `extractmint-receipts-YYYYMMDD.xlsx` and `extractmint-receipts-YYYYMMDD.csv`. Keep individual export buttons and all existing statement exports working as they do now.
 - [ ] **Step 5: Commit the export change.** Commit changes in `src/lib/converter.ts` and `src/App.tsx` as `feat: export receipt batches`.
 
