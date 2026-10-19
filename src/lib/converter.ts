@@ -1919,7 +1919,7 @@ function parseStatementMoneyCell(value: string) {
 }
 
 function parseStatementTable(lines: string[]): ExtractedRow[] {
-  const statementAmountHeader = /^(?:withdrawals?(?:\s+pengeluaran)?|pengeluaran|deposits?(?:\s+deposit)?|balance(?:\s+baki)?|baki)(?:\s*\([^)]*\))?$/i
+  const statementAmountHeader = /^(?:(?:withdrawals?|debit)(?:\s+pengeluaran)?|pengeluaran|(?:deposits?|credit)(?:\s+deposit)?|(?:running\s+)?balance(?:\s+baki)?|baki)(?:\s*\([^)]*\))?$/i
   const hasStatementColumns = lines.some(
     (line) => line.includes('\t') && splitStatementColumns(line)
       .filter((_, index) => index === 3 || index === 4 || index === 6)
@@ -2476,12 +2476,15 @@ function looksLikeReceipt(lines: string[], fileName: string) {
   if (hasStrongStatementEvidence(lines, fileName)) return false
   const text = `${fileName}\n${lines.join('\n')}`
   const invoiceEvidence = hasInvoiceEvidence(lines, fileName)
-  // Negated payment statuses cannot override invoice evidence; independent paid labels still can.
+  // Only completed-payment labels or assertions can override an explicit invoice.
   const paymentText = text.replace(/\b(?:(?:not|never|un|non)[\s-]+(?:(?:yet|fully|been)[\s-]+)*paid|unpaid|nonpaid|(?:yet[\s-]+)?to[\s-]+be[\s-]+paid|paid\s*[:=-]\s*(?:no|false))\b/gi, '')
-  const paidEvidence = /\bpaid\b/i.test(paymentText)
+  const paidEvidence = paymentText.split('\n').some((line) =>
+    /^\s*(?:(?:(?:payment|invoice)\s+)?status\s*[:=-]\s*)?paid(?:[\s-]+in[\s-]+full)?(?:\s*[:=-]\s*(?:yes|true))?\s*[.!]?\s*$/i.test(line)
+    || /^\s*(?:payment(?:\s+(?:has\s+been|was))?\s+received|(?:this\s+)?invoice\s+(?:has\s+been\s+|was\s+)?paid(?:\s+in\s+full)?)\s*[.!]?\s*$/i.test(line),
+  )
   const receiptOrPaidEvidence = /\b(?:receipt|pos|point[\s-]+of[\s-]+sale)\b/i.test(text) || paidEvidence
   if (invoiceEvidence && !receiptOrPaidEvidence) return false
-  if (/\b(subtotal|tax|vat|gst|sst|total\s+paid|amount\s+paid|grand\s+total|merchant|pos|receipt|amount\s+due)\b/i.test(text)) return true
+  if (/\b(subtotal|tax|vat|gst|sst|total\s+paid|amount\s+paid|grand\s+total|merchant|pos|receipt|amount\s+due|balance\s+due)\b/i.test(text)) return true
   // A bare payable TOTAL is receipt evidence; invoices also need positive payment evidence.
   return (!invoiceEvidence || paidEvidence) && !/\bstatement\b/i.test(text) && lines.some((line) => {
     const label = /^\s*total\b\s*[:#-]?\s*/i.exec(line)
@@ -2492,9 +2495,10 @@ function looksLikeReceipt(lines: string[], fileName: string) {
   })
 }
 
+const receiptExpenseDateLabel = /\b(?:(?:receipt|transaction|purchase|sale)\s+date|date\s+of\s+(?:receipt|transaction|purchase|sale)|purchased\s+on)\s*[:#-]?\s*$/i
+
 function selectReceiptDate(lines: string[]) {
   const nonExpenseDate = /\b(?:valid(?:ity)?|exp(?:iry|iration|ires?)?|best\s+before|use\s+by)\b/i
-  const expenseDateLabel = /\b(?:(?:receipt|transaction|purchase|sale)\s+date|date\s+of\s+(?:receipt|transaction|purchase|sale)|purchased\s+on)\s*[:#-]?\s*$/i
   const genericDateLabel = /^\s*date(?:\s*[/&]\s*time)?\s*[:#-]?\s*$/i
   const dateContextFragment = /^\s*(?:(?:date|time|valid(?:ity)?|exp(?:iry|iration|ires?)?|best|before|use|by|until|from)\b[\s:/&#-]*)+$/i
   const labeled: { date: string; priority: number }[] = []
@@ -2509,7 +2513,7 @@ function selectReceiptDate(lines: string[]) {
       const inlinePrefix = line.slice(previous ? (previous.index ?? 0) + previous[0].length : 0, start)
       const precedingLine = lines[lineIndex - 1] ?? ''
       const splitLabel = !datePattern.test(precedingLine)
-        && (expenseDateLabel.test(precedingLine) || genericDateLabel.test(precedingLine) || nonExpenseDate.test(precedingLine))
+        && (receiptExpenseDateLabel.test(precedingLine) || genericDateLabel.test(precedingLine) || nonExpenseDate.test(precedingLine))
       const usesSplitLabel = inlinePrefix.trim() === '' && splitLabel
       const prefix = usesSplitLabel ? precedingLine : inlinePrefix
       let dateContext = prefix
@@ -2523,7 +2527,7 @@ function selectReceiptDate(lines: string[]) {
       }
       // Bind inline or OCR-split labels to their following date, so expiry cannot win.
       if (nonExpenseDate.test(dateContext)) return
-      if (expenseDateLabel.test(prefix)) labeled.push({ date, priority: 2 })
+      if (receiptExpenseDateLabel.test(prefix)) labeled.push({ date, priority: 2 })
       else if (genericDateLabel.test(prefix)) labeled.push({ date, priority: 1 })
       else if (!nonExpenseDate.test(line) && matches.length === 1 && prefix.trim() === '') {
         const suffix = line.slice(start + date.length).trim()
@@ -2543,6 +2547,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const labeledMerchantLine = lines.find((line) => /^\s*merchant\s*[:#-]\s*\S/i.test(line))
   const merchantLine = labeledMerchantLine ?? lines.find((line) => {
     const withoutDate = line.replace(datePattern, '').trim()
+    if (withoutDate.match(receiptExpenseDateLabel)?.index === 0) return false
     // ISO's T can keep the date from matching datePattern's trailing word boundary.
     if (/^(?:(?:\d{4}-\d{1,2}-\d{1,2})?[T, -]*\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s*[ap]m)?(?:\s*(?:Z|[+-]\d{2}:?\d{2}))?)?$/i.test(withoutDate)) return false
     const stripped = withoutDate.replace(amountPattern, '').trim()
