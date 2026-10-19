@@ -2289,9 +2289,10 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     const closeParen = before.lastIndexOf(')')
     if (openParen <= closeParen) return false
     const annotationPrefix = before.slice(openParen + 1)
+    const prefixWithoutRates = annotationPrefix.replace(/\b\d+(?:[.,]\d+)?\s*%\s*/g, '')
     return inclusiveTaxQualifier.test(annotationPrefix)
       && /\b(?:tax|vat|gst|sst)\b/i.test(annotationPrefix)
-      && !/[\d$€£]/.test(annotationPrefix)
+      && !/[\d$€£]/.test(prefixWithoutRates)
   }
   const payableLabelMatch = totalLine?.match(selectedPayableLabel ?? /\b(?:balance\s+due|grand\s+total|amount\s+due|total\s+paid|amount\s+paid|total)\b/i)
   const payableLabelEnd = payableLabelMatch ? (payableLabelMatch.index ?? 0) + payableLabelMatch[0].length : 0
