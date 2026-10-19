@@ -1907,12 +1907,23 @@ function parseLine(line: string, lineNumber: number): ExtractedRow[] {
   ]
 }
 
+function normalizeStatementHeader(value: string) {
+  return value.replace(/\s*[/|–—-]\s*/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function parseStatementMoneyCell(value: string) {
+  // Financial columns must contain a whole monetary value, not receipt labels or dates.
+  const text = value.trim().replace(/^(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)\s*/i, '').replace(/\s*(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)$/i, '').trim()
+  const amount = new RegExp(`^(?:${amountPattern.source})$`).exec(text)
+  return amount ? parseAmount(amount[0]) : undefined
+}
+
 function parseStatementTable(lines: string[]): ExtractedRow[] {
   const statementAmountHeader = /^(?:withdrawals?(?:\s+pengeluaran)?|pengeluaran|deposits?(?:\s+deposit)?|balance(?:\s+baki)?|baki)(?:\s*\([^)]*\))?$/i
   const hasStatementColumns = lines.some(
     (line) => line.includes('\t') && splitStatementColumns(line)
       .filter((_, index) => index === 3 || index === 4 || index === 6)
-      .some((column) => statementAmountHeader.test(column)),
+      .some((column) => statementAmountHeader.test(normalizeStatementHeader(column))),
   )
   if (!hasStatementColumns) return []
 
@@ -1939,7 +1950,7 @@ function parseStatementTable(lines: string[]): ExtractedRow[] {
 
     if (/^OPENING BALANCE$/i.test(descriptionColumn) || /^CLOSING BALANCE/i.test(descriptionColumn)) {
       finishCurrent()
-      const balance = parseMoneyCell(balanceColumn)
+      const balance = parseStatementMoneyCell(balanceColumn)
       if (balance === undefined) continue
       rows.push({
         description: descriptionColumn,
@@ -1953,10 +1964,10 @@ function parseStatementTable(lines: string[]): ExtractedRow[] {
 
     if (candidateDate) {
       finishCurrent()
-      const withdrawal = parseMoneyCell(withdrawalColumn)
-      const deposit = parseMoneyCell(depositColumn)
-      const tax = parseMoneyCell(taxColumn)
-      const balance = parseMoneyCell(balanceColumn)
+      const withdrawal = parseStatementMoneyCell(withdrawalColumn)
+      const deposit = parseStatementMoneyCell(depositColumn)
+      const tax = parseStatementMoneyCell(taxColumn)
+      const balance = parseStatementMoneyCell(balanceColumn)
       // A receipt date/time row has no monetary cells in the statement columns.
       if ([withdrawal, deposit, tax, balance].every((value) => value === undefined)) continue
       const amount = deposit ?? (withdrawal !== undefined ? -withdrawal : undefined)
@@ -2429,17 +2440,16 @@ function hasStrongStatementEvidence(lines: string[], fileName: string) {
   const statementDetailHeader = /^(?:date|description|ref(?:erence)?)(?:\s+(?:tarikh|diskripsi|no))?$/i
   if (lines.some((line) => {
     if (!line.includes('\t')) return false
-    const columns = line.split('\t').map((column) => column.trim()).filter(Boolean)
+    const columns = line.split('\t').map(normalizeStatementHeader).filter(Boolean)
     const headerCount = columns.filter((column) => statementAmountHeader.test(column) || statementDetailHeader.test(column)).length
     return headerCount >= 2 && columns.some((column) => statementAmountHeader.test(column))
   })) return true
   if (lines.some((line) => /\bdate\b/i.test(line) && /\b(?:description|reference)\b/i.test(line)
-    && /\b(?:balance|debit|credit|withdrawals?|deposits?)\b/i.test(line))) return true
-  const runningBalancePattern = lines.some((line) => datePattern.test(line) && (line.match(amountPattern)?.length ?? 0) >= 2 && /\b(balance|debit|credit|withdrawal|deposit)\b/i.test(line))
-  if (runningBalancePattern) return true
-  // Repeated date/description/amount/balance rows identify headerless statements.
-  // A single dated receipt total, or separate undated tax lines, cannot satisfy this.
-  return lines.filter((line) => {
+    && /\b(?:balance|debit|credit|withdrawals?|deposits?)\b/i.test(line)
+    && !/\bbalance\s+due\b/i.test(line) && !datePattern.test(line) && !line.match(amountPattern))) return true
+  // Headerless rows need adjacent trailing amount/balance values after a leading date.
+  // Independently labeled tax/payable amounts cannot form this bank-row structure.
+  const runningBalanceRows = lines.filter((line) => {
     const text = line.trim()
     const date = text.match(datePattern)
     if (!date || date.index !== 0) return false
@@ -2452,12 +2462,18 @@ function hasStrongStatementEvidence(lines: string[], fileName: string) {
     return /[a-z]/i.test(detail.slice(0, amount.index))
       && /^[\s|]*(?:(?:[A-Z]{3}|RM)\s*)?$/i.test(detail.slice(amountEnd, balance.index))
       && detail.slice(balanceEnd).trim() === ''
-  }).length >= 2
+  })
+  return runningBalanceRows.length >= 2 || runningBalanceRows.some((line) =>
+    /\b(?:balance(?!\s+due)|debit|credit|withdrawals?|deposits?)\b/i.test(line)
+      && !/\b(?:receipt|sub[\s-]*total|tax|vat|gst|sst|total|amount\s+(?:paid|due)|balance\s+due|points?|loyalty)\b/i.test(line))
 }
 
 function looksLikeReceipt(lines: string[], fileName: string) {
   if (hasStrongStatementEvidence(lines, fileName)) return false
   const text = `${fileName}\n${lines.join('\n')}`
+  const explicitInvoice = lines.some((line) => /^\s*(?:tax\s+)?invoice\b/i.test(line))
+  const receiptOrPaidEvidence = /\b(?:receipt|pos|point[\s-]+of[\s-]+sale|paid)\b/i.test(text)
+  if (explicitInvoice && !receiptOrPaidEvidence) return false
   if (/\b(subtotal|tax|vat|gst|sst|total\s+paid|amount\s+paid|grand\s+total|merchant|pos|receipt|amount\s+due)\b/i.test(text)) return true
   // A bare payable TOTAL is receipt evidence; invoice/statement totals keep their document route.
   return !/\b(?:invoice|statement)\b/i.test(text) && lines.some((line) => {
@@ -2573,12 +2589,12 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const excludedTotalLabel = /\b(?:sub total|tax total|total (?:sales )?tax|(?:vat|gst|sst) total|total (?:vat|gst|sst)|total (?:pre tax|before tax|excluding tax|savings?|discounts?|discounted|items?|quantity|units?)|(?:pre tax|before tax|excluding tax) total|(?:savings?|discounts?) total|taxable amount)\b/
   const totalLines = amountLines.filter(({ text: line }) => {
     const label = normalizeLabel(line)
-    const nonPayableQualifier = taxQualifier.test(label) || /\b(?:savings?|discounts?)\b/.test(label)
+    const nonPayableQualifier = taxQualifier.test(label) || /\b(?:savings?|discounts?|loyalty|rewards?|points?|counts?|items?|quantity|qty|units?|visits?)\b/.test(label)
     return /\b(grand total|total paid|amount paid|amount due|balance due|total)\b/.test(label)
       && !excludedTotalLabel.test(label)
       && !nonPayableQualifier
   })
-  const payablePriority = [/\bamount\s+paid\b/i, /\btotal\s+paid\b/i, /\bgrand\s+total\b/i, /\btotal\b/i, /\bamount\s+due\b/i, /\bbalance\s+due\b/i]
+  const payablePriority = [/\bamount\s+paid\b/i, /\btotal\s+paid\b/i, /\bgrand\s+total\b/i, /\bamount\s+due\b/i, /\bbalance\s+due\b/i, /\btotal\b/i]
   const hasOwnedPayableAmount = (line: string, label: RegExp) => {
     const amounts = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))].filter((match) =>
       !/^\s*(?:\)?\s*%|%\s*\)?)/.test(line.slice((match.index ?? 0) + match[0].length)))
@@ -2586,9 +2602,11 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   }
   // Rank only payable labels that own a monetary amount.
   const selectedPayableLabel = payablePriority.find((label) => totalLines.some(({ text }) => hasOwnedPayableAmount(text, label)))
-  const totalSegment = selectedPayableLabel
-    ? totalLines.find(({ text }) => hasOwnedPayableAmount(text, selectedPayableLabel))
-    : undefined
+  const payableSegments = selectedPayableLabel
+    ? totalLines.filter(({ text }) => hasOwnedPayableAmount(text, selectedPayableLabel))
+    : []
+  // Conflicting payable lines need review rather than an arbitrary first match.
+  const totalSegment = payableSegments.length === 1 ? payableSegments[0] : undefined
   const totalLine = totalSegment?.text
   const totalAmountMatches = totalLine ? [...totalLine.matchAll(new RegExp(amountPattern.source, amountPattern.flags))] : []
   const eligibleTotalMatches = totalAmountMatches.filter((match) => {
@@ -2632,15 +2650,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const payableCandidates = totalLine
     ? amountsInLabelSegment(totalLine, payableLabelMatch, eligibleTotalMatches.filter((match) => !inlineTaxAmount(match) && !inlineTaxAnnotationAmount(match)))
     : []
-  const labelIndex = payableLabelMatch?.index ?? 0
-  const totalMatch = payableCandidates.sort((a, b) => {
-    const distance = (match: RegExpMatchArray) => {
-      const start = match.index ?? 0
-      const end = start + match[0].length
-      return end < labelIndex ? labelIndex - end : start > payableLabelEnd ? start - payableLabelEnd : 0
-    }
-    return distance(a) - distance(b)
-  })[0]
+  const totalMatch = payableCandidates.length === 1 ? payableCandidates[0] : undefined
   const taxMetadataLabel = /\b(?:tax|vat|gst|sst)\b.{0,30}\b(?:id|identification|number|no|registration|registered)\b|\b(?:id|identification|number|registration|registered)\b.{0,30}\b(?:tax|vat|gst|sst)\b/i
   const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
   const taxLabel = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|tax|vat|gst|sst)\b/i
