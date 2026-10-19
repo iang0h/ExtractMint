@@ -2392,6 +2392,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const labeledMerchantLine = lines.find((line) => /^\s*merchant\s*[:#-]\s*\S/i.test(line))
   const merchantLine = labeledMerchantLine ?? lines.find((line) => {
     const stripped = line.replace(datePattern, '').replace(amountPattern, '').trim()
+    if (/^\s*(?:(?:page|pg)\.?\s*\d+(?:\s*(?:of|\/)\s*\d+)?|\d+\s*(?:of|\/)\s*\d+)\s*$/i.test(line)) return false
     if (/^\s*(?:date|time|payment)\s*$/i.test(line)) return false
     const metadataLine = /^\s*(?:date|time|invoice(?:\s*(?:no|number|#))?|receipt(?:\s*(?:no|number|#))?|(?:tax|vat|gst|sst)\s*(?:id|identification|number|no\.?|registration(?:\s+(?:id|number|no\.?))?)|(?:company\s+)?registration\s*(?:id|no\.?|number|#)?|taxpayer\s*(?:id|number)|tin|cashier|operator|terminal|pos|register|payment(?:\s+method)?|(?:credit|debit)?\s*card(?:\s+(?:number|no))?|cash|transaction\s*(?:id|no|number)|authorization\s*code|approval\s*code|reference\s*(?:no|number|#)?|phone|tel|email|address)(?!\w)\s*(?:[:#.-]\s*)?\S/i
     return stripped.length > 1 && stripped.length <= 80 && !metadataLine.test(line) && !/\b(receipt|invoice|subtotal|tax|vat|gst|sst|total|amount paid|amount due|thank you|change|cashier|merchant|pos)\b/i.test(stripped)
