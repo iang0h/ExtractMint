@@ -17,6 +17,10 @@ const privacyHtml = readText('public/privacy/index.html')
 const privacyMarkdown = readText('public/privacy/index.md')
 const guideHtml = readText('public/convert/bank-statement-to-excel/index.html')
 const guideMarkdown = readText('public/convert/bank-statement-to-excel/index.md')
+const pdfGuideHtml = readText('public/convert/pdf-bank-statement-to-excel/index.html')
+const pdfGuideMarkdown = readText('public/convert/pdf-bank-statement-to-excel/index.md')
+const scannedGuideHtml = readText('public/convert/scanned-bank-statement-to-excel/index.html')
+const scannedGuideMarkdown = readText('public/convert/scanned-bank-statement-to-excel/index.md')
 const homepageMarkdown = readText('public/index.md')
 const retiredBankSlugs = ['cimb-bank-statement-to-excel', 'maybank-bank-statement-to-excel', 'singapore-bank-statement-to-excel']
 
@@ -118,6 +122,34 @@ for (const [path, guide] of [['guide HTML', guideHtml], ['guide Markdown', guide
   assert.match(guide, /production accuracy/i, `${path} must bound the benchmark`)
   assert.match(guide, /bank-format-limitations/, `${path} needs the bank-format limitations anchor`)
   assert.match(guide, /no bank-specific format has been independently validated/i, `${path} must disclose bank-format limits`)
+}
+
+for (const [path, page] of [
+  ['PDF guide HTML', pdfGuideHtml],
+  ['PDF guide Markdown', pdfGuideMarkdown],
+  ['scanned guide HTML', scannedGuideHtml],
+  ['scanned guide Markdown', scannedGuideMarkdown],
+]) {
+  assert.match(page, /no bank-specific format has been independently validated/i, `${path} must disclose bank-format limits`)
+  assert.doesNotMatch(page, /(?:cimb|maybank|singapore)-bank-statement-to-excel/i, `${path} must not link to retired bank-specific routes`)
+}
+
+for (const [path, page] of [['PDF guide HTML', pdfGuideHtml], ['PDF guide Markdown', pdfGuideMarkdown]]) {
+  assert.match(page, /select(?:able)? text/i, `${path} should help readers distinguish text PDFs from scans`)
+  assert.match(page, /runs? (?:locally|in your browser)/i, `${path} should explain where core conversion runs`)
+  assert.match(page, /opening and closing balances/i, `${path} should give a concrete review step`)
+  assert.match(page, /scanned-bank-statement-to-excel/i, `${path} should link readers who need OCR`)
+}
+
+for (const [path, page] of [['scanned guide HTML', scannedGuideHtml], ['scanned guide Markdown', scannedGuideMarkdown]]) {
+  assert.match(page, /Force OCR/i, `${path} should explain the OCR control`)
+  assert.match(page, /English/i, `${path} should list supported OCR languages`)
+  assert.match(page, /Malay/i, `${path} should list supported OCR languages`)
+  assert.match(page, /Indonesian/i, `${path} should list supported OCR languages`)
+  assert.match(page, /Chinese \(Simplified\)/i, `${path} should list supported OCR languages`)
+  assert.match(page, /minus signs|negative amounts/i, `${path} should warn readers what to verify after OCR`)
+  assert.doesNotMatch(page, /Future upgrade/i, `${path} should not expose an internal product roadmap`)
+  assert.match(page, /pdf-bank-statement-to-excel/i, `${path} should link readers with searchable PDFs`)
 }
 
 const homepageGraph = JSON.parse(homepage.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1] ?? '{}')['@graph']

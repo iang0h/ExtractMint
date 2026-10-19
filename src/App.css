@@ -2442,6 +2442,22 @@ footer strong {
   margin: 26px 0 22px;
 }
 
+.hero-guide-note {
+  margin: 0 0 12px;
+  color: #a5a5a5;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.hero-guide-note a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hero-guide-note a:hover {
+  color: #fff;
+}
+
 .primary-button,
 .secondary-button {
   min-height: 46px;

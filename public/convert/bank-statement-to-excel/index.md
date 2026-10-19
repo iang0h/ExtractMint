@@ -1,6 +1,6 @@
-# Bank Statement to Excel Converter
+# Free Bank Statement to Excel Converter
 
-> ExtractMint converts bank statement PDFs into Excel and CSV rows for accounting, bookkeeping, and reconciliation.
+> Convert a bank statement PDF to Excel or CSV for free. Review transactions and balance checks before export. No sign-up; core conversion runs in your browser.
 
 ## What This Page Covers
 

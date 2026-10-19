@@ -4,14 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Scanned Bank Statement to Excel | ExtractMint</title>
+    <title>Scanned Bank Statement to Excel with OCR | ExtractMint</title>
     <meta
       name="description"
-      content="Convert scanned bank statements and images into Excel, CSV, DOCX, and PDF exports with browser OCR and review-ready rows."
+      content="Turn scanned bank statements and statement images into reviewable Excel, CSV, and other exports with browser OCR. Check every date, amount, and balance before use."
     />
     <link rel="canonical" href="https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/" />
     <link rel="stylesheet" href="/seo.css" />
-    <meta property="og:title" content="Scanned Bank Statement to Excel | ExtractMint" />
+    <meta property="og:title" content="Scanned Bank Statement to Excel with OCR | ExtractMint" />
     <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
@@ -19,44 +19,85 @@
     <div class="page">
       <nav class="nav">
         <a class="brand" href="/"><span class="mark" aria-hidden="true">EM</span>ExtractMint</a>
-        <div class="nav-links"><a href="/#converter">Converter</a><a href="/convert/pdf-bank-statement-to-excel/">PDF statements</a></div>
+        <div class="nav-links">
+          <a href="/#converter">Converter</a>
+          <a href="/convert/bank-statement-to-excel/">Bank statements</a>
+          <a href="/convert/pdf-bank-statement-to-excel/">Text PDFs</a>
+        </div>
       </nav>
       <main>
         <section class="hero">
           <div>
-            <span class="eyebrow">OCR statement conversion</span>
-            <h1>Convert cleaner statement scans into spreadsheet exports.</h1>
+            <span class="eyebrow">Scanned statements · OCR</span>
+            <h1>Turn a statement scan into rows you can review.</h1>
             <p class="lede">
-              ExtractMint can use browser OCR for images and scanned statements. Clean, high-resolution
-              scans work best; difficult scans should be reviewed before export.
+              ExtractMint reads statement PDFs and images in your browser, then organizes the text into transaction rows.
+              OCR can misread financial details, so check the result against the original before you export or use it.
             </p>
             <div class="cta-row">
-              <a class="button" href="/#converter">Try a scan</a>
-              <a class="button secondary" href="/convert/bank-statement-to-excel/">Text PDF converter</a>
+              <a class="button" href="/#converter">Open the converter</a>
+              <a class="button secondary" href="/convert/pdf-bank-statement-to-excel/">Convert a text PDF</a>
             </div>
           </div>
-          <aside class="demo-card">
-            <div class="drop"><strong>Scan OCR in progress</strong><div class="progress"><span></span></div></div>
-            <div class="sheet">
-              <div class="sheet-head"><span>Signal</span><span>Field</span><span>Value</span><span>Status</span></div>
-              <div class="sheet-row"><span>OCR</span><span>Date</span><span>13/03</span><span>Review</span></div>
-              <div class="sheet-row highlight"><span>OCR</span><span>Balance</span><span>3,272.50</span><span>Matched</span></div>
-              <div class="sheet-row"><span>OCR</span><span>Export</span><span>XLSX</span><span>Ready</span></div>
+          <aside class="demo-card" aria-label="Illustrative OCR review preview">
+            <div class="drop">
+              <strong>OCR result · review before use</strong>
+              <div class="progress"><span></span></div>
             </div>
+            <div class="sheet">
+              <div class="sheet-head"><span>Field</span><span>Read</span><span>Check</span><span>Next step</span></div>
+              <div class="sheet-row"><span>Date</span><span>13/03</span><span>Review</span><span>Source</span></div>
+              <div class="sheet-row highlight"><span>Amount</span><span>3,272.50</span><span>Review</span><span>Sign</span></div>
+              <div class="sheet-row"><span>Balance</span><span>—</span><span>Review</span><span>Reconcile</span></div>
+            </div>
+            <p>Illustrative preview. OCR results vary with the source document.</p>
           </aside>
         </section>
-        <section class="grid">
-          <article class="panel"><h2>Best inputs</h2><p>Use straight, high-resolution images with readable dates, descriptions, and amount columns.</p></article>
-          <article class="panel"><h2>Review required</h2><p>Scans are less reliable than text PDFs. Balance checks and manual review are important before using the file.</p></article>
-          <article class="panel"><h2>Future upgrade</h2><p>A production SaaS version should add server OCR, audit trails, and confidence-based review queues.</p></article>
+
+        <section class="grid" aria-label="OCR workflow">
+          <article class="panel">
+            <h2>Automatic OCR for PDFs</h2>
+            <p>ExtractMint first checks a PDF for selectable text. If it finds little text, it renders and OCRs the pages in your browser. For a text PDF that needs re-reading, turn on “Force OCR (scanned PDFs)” in the converter to OCR every page. Images use OCR directly.</p>
+          </article>
+          <article class="panel">
+            <h2>Choose the document language</h2>
+            <p>The converter offers English, Malay, Indonesian, and Chinese (Simplified). Choose the language used in the statement before processing; mixed-language text or unfamiliar terms may still need correction.</p>
+          </article>
+          <article class="panel">
+            <h2>Start with a clean scan</h2>
+            <p>Use a sharp, high-resolution scan with the page straight, evenly lit, and fully in frame. Avoid blur, glare, shadows, compression artifacts, and handwriting over transaction rows.</p>
+          </article>
         </section>
-        <section class="related">
+
+        <section class="grid" aria-label="What to review">
+          <article class="panel">
+            <h2>Check the details OCR can confuse</h2>
+            <p>Compare dates and descriptions with the source. Check decimal separators, minus signs, parentheses, and whether each transaction is a debit or credit. A small character error can change an amount or its direction.</p>
+          </article>
+          <article class="panel">
+            <h2>Reconcile balances and page breaks</h2>
+            <p>Look for transactions split or skipped at page boundaries. Compare opening and closing balances, deposits, withdrawals, and running balances. A balance check can flag a discrepancy, but it does not prove every OCR result is correct.</p>
+          </article>
+          <article class="panel">
+            <h2>Review, edit, then export</h2>
+            <p>Inspect the extracted rows in the converter and correct fields before downloading. Exports include XLSX, CSV, DOCX, PDF, QBO, review JSON, review-pack ZIP, and a combined workbook.</p>
+          </article>
+        </section>
+
+        <section class="related" aria-label="Related information">
           <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
-          <a href="/convert/pdf-bank-statement-to-excel/">PDF bank statement to Excel</a>
-          <a href="/convert/maybank-bank-statement-to-excel/">Maybank statement to Excel</a>
+          <a href="/convert/pdf-bank-statement-to-excel/">Text-based PDF to Excel</a>
+          <a href="/#converter">Open ExtractMint</a>
+          <a href="/privacy/">Privacy details</a>
+        </section>
+
+        <section class="panel">
+          <h2>Processing and bank-format limits</h2>
+          <p>In this static build, core file reading, PDF OCR, image OCR, and row extraction run in your browser. Optional “Persist OCR cache” and “Persist PDF review index” settings store derived text in this browser for repeat work; you can clear those caches in the converter. If you use the optional assistant, your question, file name, document details, and up to five extracted rows are sent to its endpoint; a configured AI provider may receive that context. The original PDF is not sent by that assistant request. See the <a href="/privacy/">privacy details</a>.</p>
+          <p>Bank statement layouts differ, and no bank-specific format has been independently validated against real statements. OCR language support is not a claim of bank coverage or guaranteed accuracy. Review each export against its source before relying on it.</p>
         </section>
       </main>
-      <footer class="footer"><span>ExtractMint</span><span>Scanned statements to review-ready spreadsheets.</span></footer>
+      <footer class="footer"><span>ExtractMint</span><span>Scanned statement rows, ready for review.</span></footer>
     </div>
   </body>
 </html>

@@ -1701,6 +1701,7 @@ function App() {
         <nav aria-label="Primary navigation">
           <a href="#converter">Converter</a>
           <a href="#formats">Formats</a>
+          <a href="/convert/bank-statement-to-excel/">Bank statement guide</a>
           <a href="/pricing/">Pricing</a>
           <a href="#faq">FAQ</a>
         </nav>
@@ -1714,11 +1715,11 @@ function App() {
         <div className="hero-copy">
           <p className="eyebrow">Bank statement converter</p>
           <h1 className="animated-headline">
-            <span>Turn statements into</span>
-            <span>clean data.</span>
+            <span>Bank statements</span>
+            <span>to Excel.</span>
           </h1>
           <p className="hero-lede">
-            Convert statement PDFs in your browser, review transactions and balance checks, then export to Excel, CSV, or accounting formats.
+            Convert bank statement PDFs in your browser for free. Review transactions and balance checks, then export to Excel, CSV, or QBO. No sign-up.
           </p>
           <div className="hero-actions">
             <button className="primary-button" onClick={() => inputRef.current?.click()}>
@@ -1730,6 +1731,9 @@ function App() {
               See how it works
             </a>
           </div>
+          <p className="hero-guide-note">
+            <a href="/convert/bank-statement-to-excel/">Bank statement to Excel guide</a>
+          </p>
           <div className="hero-proof" aria-label="Product trust signals">
             <span>
               <LockKeyhole size={16} />
@@ -2891,6 +2895,9 @@ function App() {
         </strong>
         <span>Document extraction for operators, accountants, and founders.</span>
         <div className="footer-links" aria-label="Site links">
+          <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
+          <a href="/convert/pdf-bank-statement-to-excel/">PDF statement to Excel</a>
+          <a href="/convert/scanned-bank-statement-to-excel/">Scanned statement to Excel</a>
           <a href="/#support">Support</a>
           <a href="/pricing/">Pricing</a>
           <a href="/privacy/">Privacy</a>
