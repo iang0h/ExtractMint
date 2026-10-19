@@ -220,6 +220,15 @@ const receiptBatchExportColumns = [
   ...receiptExportColumns,
   { header: 'Source Filename', key: 'fileName', width: 34 },
 ]
+const receiptSummaryColumns = [
+  { header: 'File', key: 'file', width: 34 },
+  { header: 'Kind', key: 'kind', width: 18 },
+  ...receiptExportColumns,
+  { header: 'SHA-256', key: 'sha256', width: 66 },
+  { header: 'File size', key: 'size', width: 14 },
+  { header: 'Last modified', key: 'lastModified', width: 22 },
+  { header: 'Processed', key: 'processed', width: 26 },
+]
 
 function receiptExportRow(result: ConversionResult) {
   const row = result.rows[0]
@@ -236,6 +245,20 @@ function receiptExportRow(result: ConversionResult) {
     confidence: row && Number.isFinite(row.confidence) ? `${row.confidence}%` : '',
     source: row?.source ?? '',
     fileName: result.fileName,
+  }
+}
+
+function receiptSummaryRow(result: ConversionResult) {
+  return {
+    ...receiptExportRow(result),
+    file: result.fileName,
+    kind: result.summary.documentKind,
+    sha256: result.fileMeta.sha256 ?? '',
+    size: result.fileMeta.size,
+    lastModified: result.fileMeta.lastModified
+      ? new Date(result.fileMeta.lastModified).toISOString()
+      : '',
+    processed: result.processedAt,
   }
 }
 
@@ -282,7 +305,7 @@ export async function createExcelBlob(result: ConversionResult) {
   const isReceipt = result.summary.documentKind === 'Receipt'
 
   const summary = workbook.addWorksheet('Summary')
-  summary.columns = [
+  summary.columns = isReceipt ? receiptSummaryColumns : [
     { header: 'File', key: 'file', width: 34 },
     { header: 'Kind', key: 'kind', width: 18 },
     { header: 'Currency', key: 'currency', width: 12 },
@@ -297,7 +320,7 @@ export async function createExcelBlob(result: ConversionResult) {
     { header: 'Last modified', key: 'lastModified', width: 22 },
     { header: 'Processed', key: 'processed', width: 26 },
   ]
-  summary.addRow({
+  summary.addRow(isReceipt ? receiptSummaryRow(result) : {
     file: result.fileName,
     kind: result.summary.documentKind,
     currency: result.summary.documentKind === 'Receipt' && result.currencyCodeDetected !== true ? '' : result.currencyCode,
@@ -314,6 +337,11 @@ export async function createExcelBlob(result: ConversionResult) {
       : '',
     processed: result.processedAt,
   })
+  if (isReceipt) {
+    ;['total', 'tax'].forEach((key) => {
+      summary.getColumn(key).numFmt = moneyFmt
+    })
+  }
   ;(isReceipt ? [] : result.validation.issues).forEach((issue) => {
     summary.addRow({
       file: issue.rowIndex !== undefined ? `Row ${issue.rowIndex + 1}` : 'Document',
@@ -495,9 +523,10 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
   const numberOrNull = (value: number | undefined) =>
     typeof value === 'number' && Number.isFinite(value) ? value : null
   const moneyFmt = '#,##0.00;[Red]-#,##0.00'
+  const receiptsOnly = results.length > 0 && results.every((result) => result.summary.documentKind === 'Receipt')
 
   const summary = workbook.addWorksheet('Summary')
-  summary.columns = [
+  summary.columns = receiptsOnly ? receiptSummaryColumns : [
     { header: 'File', key: 'file', width: 34 },
     { header: 'Kind', key: 'kind', width: 18 },
     { header: 'Currency', key: 'currency', width: 12 },
@@ -516,8 +545,8 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     { header: 'Processed', key: 'processed', width: 26 },
   ]
 
-  const issuesSheet = workbook.addWorksheet('Issues')
-  issuesSheet.columns = [
+  const issuesSheet = receiptsOnly ? undefined : workbook.addWorksheet('Issues')
+  if (issuesSheet) issuesSheet.columns = [
     { header: 'File', key: 'file', width: 34 },
     { header: 'Row', key: 'row', width: 10 },
     { header: 'Severity', key: 'severity', width: 12 },
@@ -551,7 +580,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
   }
 
   ;[
-    { sheet: summary, keys: ['opening', 'closing', 'net', 'deposits', 'withdrawals'] },
+    { sheet: summary, keys: receiptsOnly ? ['total', 'tax'] : ['opening', 'closing', 'net', 'deposits', 'withdrawals'] },
     ...(reconciliationSheet
       ? [{
           sheet: reconciliationSheet,
@@ -566,7 +595,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
           ],
         }]
       : []),
-    { sheet: issuesSheet, keys: ['delta', 'expected', 'actual'] },
+    ...(issuesSheet ? [{ sheet: issuesSheet, keys: ['delta', 'expected', 'actual'] }] : []),
   ].forEach(({ sheet, keys }) => {
     keys.forEach((key) => {
       const column = sheet.getColumn(key)
@@ -589,7 +618,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     const closing = result.validation.closingBalance
     const net = opening !== undefined && closing !== undefined ? closing - opening : undefined
 
-    summary.addRow({
+    summary.addRow(receiptsOnly ? receiptSummaryRow(result) : {
       file: result.fileName,
       kind: result.summary.documentKind,
       currency: result.summary.documentKind === 'Receipt' && result.currencyCodeDetected !== true ? '' : result.currencyCode,
@@ -630,7 +659,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     }
 
     result.validation.issues.forEach((issue) => {
-      issuesSheet.addRow({
+      issuesSheet?.addRow({
         file: result.fileName,
         row: issue.rowIndex !== undefined ? issue.rowIndex + 1 : '',
         severity: issue.severity,
@@ -687,7 +716,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     rowsSheet.views = [{ state: 'frozen', ySplit: 1 }]
   }
 
-  ;[summary, issuesSheet].forEach((sheet) => {
+  ;[summary, ...(issuesSheet ? [issuesSheet] : [])].forEach((sheet) => {
     sheet.getRow(1).font = { bold: true }
     sheet.views = [{ state: 'frozen', ySplit: 1 }]
   })
@@ -2353,7 +2382,20 @@ function hasGenericStatementTable(lines: string[], fileName: string) {
   const text = `${fileName}\n${lines.join('\n')}`
   const statementContext = /\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account|statement[\s_-]+period|account[\s_-]+number|opening[\s_-]+balance|closing[\s_-]+balance|running[\s_-]+balance|transaction[\s_-]+history)\b/i.test(text)
   return lines.some((line, headerIndex) => {
-    if (!line.includes('\t')) return false
+    if (!line.includes('\t')) {
+      if (!/^date\s+description\s+amount(?:\s*\([^)]*\))?$/i.test(line)) return false
+      // Require dated transactions, so one receipt date/amount entry stays a receipt.
+      return lines.slice(headerIndex + 1).filter((row) => {
+        const date = row.match(datePattern)
+        if (!date || date.index !== 0) return false
+        const detail = row.slice(date[0].length).trim()
+        const amount = [...detail.matchAll(new RegExp(amountPattern.source, amountPattern.flags))].at(-1)
+        if (!amount || (amount.index ?? 0) === 0) return false
+        const description = detail.slice(0, amount.index).trim()
+        return description !== '' && detail.slice((amount.index ?? 0) + amount[0].length).trim() === ''
+          && parseMoneyCell(detail.slice(amount.index)) !== undefined
+      }).length >= 2
+    }
     const headers = line.split('\t').map((column) => column.trim())
     const dateIndex = headers.findIndex((column) => /^date$/i.test(column))
     const descriptionIndex = headers.findIndex((column) => /^description$/i.test(column))
@@ -2420,18 +2462,39 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const taxQualifier = /\b(?:before|excluding|excl|pre)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/
   const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/i
   const amountLabelPattern = /\b(?:total\s+(?:tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst)\b/gi
-  const amountsInLabelSegment = (line: string, label: RegExpMatchArray | null | undefined, amounts: RegExpMatchArray[]) => {
-    if (!label) return []
-    const labelStart = label.index ?? 0
-    const labelEnd = labelStart + label[0].length
-    const labels = [...line.matchAll(new RegExp(amountLabelPattern.source, amountLabelPattern.flags))].filter((candidate) => {
-      // Inclusive tax phrases remain annotations handled by the existing tax rules.
+  const labelsInAmountLine = (line: string) =>
+    [...line.matchAll(new RegExp(amountLabelPattern.source, amountLabelPattern.flags))].filter((candidate) => {
+      // Tax qualifiers remain part of their label rather than starting another value span.
       if (!/^(?:tax|vat|gst|sst)$/i.test(candidate[0])) return true
       const prefix = normalizeLabel(line.slice(0, (candidate.index ?? 0) + candidate[0].length))
       const suffix = normalizeLabel(line.slice(candidate.index ?? 0))
       return !new RegExp(`(?:${inclusiveTaxQualifier.source})$`, 'i').test(prefix)
+        && !new RegExp(`(?:${taxQualifier.source})$`, 'i').test(prefix)
         && !/^(?:tax|vat|gst|sst)\s+(?:included|inclusive)\b/i.test(suffix)
+        && !/^(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/i.test(suffix)
     })
+  const amountLines = lines.flatMap((line, lineIndex) => {
+    const segments: { text: string; lineIndex: number }[] = []
+    let start = 0
+    // Bind compact label/value spans before subtotal or qualifier exclusions.
+    // Labels without an intervening monetary value (e.g. "Total before tax") stay together.
+    labelsInAmountLine(line).slice(1).forEach((label) => {
+      const nextStart = label.index ?? 0
+      const preceding = line.slice(start, nextStart)
+      const hasAmount = [...preceding.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
+        .some((amount) => !/^\s*(?:\)?\s*%|%\s*\)?)/.test(preceding.slice((amount.index ?? 0) + amount[0].length)))
+      if (!hasAmount) return
+      segments.push({ text: preceding.trim(), lineIndex })
+      start = nextStart
+    })
+    segments.push({ text: line.slice(start).trim(), lineIndex })
+    return segments
+  })
+  const amountsInLabelSegment = (line: string, label: RegExpMatchArray | null | undefined, amounts: RegExpMatchArray[]) => {
+    if (!label) return []
+    const labelStart = label.index ?? 0
+    const labelEnd = labelStart + label[0].length
+    const labels = labelsInAmountLine(line)
     const nextLabelStart = labels.find((candidate) => (candidate.index ?? 0) >= labelEnd)?.index ?? line.length
     const following = amounts.filter((amount) => (amount.index ?? 0) >= labelEnd
       && (amount.index ?? 0) + amount[0].length <= nextLabelStart)
@@ -2441,7 +2504,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     return amounts.filter((amount) => (amount.index ?? 0) + amount[0].length <= labelStart)
   }
   const excludedTotalLabel = /\b(?:sub total|tax total|total tax|(?:vat|gst|sst) total|total (?:vat|gst|sst)|total (?:pre tax|before tax|excluding tax|savings?|discounts?|discounted|items?|quantity|units?)|(?:pre tax|before tax|excluding tax) total|(?:savings?|discounts?) total|taxable amount)\b/
-  const totalLines = lines.filter((line) => {
+  const totalLines = amountLines.filter(({ text: line }) => {
     const label = normalizeLabel(line)
     const nonPayableQualifier = taxQualifier.test(label) || /\b(?:savings?|discounts?)\b/.test(label)
     return /\b(grand total|total paid|amount paid|amount due|balance due|total)\b/.test(label)
@@ -2449,8 +2512,9 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
       && !nonPayableQualifier
   })
   const payablePriority = [/\bamount\s+paid\b/i, /\btotal\s+paid\b/i, /\bgrand\s+total\b/i, /\btotal\b/i, /\bamount\s+due\b/i, /\bbalance\s+due\b/i]
-  const selectedPayableLabel = payablePriority.find((label) => totalLines.some((line) => label.test(line)))
-  const totalLine = (selectedPayableLabel ? totalLines.find((line) => selectedPayableLabel.test(line)) : undefined) ?? totalLines[0]
+  const selectedPayableLabel = payablePriority.find((label) => totalLines.some(({ text }) => label.test(text)))
+  const totalSegment = (selectedPayableLabel ? totalLines.find(({ text }) => selectedPayableLabel.test(text)) : undefined) ?? totalLines[0]
+  const totalLine = totalSegment?.text
   const totalAmountMatches = totalLine ? [...totalLine.matchAll(new RegExp(amountPattern.source, amountPattern.flags))] : []
   const eligibleTotalMatches = totalAmountMatches.filter((match) => {
     const suffix = totalLine?.slice((match.index ?? 0) + match[0].length) ?? ''
@@ -2505,7 +2569,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const taxMetadataLabel = /\b(?:tax|vat|gst|sst)\b.{0,30}\b(?:id|identification|number|no|registration|registered)\b|\b(?:id|identification|number|registration|registered)\b.{0,30}\b(?:tax|vat|gst|sst)\b/i
   const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
   const taxLabel = /\b(?:total\s+(?:tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|tax|vat|gst|sst)\b/i
-  const taxLines = lines.filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxQualifier.test(normalizeLabel(line)) && !inclusiveTaxQualifier.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
+  const taxLines = amountLines.map(({ text }) => text).filter((line) => taxLabel.test(line) && !/\b(sub[\s-]*total|tax invoice)\b/i.test(line) && !nonTaxAmountLabel.test(normalizeLabel(line)) && !taxQualifier.test(normalizeLabel(line)) && !inclusiveTaxQualifier.test(normalizeLabel(line)) && !taxMetadataLabel.test(line) && !/\b(?:company\s+)?registration\b/i.test(line) && !/^\s*(?:taxpayer\s*(?:id|number)|tin)\s*(?:[:#-]\s*)?\S/i.test(line) && !(/\btotal\b/i.test(line) && /\b(?:savings?|discounts?|before tax|excluding tax|pre tax)\b/i.test(normalizeLabel(line))))
   const monetaryTaxLines = taxLines.filter((line) => {
     const amountMatches = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
     return amountMatches.some((match) => {
@@ -2537,7 +2601,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     tax: taxMatch ? parseAmount(taxMatch) : inlineTaxMatch ? parseAmount(inlineTaxMatch[0]) : undefined,
     category,
     confidence: Math.max(20, Math.min(96, 96 - [date, merchant, totalMatch, currencyCodeDetected].filter((value) => !value).length * 16)),
-    source: totalLine ? `Line ${lines.indexOf(totalLine) + 1}` : fileName || 'Receipt text',
+    source: totalSegment ? `Line ${totalSegment.lineIndex + 1}` : fileName || 'Receipt text',
   }
 }
 
