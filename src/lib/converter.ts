@@ -227,7 +227,7 @@ function receiptExportRow(result: ConversionResult) {
     typeof value === 'number' && Number.isFinite(value) ? value : ''
   return {
     date: row?.date ?? '',
-    merchant: row?.description === 'Receipt' && !result.summary.vendor ? '' : row?.description ?? '',
+    merchant: row?.description ?? '',
     total: numberOrBlank(row?.amount),
     tax: numberOrBlank(row?.tax),
     currency: result.currencyCodeDetected === true ? result.currencyCode : '',
@@ -1202,6 +1202,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
           total: rowsValue.length,
           notes: ['Imported from ExtractMint review JSON'],
         }
+  const isReceipt = summary.documentKind === 'Receipt'
 
   const fileMeta =
     typeof payload.fileMeta === 'object' && payload.fileMeta
@@ -1213,7 +1214,10 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
 
   const rows: ExtractedRow[] = rowsValue.map((row) => {
     const record = (row ?? {}) as Record<string, unknown>
-    const description = asString(record.description)?.trim() || 'Transaction'
+    const parsedDescription = asString(record.description)?.trim() ?? ''
+    const description = isReceipt
+      ? parsedDescription === 'Receipt' ? '' : parsedDescription
+      : parsedDescription || 'Transaction'
     const category = asString(record.category)?.trim() || 'Uncategorized'
     const confidence = asFiniteNumber(record.confidence) ?? 0
     const source = asString(record.source)?.trim() || 'review-json'
@@ -1257,7 +1261,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
     confidence: asFiniteNumber(payload.confidence) ?? Math.round((summary.total ?? 0) > 0 ? 84 : 0),
     validation,
     processedAt,
-    summary,
+    summary: isReceipt ? { ...summary, vendor: rows[0]?.description || undefined } : summary,
   }
 }
 
@@ -1797,10 +1801,13 @@ function parseRawText(
         title: fileName.replace(/\.[^.]+$/, '') || fileName,
         documentKind: 'Receipt',
         total: fallbackRows[0]?.amount,
-        vendor: fallbackRows[0]?.description === 'Receipt' ? undefined : fallbackRows[0]?.description,
+        vendor: fallbackRows[0]?.description || undefined,
         notes: fallbackRows[0]?.amount === undefined ? ['Receipt total not found; review required'] : [],
       }
-    : summarize(lines, fallbackRows, fileName, validation)
+    : {
+        ...summarize(lines, fallbackRows, fileName, validation),
+        ...(structuredRows.length > 0 ? { documentKind: 'Statement' } : {}),
+      }
   const confidence = receipt
     ? fallbackRows[0]?.confidence ?? 0
     : scoreConfidence(fileType, fallbackRows, normalized, validation)
@@ -2330,7 +2337,14 @@ function detectCurrencyCode(rawText: string, fileName: string): { code: string; 
 function looksLikeReceipt(lines: string[], fileName: string) {
   const text = `${fileName}\n${lines.join('\n')}`
   if (/\b(statement period|account number|opening balance|closing balance|running balance|transaction history)\b/i.test(text)) return false
-  if (lines.some((line) => line.includes('\t') && /\b(date|description|withdrawal|deposit|balance)\b/i.test(line))) return false
+  const statementAmountHeader = /^(?:balance|debit|credit|withdrawals?|deposits?)(?:\s+(?:baki|pengeluaran|deposit))?(?:\s*\([^)]*\))?$/i
+  const statementDetailHeader = /^(?:date|description|ref(?:erence)?)(?:\s+(?:tarikh|diskripsi|no))?$/i
+  if (lines.some((line) => {
+    if (!line.includes('\t')) return false
+    const columns = line.split('\t').map((column) => column.trim()).filter(Boolean)
+    const headerCount = columns.filter((column) => statementAmountHeader.test(column) || statementDetailHeader.test(column)).length
+    return headerCount >= 2 && columns.some((column) => statementAmountHeader.test(column))
+  })) return false
   const runningBalancePattern = lines.some((line) => datePattern.test(line) && (line.match(amountPattern)?.length ?? 0) >= 2 && /\b(balance|debit|credit|withdrawal|deposit)\b/i.test(line))
   if (runningBalancePattern) return false
   return /\b(subtotal|tax|vat|gst|sst|total\s+paid|amount\s+paid|grand\s+total|merchant|pos|receipt|amount\s+due)\b/i.test(text)
@@ -2358,7 +2372,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
       && !excludedTotalLabel.test(label)
       && !nonPayableQualifier
   })
-  const payablePriority = [/\bbalance\s+due\b/i, /\bgrand\s+total\b/i, /\bamount\s+due\b/i, /\btotal\s+paid\b/i, /\bamount\s+paid\b/i, /\btotal\b/i]
+  const payablePriority = [/\bamount\s+paid\b/i, /\btotal\s+paid\b/i, /\bgrand\s+total\b/i, /\btotal\b/i, /\bamount\s+due\b/i, /\bbalance\s+due\b/i]
   const selectedPayableLabel = payablePriority.find((label) => totalLines.some((line) => label.test(line)))
   const totalLine = (selectedPayableLabel ? totalLines.find((line) => selectedPayableLabel.test(line)) : undefined) ?? totalLines[0]
   const totalAmountMatches = totalLine ? [...totalLine.matchAll(new RegExp(amountPattern.source, amountPattern.flags))] : []
@@ -2437,7 +2451,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   else if (/\b(software|cloud|hosting|subscription)\b/.test(categorySource)) category = 'Software'
   return {
     date,
-    description: merchant || 'Receipt',
+    description: merchant || '',
     amount: totalMatch ? parseAmount(totalMatch[0]) : undefined,
     tax: taxMatch ? parseAmount(taxMatch) : inlineTaxMatch ? parseAmount(inlineTaxMatch[0]) : undefined,
     category,
