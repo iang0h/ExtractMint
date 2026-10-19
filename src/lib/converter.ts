@@ -2347,7 +2347,7 @@ function detectCurrencyCode(rawText: string, fileName: string): { code: string; 
 
 function hasGenericStatementTable(lines: string[], fileName: string) {
   const text = `${fileName}\n${lines.join('\n')}`
-  const statementContext = /\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account)\b/i.test(text)
+  const statementContext = /\b(?:bank[\s_-]+statement|account[\s_-]+statement|statement[\s_-]+of[\s_-]+account|statement[\s_-]+period|account[\s_-]+number|opening[\s_-]+balance|closing[\s_-]+balance|running[\s_-]+balance|transaction[\s_-]+history)\b/i.test(text)
   return lines.some((line, headerIndex) => {
     if (!line.includes('\t')) return false
     const headers = line.split('\t').map((column) => column.trim())
