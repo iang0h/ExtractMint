@@ -1780,7 +1780,11 @@ function App() {
                 disabled={isProcessing}
                 accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.docx,.txt,.csv,.xlsx,.xls,.zip,.extractmint-review.json"
                 onChange={(event) => {
-                  if (event.target.files) void processFiles(event.target.files)
+                  const input = event.currentTarget
+                  const files = input.files
+                  if (files) void processFiles(files)
+                  // processFiles snapshots the files synchronously before this reset.
+                  input.value = ''
                 }}
               />
               <span className="drop-icon">
