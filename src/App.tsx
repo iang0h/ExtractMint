@@ -1743,7 +1743,7 @@ function App() {
               </a>
             </div>
             <p className="local-processing-note">
-              Conversion runs in your browser. Privacy and support details are available below.
+              Conversion runs in your browser. <a href="#support">Privacy and support details</a>
             </p>
 
             {showProgressPanel && (
@@ -1812,7 +1812,7 @@ function App() {
               </div>
             ) : null}
 
-            {activeResult ? (
+            {activeResult && !isProcessing ? (
               <div className="export-sanity" aria-label="Export sanity checks">
                 {(() => {
                   const snapshot = exportSanitySnapshot(activeResult)
