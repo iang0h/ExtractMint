@@ -2266,16 +2266,20 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const totalLines = lines.filter((line) => /\b(grand\s+total|total\s+paid|amount\s+paid|amount\s+due|balance\s+due|total)\b/i.test(line) && !excludedTotalLabel.test(line))
   const totalLine = totalLines.find((line) => /\b(grand\s+total|total\s+paid|amount\s+paid)\b/i.test(line)) ?? totalLines[0]
   const totalMatch = totalLine?.match(amountPattern)?.at(-1)
-  const taxLines = lines.filter((line) => /\b(tax|vat|gst|sst)\b/i.test(line) && !/\b(subtotal|tax invoice|total\s+(?:tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+total)\b/i.test(line))
+  const taxLines = lines.filter((line) => /\b(tax|vat|gst|sst)\b/i.test(line) && !/\b(subtotal|tax invoice)\b/i.test(line))
   const monetaryTaxLines = taxLines.filter((line) => {
     const amountMatches = [...line.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
     return amountMatches.some((match) => {
       const suffix = line.slice((match.index ?? 0) + match[0].length)
-      return !/^\s*%/.test(suffix)
+      return !/^\s*\)?\s*%/.test(suffix)
     })
   })
   const taxLine = monetaryTaxLines.find((line) => /\b(?:tax|vat|gst|sst)\s*(?:amount|:|#|-)?\s*[$€£]|\b(?:tax|vat|gst|sst)\b.*(?:\b(?:rm|myr|sgd|usd|eur|gbp|aud|cad)\b|[$€£])/i.test(line)) ?? monetaryTaxLines[0]
-  const taxMatch = taxLine?.match(amountPattern)?.at(-1)
+  const taxAmountMatches = taxLine ? [...taxLine.matchAll(new RegExp(amountPattern.source, amountPattern.flags))] : []
+  const taxMatch = taxAmountMatches.filter((match) => {
+    const suffix = taxLine?.slice((match.index ?? 0) + match[0].length) ?? ''
+    return !/^\s*\)?\s*%/.test(suffix)
+  }).at(-1)?.[0]
   const categorySource = `${merchant ?? ''} ${lines.join(' ')}`.toLowerCase()
   let category = 'Uncategorized'
   if (/\b(cafe|coffee|restaurant|food|grocery|market|bakery)\b/.test(categorySource)) category = 'Meals'
