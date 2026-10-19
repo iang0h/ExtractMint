@@ -69,11 +69,11 @@
 - Add `createReceiptBatchCsvBlob(results: ConversionResult[]): Blob`, filtering receipt results and writing one row per receipt.
 - `createCombinedExcelBlob` adds one consolidated `Receipts` sheet when a batch contains receipts, while preserving existing per-file sheets and the Issues sheet.
 
-- [ ] **Step 1: Format a single receipt export.** When `result.summary.documentKind === 'Receipt'`, make the Excel Rows sheet and CSV columns Date, Merchant, Total, Tax, Currency, Currency Status, Category, Confidence, and Source. Leave Currency blank when `currencyCodeDetected` is false; set Currency Status to `Needs review` when false and `Confirmed` when true. Leave missing extracted values blank. Keep bank-statement sheet/CSV columns unchanged.
-- [ ] **Step 2: Add the consolidated receipt worksheet.** In `createCombinedExcelBlob`, add a `Receipts` sheet containing all receipt results in the batch with the same fields plus source filename. Use safe sheet-name handling already present in the workbook helper.
-- [ ] **Step 3: Add batch CSV export.** Implement `createReceiptBatchCsvBlob` with one row per receipt and proper CSV quoting. Include source filename and the Currency Status column (`Confirmed` or `Needs review`).
-- [ ] **Step 4: Wire receipt export actions.** In `App.tsx`, show “All receipts XLSX” and “All receipts CSV” actions when the current batch contains receipt results. Name downloads `extractmint-receipts-YYYYMMDD.xlsx` and `extractmint-receipts-YYYYMMDD.csv`. Keep individual export buttons and all existing statement exports working as they do now.
-- [ ] **Step 5: Commit the export change.** Commit changes in `src/lib/converter.ts` and `src/App.tsx` as `feat: export receipt batches`.
+- [x] **Step 1: Format a single receipt export.** When `result.summary.documentKind === 'Receipt'`, make the Excel Rows sheet and CSV columns Date, Merchant, Total, Tax, Currency, Currency Status, Category, Confidence, and Source. Leave Currency blank when `currencyCodeDetected` is false; set Currency Status to `Needs review` when false and `Confirmed` when true. Leave missing extracted values blank. Keep bank-statement sheet/CSV columns unchanged.
+- [x] **Step 2: Add the consolidated receipt worksheet.** In `createCombinedExcelBlob`, add a `Receipts` sheet containing all receipt results in the batch with the same fields plus source filename. Use safe sheet-name handling already present in the workbook helper.
+- [x] **Step 3: Add batch CSV export.** Implement `createReceiptBatchCsvBlob` with one row per receipt and proper CSV quoting. Include source filename and the Currency Status column (`Confirmed` or `Needs review`).
+- [x] **Step 4: Wire receipt export actions.** In `App.tsx`, show “All receipts XLSX” and “All receipts CSV” actions when the current batch contains receipt results. Name downloads `extractmint-receipts-YYYYMMDD.xlsx` and `extractmint-receipts-YYYYMMDD.csv`. Keep individual export buttons and all existing statement exports working as they do now.
+- [x] **Step 5: Commit the export change.** Commit changes in `src/lib/converter.ts` and `src/App.tsx` as `feat: export receipt batches`.
 
 ### Task 4: Compile check and requirement review
 
