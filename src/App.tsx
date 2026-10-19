@@ -209,80 +209,6 @@ const faqItems = [
   },
 ]
 
-const createSampleResultLite = (): ConversionResult => ({
-  fileName: 'sample-bank-statement.pdf',
-  fileType: 'application/pdf',
-  currencyCode: 'USD',
-  statementPeriod: {
-    start: '2026-04-01',
-    end: '2026-04-30',
-    source: 'inferred',
-  },
-  fileMeta: {
-    size: 0,
-    lastModified: Date.now(),
-    sha256: 'sample',
-  },
-  rawText: 'Sample statement preview (conversion runs after upload).',
-  rows: [
-    {
-      date: '2026-04-02',
-      description: 'STRIPE PAYOUT INV-1082',
-      deposit: 8420,
-      amount: 8420,
-      balance: 24991.2,
-      reference: 'INV-1082',
-      category: 'Income',
-      confidence: 0.93,
-      source: 'sample',
-    },
-    {
-      date: '2026-04-05',
-      description: 'AWS CLOUD SERVICES',
-      withdrawal: 842.1,
-      amount: -842.1,
-      balance: 24149.1,
-      reference: '',
-      category: 'Expense',
-      confidence: 0.92,
-      source: 'sample',
-    },
-    {
-      date: '2026-04-08',
-      description: 'CLIENT ACME RETAINER',
-      deposit: 12500,
-      amount: 12500,
-      balance: 36649.1,
-      reference: '',
-      category: 'Income',
-      confidence: 0.93,
-      source: 'sample',
-    },
-  ],
-  confidence: 92,
-  validation: {
-    status: 'review',
-    checkedRows: 2,
-    issueCount: 1,
-    openingBalance: undefined,
-    closingBalance: 38268.1,
-    issues: [
-      {
-        severity: 'info',
-        message: 'Upload a real statement to validate the full running balance trail.',
-      },
-    ],
-  },
-  processedAt: new Date().toISOString(),
-  summary: {
-    title: 'Sample statement',
-    documentKind: 'Bank statement',
-    total: 0,
-    vendor: 'ExtractMint',
-    notes: ['Sample preview only. Upload a file to run extraction.'],
-  },
-})
-
 function fileSignatureParts(fileName: string, size: number, lastModified: number) {
   return `${fileName}:${size}:${lastModified}`
 }
@@ -452,7 +378,7 @@ const TELEMETRY_STORAGE_KEY = 'extractmint.telemetry.v1'
 function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL ?? '').trim()
-  const [results, setResults] = useState<ConversionResult[]>([createSampleResultLite()])
+  const [results, setResults] = useState<ConversionResult[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [showAllRows, setShowAllRows] = useState(false)
   const [onlyIssues, setOnlyIssues] = useState(false)
@@ -532,10 +458,10 @@ function App() {
     }
   })
   const [progress, setProgress] = useState<ProgressEvent>({
-    fileName: 'sample-bank-statement.pdf',
+    fileName: '',
     stage: 'ready',
-    percent: 100,
-    detail: 'Sample conversion loaded',
+    percent: 0,
+    detail: '',
   })
   const conversionSawOcrRef = useRef(false)
 
@@ -554,6 +480,8 @@ function App() {
   }
 
   const activeResult = results[activeIndex] ?? results[0]
+  const showProgressPanel =
+    isProcessing || progress.stage === 'error' || progress.detail === 'Conversion canceled'
   const activeSha = activeResult?.fileMeta?.sha256
   const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
   const activePdfSignature = activeResult
@@ -2018,7 +1946,8 @@ function App() {
                   </details>
 			            </div>
 
-	            <div className="progress-panel" role="status" aria-live="polite">
+	            {showProgressPanel && (
+              <div className="progress-panel" role="status" aria-live="polite">
 	              <div>
 	                <span>{progress.stage}</span>
 	                <strong>{progress.fileName}</strong>
@@ -2039,7 +1968,8 @@ function App() {
                 </svg>
                 <span>{progress.percent}%</span>
               </div>
-            </div>
+              </div>
+            )}
 
             {pdfPasswordPrompt ? (
               <form className="pdf-password-prompt" onSubmit={submitPdfPassword} aria-labelledby="pdf-password-title">
@@ -2209,6 +2139,7 @@ function App() {
         ))}
       </section>
 
+      {activeResult ? (
       <section className="results-section">
         <div className="section-heading">
           <span className="eyebrow">Converted workspace</span>
@@ -2689,6 +2620,7 @@ function App() {
           </div>
         </div>
       </section>
+      ) : null}
 
       <section className="workflow-section" id="video">
         <div className="section-heading">
