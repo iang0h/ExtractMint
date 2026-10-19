@@ -37,7 +37,7 @@ No known concerns. Visual verification in the app was not performed.
 
 Reviewer findings resolved in follow-up commit:
 
-- Hash: `54e8221421468c4a7e606f92a7b52891167c0f5d`
+- Hash: `d2579bbf455c9990c9c922ef964035a7ed652990`
 - Subject: `Hide exports until conversion completes`
 - Gated the converted workspace on `activeResult && !isProcessing`.
 - Hid `.export-row` and `.export-options` unless a result exists and processing has finished. Existing export controls and handlers are preserved inside the gated markup.
