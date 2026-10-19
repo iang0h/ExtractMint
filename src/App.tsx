@@ -37,6 +37,25 @@ import {
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
 import { createSampleRunGuard, fetchSyntheticSample, SYNTHETIC_SAMPLE_FILENAME, SYNTHETIC_SAMPLE_URL, type SampleRun } from './lib/syntheticSample.mjs'
 
+type CachedPdfDocumentProxy = PdfDocumentProxy & {
+  destroy?: () => Promise<void>
+}
+
+function destroyPdfDocument(pdf: CachedPdfDocumentProxy) {
+  try {
+    void pdf.destroy?.().catch(() => {
+      // Cleanup must not interrupt conversion or preview state updates.
+    })
+  } catch {
+    // A document may already have been released by PDF.js.
+  }
+}
+
+function destroyPdfDocuments(documents: Map<string, CachedPdfDocumentProxy>) {
+  documents.forEach(destroyPdfDocument)
+  documents.clear()
+}
+
 type PdfPasswordPrompt = {
   fileName: string
   reason: 'required' | 'incorrect'
@@ -481,6 +500,7 @@ function App() {
   const [pdfThumbStatus, setPdfThumbStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [pdfUrlsBySha, setPdfUrlsBySha] = useState<Record<string, string>>({})
   const pdfUrlRef = useRef<Record<string, string>>({})
+  const pdfDocumentsRef = useRef(new Map<string, CachedPdfDocumentProxy>())
   const pdfDocRef = useRef<unknown>(null)
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null)
   const [pdfMatchInfo, setPdfMatchInfo] = useState<PdfMatchInfo | null>(null)
@@ -535,6 +555,9 @@ function App() {
   const activeResult = results[activeIndex] ?? results[0]
   const activeSha = activeResult?.fileMeta?.sha256
   const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
+  const activePdfSignature = activeResult
+    ? fileSignatureParts(activeResult.fileName, activeResult.fileMeta.size, activeResult.fileMeta.lastModified)
+    : undefined
   const supportMailtoHref = useMemo(() => {
     if (!supportEmail) return null
     const subject = 'ExtractMint support request'
@@ -628,6 +651,8 @@ function App() {
 
   useEffect(() => {
     return () => {
+      conversionAbortRef.current?.abort()
+      destroyPdfDocuments(pdfDocumentsRef.current)
       const urls = Object.values(pdfUrlRef.current)
       urls.forEach((url) => {
         try {
@@ -640,7 +665,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!showSourcePreview || !activePdfUrl) {
+    const cachedPdf = activePdfSignature ? pdfDocumentsRef.current.get(activePdfSignature) : undefined
+    if (!showSourcePreview || (!cachedPdf && !activePdfUrl)) {
       pdfDocRef.current = null
       setPdfDoc(null)
       setPdfPageCount(null)
@@ -651,7 +677,18 @@ function App() {
       return
     }
 
+    if (cachedPdf) {
+      pdfDocRef.current = cachedPdf
+      setPdfDoc(cachedPdf)
+      setPdfPageCount(cachedPdf.numPages)
+      setPdfPage((current) => clampPage(current, cachedPdf.numPages))
+      setPdfThumbStatus('ready')
+      return
+    }
+    if (!activePdfUrl) return
+
     let cancelled = false
+    let previewPdf: CachedPdfDocumentProxy | null = null
     pdfDocRef.current = null
     setPdfDoc(null)
     setPdfPageCount(null)
@@ -667,7 +704,11 @@ function App() {
         const response = await fetch(activePdfUrl)
         const buffer = await response.arrayBuffer()
         const pdf = await pdfjs.getDocument({ data: buffer }).promise
-        if (cancelled) return
+        if (cancelled) {
+          destroyPdfDocument(pdf as unknown as CachedPdfDocumentProxy)
+          return
+        }
+        previewPdf = pdf as unknown as CachedPdfDocumentProxy
         pdfDocRef.current = pdf
         setPdfDoc(pdf as unknown as PdfDocumentProxy)
         setPdfPageCount(pdf.numPages)
@@ -687,8 +728,9 @@ function App() {
 
     return () => {
       cancelled = true
+      if (previewPdf) destroyPdfDocument(previewPdf)
     }
-  }, [activePdfUrl, showSourcePreview])
+  }, [activePdfUrl, activePdfSignature, results, showSourcePreview])
 
   useEffect(() => {
     if (!showSourcePreview || !activeSha || !selectedRow || selectedRowIndex === null) {
@@ -1096,6 +1138,8 @@ function App() {
     const controller = new AbortController()
     conversionAbortRef.current = controller
     const signatureUrls: Record<string, string> = {}
+    const batchPdfDocuments = new Map<string, CachedPdfDocumentProxy>()
+    let batchDocumentsAdopted = false
     const reviewJsonFiles = files.filter((file) =>
       file.name.toLowerCase().endsWith('.extractmint-review.json'),
     )
@@ -1198,8 +1242,14 @@ function App() {
               persistOcrCache,
               signal: controller.signal,
               requestPdfPassword,
+              onPdfDocumentLoaded: (file, pdf) => {
+                const signature = fileSignatureParts(file.name, file.size, file.lastModified)
+                const previous = batchPdfDocuments.get(signature)
+                if (previous) destroyPdfDocument(previous)
+                batchPdfDocuments.set(signature, pdf as unknown as CachedPdfDocumentProxy)
+              },
             })
-      if (!sampleIsCurrent()) return
+      if (!sampleIsCurrent() || controller.signal.aborted) return
 
       if (converted.length > 0) {
         if (source === 'upload') converted.forEach(() => trackExtractMintEvent('conversion_completed'))
@@ -1254,6 +1304,9 @@ function App() {
           }),
         )
       }
+      destroyPdfDocuments(pdfDocumentsRef.current)
+      pdfDocumentsRef.current = batchPdfDocuments
+      batchDocumentsAdopted = true
       setResults(combined)
       refreshOcrCacheStats()
       setProgress({
@@ -1281,6 +1334,7 @@ function App() {
         }
       })
     } finally {
+      if (!batchDocumentsAdopted) destroyPdfDocuments(batchPdfDocuments)
       conversionAbortRef.current = null
       pendingPdfPasswordRef.current = null
       setPdfPasswordPrompt(null)
