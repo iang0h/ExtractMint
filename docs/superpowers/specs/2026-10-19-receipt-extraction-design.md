@@ -25,6 +25,7 @@ Currency may use a detected code when the text provides a clear signal. The curr
 ## Extraction and export boundaries
 
 - Reuse the existing browser OCR and document input pipeline; do not upload receipt files or text to a server.
+- Keep receipt filenames, OCR text, and extracted fields out of optional remote assistant requests. Hide or disable remote assistant support while a receipt is active.
 - Use explicit receipt labels for date, tax/VAT/GST/SST, subtotal, and total where possible. Prefer an explicit grand total or amount paid over subtotal. Never manufacture a missing total.
 - Preserve bank-statement parsing, balance validation, and current export behavior.
 - Receipt XLSX/CSV rows include Date, Merchant, Total, Tax, Currency, Category, Confidence, and Source.

@@ -11,6 +11,7 @@
 ## Global Constraints
 
 - Reuse the existing browser OCR and document input pipeline; do not upload receipt files or text to a server.
+- Keep receipt filenames, OCR text, and extracted fields out of optional remote assistant requests. Hide or disable remote assistant support while a receipt is active.
 - Use explicit receipt labels for date, tax/VAT/GST/SST, subtotal, and total where possible. Prefer an explicit grand total or amount paid over subtotal. Never manufacture a missing total.
 - Preserve bank-statement parsing, balance validation, and current export behavior.
 - Receipt XLSX/CSV rows include Date, Merchant, Total, Tax, Currency, Category, Confidence, and Source.
@@ -30,12 +31,12 @@
 - Add optional `ConversionResult.currencyCodeDetected?: boolean`. `currencyCode` can retain its existing formatting fallback, but receipt exports show a currency only when this flag is true.
 - Keep `parseRawText(rawText, fileName, fileType, fileMeta)` as the parser entry point. Statement-table parsing takes priority over receipt detection.
 
-- [ ] **Step 1: Track explicit currency evidence.** Change the private currency detector to return `{ code: string; detected: boolean }`. Preserve the existing code choice and USD fallback for current bank-statement displays. Set `currencyCodeDetected` only when the text or filename has an explicit supported currency signal.
-- [ ] **Step 2: Add conservative receipt detection.** Add a private `looksLikeReceipt(lines: string[], fileName: string)` helper. Recognize explicit receipt labels such as subtotal, tax/VAT/GST/SST, total paid, merchant, or POS wording. Return false when statement headers or a running-balance pattern identify a bank statement.
-- [ ] **Step 3: Extract one receipt row.** Add a private `parseReceipt(lines: string[], fileName: string, currencyCode: string, currencyCodeDetected: boolean): ExtractedRow`. Prefer an explicit date and merchant text; choose an explicitly labeled grand total/amount paid/total over subtotal; capture only explicitly labeled tax values; suggest a category only from clear keywords and otherwise use `Uncategorized`. Leave unreadable fields undefined, set source and confidence, and lower confidence when date, merchant, total, or currency is missing.
-- [ ] **Step 4: Route receipt text without changing statement results.** In `parseRawText`, keep `parseStatementTable` first. If it returns no statement rows and `looksLikeReceipt` is true, use exactly one result row from `parseReceipt`; otherwise keep the existing generic row and fallback behavior. Set `summary.documentKind` to `Receipt`, `summary.vendor` to the extracted merchant when present, and `summary.total` to the receipt total when present. Keep receipt validation free of balance-trail errors.
-- [ ] **Step 5: Preserve review-pack round trips.** Include `currencyCodeDetected` when serializing receipt results and restore it on import. Continue accepting existing review JSON that has no such property.
-- [ ] **Step 6: Commit the parser change.** Commit the changes in `src/lib/converter.ts` as `feat: extract receipt expense fields`.
+- [x] **Step 1: Track explicit currency evidence.** Change the private currency detector to return `{ code: string; detected: boolean }`. Preserve the existing code choice and USD fallback for current bank-statement displays. Set `currencyCodeDetected` only when the text or filename has an explicit supported currency signal.
+- [x] **Step 2: Add conservative receipt detection.** Add a private `looksLikeReceipt(lines: string[], fileName: string)` helper. Recognize explicit receipt labels such as subtotal, tax/VAT/GST/SST, total paid, merchant, or POS wording. Return false when statement headers or a running-balance pattern identify a bank statement.
+- [x] **Step 3: Extract one receipt row.** Add a private `parseReceipt(lines: string[], fileName: string, currencyCode: string, currencyCodeDetected: boolean): ExtractedRow`. Prefer an explicit date and merchant text; choose an explicitly labeled grand total/amount paid/total over subtotal; capture only explicitly labeled tax values; suggest a category only from clear keywords and otherwise use `Uncategorized`. Leave unreadable fields undefined, set source and confidence, and lower confidence when date, merchant, total, or currency is missing.
+- [x] **Step 4: Route receipt text without changing statement results.** In `parseRawText`, keep `parseStatementTable` first. If it returns no statement rows and `looksLikeReceipt` is true, use exactly one result row from `parseReceipt`; otherwise keep the existing generic row and fallback behavior. Set `summary.documentKind` to `Receipt`, `summary.vendor` to the extracted merchant when present, and `summary.total` to the receipt total when present. Keep receipt validation free of balance-trail errors.
+- [x] **Step 5: Preserve review-pack round trips.** Include `currencyCodeDetected` when serializing receipt results and restore it on import. Continue accepting existing review JSON that has no such property.
+- [x] **Step 6: Commit the parser change.** Commit the changes in `src/lib/converter.ts` as `feat: extract receipt expense fields`.
 
 ### Task 2: Receipt review and local source preview
 
@@ -54,7 +55,8 @@
 - [ ] **Step 4: Show missing-field review states.** Mark missing or low-confidence receipt fields for review. Keep values blank when OCR did not find them; do not fill a default tax, merchant, total, or currency.
 - [ ] **Step 5: Add local image preview.** Reuse the existing source-file identity/cache path to retain image receipt files in memory and create an object URL only for the active receipt. Render the image next to the receipt table with the source filename as accessible text. Revoke object URLs when the active source changes or the component unmounts. Continue using the current PDF preview for receipt PDFs.
 - [ ] **Step 6: Keep the receipt layout usable on narrow screens.** Add receipt-specific responsive table or card styling in `src/App.css`, preserving visible field names and keyboard focus states.
-- [ ] **Step 7: Commit the review change.** Commit the changes in `src/App.tsx` and `src/App.css` as `feat: review extracted receipts`.
+- [ ] **Step 7: Keep receipt details out of remote assistant requests.** For receipt results, hide or disable the remote assistant support UI, return no receipt-derived `agentContext`, and guard `askAgent` so it cannot POST receipt filenames, OCR text, or extracted fields to `/api/agent/`. Keep the statement assistant behavior unchanged.
+- [ ] **Step 8: Commit the review change.** Commit the changes in `src/App.tsx` and `src/App.css` as `feat: review extracted receipts`.
 
 ### Task 3: Single and batch receipt exports
 

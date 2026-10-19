@@ -29,3 +29,7 @@
 - Task 2: complete — primary Excel flow, collapsible secondary exports/settings/privacy/support, linked privacy note, and processing-state balance gate; commits `df4a8f1`, `cbd9b17`, `8141f9c`, and `45e985d`; spec and quality review passed.
 - Task 3: complete — responsive disclosure, sample, Excel, and secondary-export styling with keyboard focus and 42px review-pack checkbox target; commits `b80cdca`, `86202fa`, `0267772`, `cd85f22`, `f8afd64`, and `1a84174`; focused CSS reviews passed.
 - Task 4: complete — the production build passes; the converter was visually checked at 390px, 747px, and desktop, including the synthetic sample review state, primary Excel action, and visible keyboard focus. A full branch review passed with one P3 polish finding; that disabled-button styling was fixed and the focused CSS re-review passed. No test suite was run. The final preview reconnect timed out after the CSS-only fix, so that state was verified by source review. The build retains the existing large-chunk advisory. No production deployment was performed.
+
+# ExtractMint receipt extraction progress
+
+- Task 1: complete — parser implementation `9e73309`; follow-up commits `bd22a83`, `186cd9f`, `d89d41c`, `db1a280`, `c3d39b4`, `984bb1a`, `ec008ca`, `13cf57b`, `e3c75b7`, `5754a68`, `bb2b50a`, `8b02c84`, `fd3c138`, `8d5a695`, `bc6ee80`; final independent spec and quality review approved at `bc6ee80`. Source review and `git diff --check` only; no automated tests were added or run, per developer instruction.
