@@ -21,7 +21,7 @@ import {
   Table2,
   UploadCloud,
 } from 'lucide-react'
-import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type DragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
@@ -36,6 +36,15 @@ import {
 } from './lib/pdfTextIndexCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
 import { createSampleRunGuard, fetchSyntheticSample, SYNTHETIC_SAMPLE_FILENAME, SYNTHETIC_SAMPLE_URL, type SampleRun } from './lib/syntheticSample.mjs'
+
+type PdfPasswordPrompt = {
+  fileName: string
+  reason: 'required' | 'incorrect'
+}
+
+type PendingPdfPassword = {
+  resolve: (password: string) => void
+}
 
 type ParsedPage = { pageNumber: number; text: string }
 type AgentMessage = {
@@ -442,6 +451,11 @@ function App() {
   )
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [pdfPasswordPrompt, setPdfPasswordPrompt] = useState<PdfPasswordPrompt | null>(null)
+  const [pdfPasswordInput, setPdfPasswordInput] = useState('')
+  const pdfPasswordInputRef = useRef<HTMLInputElement>(null)
+  const pendingPdfPasswordRef = useRef<PendingPdfPassword | null>(null)
+  const conversionAbortRef = useRef<AbortController | null>(null)
   const [isSampleLoading, setIsSampleLoading] = useState(false)
   const sampleLoadingRef = useRef(false)
   const sampleRunGuardRef = useRef(createSampleRunGuard(trackExtractMintEvent))
@@ -1021,9 +1035,51 @@ function App() {
     }
   }, [results])
 
+  useEffect(() => {
+    if (pdfPasswordPrompt) pdfPasswordInputRef.current?.focus()
+  }, [pdfPasswordPrompt])
+
+  const requestPdfPassword = (fileName: string, reason: PdfPasswordPrompt['reason'], signal?: AbortSignal) =>
+    new Promise<string>((resolve, reject) => {
+      let onAbort = () => {}
+      const cleanup = () => signal?.removeEventListener('abort', onAbort)
+      onAbort = () => {
+        cleanup()
+        pendingPdfPasswordRef.current = null
+        setPdfPasswordPrompt(null)
+        setPdfPasswordInput('')
+        reject(new DOMException('Conversion canceled', 'AbortError'))
+      }
+
+      if (signal?.aborted) {
+        onAbort()
+        return
+      }
+
+      pendingPdfPasswordRef.current = {
+        resolve: (password) => { cleanup(); resolve(password) },
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+      setPdfPasswordInput('')
+      setPdfPasswordPrompt({ fileName, reason })
+    })
+
+  const submitPdfPassword = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const pending = pendingPdfPasswordRef.current
+    if (!pending) return
+    const password = pdfPasswordInput
+    pendingPdfPasswordRef.current = null
+    setPdfPasswordInput('')
+    setPdfPasswordPrompt(null)
+    pending.resolve(password)
+  }
+
+  const cancelConversion = () => conversionAbortRef.current?.abort()
+
   const processFiles = async (fileList: FileList | File[], source: 'upload' | 'sample' = 'upload', sampleRun?: SampleRun) => {
     const files = Array.from(fileList)
-    if (files.length === 0) return
+    if (files.length === 0 || conversionAbortRef.current) return
     const sampleIsCurrent = () => source !== 'sample' || (sampleRun !== undefined && sampleRunGuardRef.current.isCurrent(sampleRun))
     if (source === 'upload') {
       sampleRunGuardRef.current.startUpload()
@@ -1037,6 +1093,8 @@ function App() {
     }
     if (!sampleIsCurrent()) return
 
+    const controller = new AbortController()
+    conversionAbortRef.current = controller
     const signatureUrls: Record<string, string> = {}
     const reviewJsonFiles = files.filter((file) =>
       file.name.toLowerCase().endsWith('.extractmint-review.json'),
@@ -1138,6 +1196,8 @@ function App() {
               forceOcr: source === 'sample' ? false : forceOcr,
               ocrLanguage,
               persistOcrCache,
+              signal: controller.signal,
+              requestPdfPassword,
             })
       if (!sampleIsCurrent()) return
 
@@ -1208,9 +1268,9 @@ function App() {
         if (source === 'sample' && sampleRun) sampleRunGuardRef.current.finish(sampleRun, 'sample_conversion_failed')
         setProgress({
           fileName: files.length === 1 ? files[0].name : `${files.length} files`,
-          stage: 'error',
+          stage: controller.signal.aborted ? 'ready' : 'error',
           percent: 100,
-          detail: error instanceof Error ? error.message : 'Conversion failed',
+          detail: controller.signal.aborted ? 'Conversion canceled' : error instanceof Error ? error.message : 'Conversion failed',
         })
       }
       Object.values(signatureUrls).forEach((url) => {
@@ -1221,6 +1281,10 @@ function App() {
         }
       })
     } finally {
+      conversionAbortRef.current = null
+      pendingPdfPasswordRef.current = null
+      setPdfPasswordPrompt(null)
+      setPdfPasswordInput('')
       if (source === 'upload' || !sampleRun?.superseded) setIsProcessing(false)
       if (source === 'sample' && sampleRun?.superseded) {
         Object.values(signatureUrls).forEach((url) => {
@@ -1659,6 +1723,7 @@ function App() {
                 ref={inputRef}
                 type="file"
                 multiple
+                disabled={isProcessing}
                 accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.docx,.txt,.csv,.xlsx,.xls,.zip,.extractmint-review.json"
                 onChange={(event) => {
                   if (event.target.files) void processFiles(event.target.files)
@@ -1910,6 +1975,28 @@ function App() {
                 <span>{progress.percent}%</span>
               </div>
             </div>
+
+            {pdfPasswordPrompt ? (
+              <form className="pdf-password-prompt" onSubmit={submitPdfPassword} aria-labelledby="pdf-password-title">
+                <label id="pdf-password-title" htmlFor="pdf-password-input">
+                  Enter the password to unlock {pdfPasswordPrompt.fileName}
+                </label>
+                <input
+                  ref={pdfPasswordInputRef}
+                  id="pdf-password-input"
+                  type="password"
+                  autoComplete="off"
+                  aria-describedby={pdfPasswordPrompt.reason === 'incorrect' ? 'pdf-password-error' : undefined}
+                  value={pdfPasswordInput}
+                  onChange={(event) => setPdfPasswordInput(event.target.value)}
+                />
+                {pdfPasswordPrompt.reason === 'incorrect' ? (
+                  <p id="pdf-password-error" role="status" aria-live="polite">That password didn’t work. Try again.</p>
+                ) : null}
+                <button type="submit">Unlock &amp; continue</button>
+                <button type="button" onClick={cancelConversion}>Cancel conversion</button>
+              </form>
+            ) : null}
 
             <div className="export-row">
               <h3 className="export-row-label">Export files</h3>
