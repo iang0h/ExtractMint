@@ -1730,223 +1730,23 @@ function App() {
             </label>
 
             <div className="synthetic-sample-action">
-              <div>
-                <strong>Try a synthetic example</strong>
-                <p>Uses invented figures and runs in your browser.</p>
-              </div>
-              <div className="synthetic-sample-controls">
-                <button
-                  id="load-synthetic-sample"
-                  type="button"
-                  onClick={() => void loadSyntheticSample()}
-                  disabled={isProcessing || isSampleLoading}
-                >
-                  Load synthetic example
-                </button>
-                <a href={SYNTHETIC_SAMPLE_URL} download={SYNTHETIC_SAMPLE_FILENAME}>
-                  Download sample PDF
-                </a>
-              </div>
+              <button
+                id="load-synthetic-sample"
+                type="button"
+                onClick={() => void loadSyntheticSample()}
+                disabled={isProcessing || isSampleLoading}
+              >
+                {isSampleLoading ? 'Loading sample…' : 'Try a sample statement'}
+              </button>
+              <a href={SYNTHETIC_SAMPLE_URL} download={SYNTHETIC_SAMPLE_FILENAME}>
+                Download sample PDF
+              </a>
             </div>
+            <p className="local-processing-note">
+              Conversion runs in your browser. Privacy and support details are available below.
+            </p>
 
-            <div className="ocr-settings" aria-label="Processing settings">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={forceOcr}
-                  onChange={(event) => {
-                    const next = event.target.checked
-                    setForceOcr(next)
-                    storeValue('extractmint.forceOcr', next ? '1' : '0')
-                  }}
-                />
-                Force OCR (scanned PDFs)
-              </label>
-              <label>
-                OCR language
-                <select
-                  value={ocrLanguage}
-                  onChange={(event) => {
-                    const next = event.target.value
-                    setOcrLanguage(next)
-                    storeValue('extractmint.ocrLanguage', next)
-                  }}
-                >
-                  <option value="eng">English</option>
-                  <option value="msa">Malay</option>
-                  <option value="ind">Indonesian</option>
-                  <option value="chi_sim">Chinese (Simplified)</option>
-                </select>
-              </label>
-	              <label className="ocr-cache-row">
-                <input
-                  type="checkbox"
-                  checked={persistOcrCache}
-                  onChange={(event) => {
-                    const next = event.target.checked
-                    setPersistOcrCache(next)
-                    storeValue('extractmint.persistOcrCache', next ? '1' : '0')
-                  }}
-                />
-                Persist OCR cache (faster repeat exports)
-                {persistOcrCache ? (
-                  <span className="ocr-cache-meta">
-                    {ocrCacheStats.entries} saved · {Math.round(ocrCacheStats.bytes / 1024)} KB
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => {
-                        void (async () => {
-                          await clearPersistentOcrCache()
-                          refreshOcrCacheStats()
-                        })()
-                      }}
-                    >
-                      Clear
-                    </button>
-                  </span>
-                ) : null}
-	              </label>
-		              <label className="ocr-cache-row">
-		                <input
-		                  type="checkbox"
-		                  checked={persistPdfTextIndex}
-	                  onChange={(event) => {
-	                    const next = event.target.checked
-	                    setPersistPdfTextIndex(next)
-	                    storeValue('extractmint.persistPdfTextIndex', next ? '1' : '0')
-	                  }}
-	                />
-	                Persist PDF review index (faster row matching)
-	                {persistPdfTextIndex ? (
-	                  <span className="ocr-cache-meta">
-	                    {pdfTextIndexStats.entries} pages saved · {Math.round(pdfTextIndexStats.bytes / 1024)} KB
-	                    <button
-	                      type="button"
-	                      className="link-button"
-	                      onClick={() => {
-	                        void (async () => {
-	                          await clearPersistentPdfTextIndex()
-	                          refreshPdfTextIndexStats()
-	                        })()
-	                      }}
-	                    >
-	                      Clear
-	                    </button>
-	                  </span>
-		                ) : null}
-		              </label>
-
-                  <details className="privacy-panel">
-                    <summary>Trust &amp; privacy (local-only processing)</summary>
-                    <div className="privacy-panel-body">
-                      <p>
-                        ExtractMint reads files in your browser in this static build. Nothing is uploaded unless you later add a server-side
-                        conversion backend.
-                      </p>
-                      <ul>
-                        <li>
-                          <strong>Optional local caches:</strong> “Persist OCR cache” and “Persist PDF review index” store derived text in your
-                          browser (IndexedDB) for faster repeat exports and row matching.
-                        </li>
-                        <li>
-                          <strong>Review packs are exports:</strong> downloaded review JSON/ZIP can contain extracted rows (and optionally source
-                          PDFs) so treat them like financial documents.
-                        </li>
-                        <li>
-                          <strong>Support diagnostics are privacy-safe:</strong> the Diagnostic JSON contains only counts/signals (no statement
-                          text or transactions) so you can share it when a bank format fails.
-                        </li>
-                        <li>
-                          <strong>Clear anytime:</strong> remove cached OCR + PDF index data from this browser with one click.
-                        </li>
-                      </ul>
-                      <div className="privacy-actions">
-                        <button type="button" onClick={clearAllLocalCaches} disabled={cacheClearStatus === 'clearing'}>
-                          {cacheClearStatus === 'clearing'
-                            ? 'Clearing local caches…'
-                            : cacheClearStatus === 'done'
-                              ? 'Cleared'
-                              : cacheClearStatus === 'error'
-                                ? 'Clear failed (retry)'
-                                : 'Clear all local caches'}
-                        </button>
-                        <small>
-                          Clears persistent OCR + PDF index caches (and in-memory review caches) for this browser profile.
-                        </small>
-                      </div>
-                    </div>
-                  </details>
-
-                  <details className="privacy-panel" id="support">
-                    <summary>Support &amp; telemetry (local-only, no PII)</summary>
-                    <div className="privacy-panel-body">
-                      <p>
-                        Telemetry stays in your browser and only stores counts/signals (no statement text, rows, or filenames). Use it to spot
-                        patterns like “OCR needed” or “balance discrepancy”.
-                      </p>
-                      <div className="privacy-actions">
-                        <button type="button" onClick={copySupportRequest} disabled={!activeResult}>
-                          Copy support request (privacy-safe)
-                        </button>
-                        <small>
-                          Copies a pre-filled support request (JSON) to your clipboard. Paste into email and optionally attach the Diagnostic
-                          export.
-                        </small>
-                        {supportMailtoHref ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                window.location.href = supportMailtoHref
-                              }}
-                            >
-                              Email support
-                            </button>
-                            <small>Opens your email client with a pre-filled template (attach Diagnostic + optional redacted sample).</small>
-                          </>
-                        ) : null}
-                        <button type="button" onClick={clearTelemetry} disabled={telemetryEvents.length === 0}>
-                          Clear telemetry history
-                        </button>
-                      </div>
-                      {telemetryEvents.length > 0 ? (
-                        <ul>
-                          {telemetryEvents.slice(0, 8).map((event, index) => (
-                            <li key={`${event.at}-${event.shaPrefix ?? index}`}>
-                              <strong>{new Date(event.at).toLocaleString()}</strong> — {event.fileType} · {event.rows} rows ·{' '}
-                              {Math.round(event.confidence * 100)}% confidence · {event.validationStatus}
-                              {event.hasBalanceTrail && event.discrepancy !== undefined
-                                ? ` · discrepancy ${event.discrepancy.toFixed(2)}`
-                                : ''}
-                              {event.usedOcr ? ' · OCR' : ''}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-
-                      <div className="support-redaction">
-                        <p>
-                          Need to share a sample page? Use the redaction helper to blackout account numbers and names before emailing support.
-                        </p>
-                        {activeResult?.fileType === 'application/pdf' && activePdfUrl && pdfDoc ? (
-                          <PdfRedactionTool
-                            key={`${activeSha ?? activeResult.fileName}:${pdfPage}`}
-                            pdf={pdfDoc}
-                            pageNumber={pdfPage}
-                            fileName={activeResult.fileName}
-                          />
-                        ) : (
-                          <div className="support-redaction-empty">
-                            Attach the original PDF (via the Source PDF preview panel) to enable redaction downloads.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </details>
-			            </div>
-
-	            {showProgressPanel && (
+            {showProgressPanel && (
               <div className="progress-panel" role="status" aria-live="polite">
 	              <div>
 	                <span>{progress.stage}</span>
@@ -1994,61 +1794,22 @@ function App() {
             ) : null}
 
             {activeResult && !isProcessing ? (
-            <div className="export-row">
-              <h3 className="export-row-label">Export files</h3>
-              <button onClick={() => void downloadBlob('xlsx')} disabled={!activeResult}>
-                <FileSpreadsheet size={16} />
-                Excel
-              </button>
-              <button
-                onClick={() => void downloadCombinedWorkbook()}
-                disabled={results.length < 2}
-                title="Download a single workbook with one sheet per file plus a combined Issues tab."
-              >
-                <Table2 size={16} />
-                Combined XLSX
-              </button>
-              <button onClick={downloadReviewJson} disabled={!activeResult}>
-                <ShieldCheck size={16} />
-                Review JSON
-              </button>
-              <button onClick={() => void downloadReviewPack()} disabled={results.length === 0}>
-                <FileArchive size={16} />
-                Review pack (ZIP)
-              </button>
-	              <button
-	                onClick={downloadDiagnostic}
-	                disabled={!activeResult}
-	                title="Downloads a privacy-safe diagnostic JSON (no transactions) to help support new bank formats."
-	              >
-	                <Tag size={16} />
-	                Diagnostic
-	              </button>
-	              <button
-	                onClick={copySupportRequest}
-	                disabled={!activeResult}
-	                title="Copies a pre-filled, privacy-safe support request to your clipboard (no statement text/rows/filename)."
-	              >
-	                <Copy size={16} />
-	                Support copy
-	              </button>
-	              <button onClick={() => void downloadBlob('docx')} disabled={!activeResult}>
-	                <FileText size={16} />
-	                Google Docs
-	              </button>
-              <button onClick={() => void downloadBlob('pdf')} disabled={!activeResult}>
-                <FileText size={16} />
-                PDF
-              </button>
-              <button onClick={() => void downloadBlob('csv')} disabled={!activeResult}>
-                <ArrowDownToLine size={16} />
-                CSV
-              </button>
-              <button onClick={() => void downloadBlob('qbo')} disabled={!activeResult}>
-                <ReceiptText size={16} />
-                QuickBooks (QBO)
-              </button>
-            </div>
+              <div className="result-primary-action">
+                <div className="result-primary-summary">
+                  <span>Ready to review</span>
+                  <strong>{activeResult.fileName}</strong>
+                  <small>{activeResult.rows.length} rows extracted</small>
+                </div>
+                <button
+                  className="primary-export-button"
+                  type="button"
+                  onClick={() => void downloadBlob('xlsx')}
+                  disabled={!activeResult}
+                >
+                  <FileSpreadsheet size={17} />
+                  Download Excel
+                </button>
+              </div>
             ) : null}
 
             {activeResult ? (
@@ -2064,14 +1825,17 @@ function App() {
                         : { label: 'Discrepancy — review', className: 'is-review' }
 
                   return (
-                    <div className={`export-sanity-card ${status.className}`}>
-                      <div className="export-sanity-header">
+                    <details
+                      className={`export-sanity-card ${status.className}`}
+                      open={status.className === 'is-review'}
+                    >
+                      <summary className="export-sanity-header">
                         <div>
-                          <strong>Export sanity checks</strong>
+                          <strong>Check balances</strong>
                           <small>Compares opening/closing balances to extracted transaction totals.</small>
                         </div>
                         <span className="export-sanity-status">{status.label}</span>
-                      </div>
+                      </summary>
                       <div className="export-sanity-grid">
                         <div>
                           <span>Opening balance</span>
@@ -2102,28 +1866,287 @@ function App() {
                           <strong>{formatAmount(snapshot.discrepancy, activeResult.currencyCode)}</strong>
                         </div>
                       </div>
-                    </div>
+                    </details>
                   )
                 })()}
               </div>
             ) : null}
 
             {activeResult && !isProcessing ? (
-            <div className="export-options" aria-label="Review pack options">
-              <label title="Include the original statement PDFs inside the review pack ZIP so PDF previews work when you import later (larger download).">
-                <input
-                  type="checkbox"
-                  checked={includeSourcesInReviewPack}
-                  onChange={(event) => {
-                    const next = event.target.checked
-                    setIncludeSourcesInReviewPack(next)
-                    storeValue('extractmint.reviewPackIncludeSources', next ? '1' : '0')
-                  }}
-                />
-                Include source PDFs in review pack ZIP
-              </label>
-            </div>
+              <details className="converter-disclosure more-export-options">
+                <summary>More export formats</summary>
+                <div className="converter-disclosure-body">
+                  <div className="export-row">
+                    <button
+                      type="button"
+                      onClick={() => void downloadCombinedWorkbook()}
+                      disabled={results.length < 2}
+                      title="Download a single workbook with one sheet per file plus a combined Issues tab."
+                    >
+                      <Table2 size={16} />
+                      Combined XLSX
+                    </button>
+                    <button type="button" onClick={downloadReviewJson} disabled={!activeResult}>
+                      <ShieldCheck size={16} />
+                      Review JSON
+                    </button>
+                    <div className="review-pack-export">
+                      <button
+                        type="button"
+                        onClick={() => void downloadReviewPack()}
+                        disabled={results.length === 0}
+                      >
+                        <FileArchive size={16} />
+                        Review pack (ZIP)
+                      </button>
+                      <label
+                        className="review-pack-source-option"
+                        title="Include the original statement PDFs inside the review pack ZIP so PDF previews work when you import later (larger download)."
+                      >
+                        <input
+                          type="checkbox"
+                          checked={includeSourcesInReviewPack}
+                          onChange={(event) => {
+                            const next = event.target.checked
+                            setIncludeSourcesInReviewPack(next)
+                            storeValue('extractmint.reviewPackIncludeSources', next ? '1' : '0')
+                          }}
+                        />
+                        Include source PDFs
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={downloadDiagnostic}
+                      disabled={!activeResult}
+                      title="Downloads a privacy-safe diagnostic JSON (no transactions) to help support new bank formats."
+                    >
+                      <Tag size={16} />
+                      Diagnostic
+                    </button>
+                    <button type="button" onClick={() => void downloadBlob('docx')} disabled={!activeResult}>
+                      <FileText size={16} />
+                      Google Docs
+                    </button>
+                    <button type="button" onClick={() => void downloadBlob('pdf')} disabled={!activeResult}>
+                      <FileText size={16} />
+                      PDF
+                    </button>
+                    <button type="button" onClick={() => void downloadBlob('csv')} disabled={!activeResult}>
+                      <ArrowDownToLine size={16} />
+                      CSV
+                    </button>
+                    <button type="button" onClick={() => void downloadBlob('qbo')} disabled={!activeResult}>
+                      <ReceiptText size={16} />
+                      QuickBooks (QBO)
+                    </button>
+                  </div>
+                </div>
+              </details>
             ) : null}
+
+            <details className="converter-disclosure">
+              <summary>Advanced options</summary>
+              <div className="converter-disclosure-body">
+                <div className="ocr-settings" aria-label="Processing settings">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={forceOcr}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                        setForceOcr(next)
+                        storeValue('extractmint.forceOcr', next ? '1' : '0')
+                      }}
+                    />
+                    Force OCR (scanned PDFs)
+                  </label>
+                  <label>
+                    OCR language
+                    <select
+                      value={ocrLanguage}
+                      onChange={(event) => {
+                        const next = event.target.value
+                        setOcrLanguage(next)
+                        storeValue('extractmint.ocrLanguage', next)
+                      }}
+                    >
+                      <option value="eng">English</option>
+                      <option value="msa">Malay</option>
+                      <option value="ind">Indonesian</option>
+                      <option value="chi_sim">Chinese (Simplified)</option>
+                    </select>
+                  </label>
+                  <label className="ocr-cache-row">
+                    <input
+                      type="checkbox"
+                      checked={persistOcrCache}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                        setPersistOcrCache(next)
+                        storeValue('extractmint.persistOcrCache', next ? '1' : '0')
+                      }}
+                    />
+                    Persist OCR cache (faster repeat exports)
+                    {persistOcrCache ? (
+                      <span className="ocr-cache-meta">
+                        {ocrCacheStats.entries} saved · {Math.round(ocrCacheStats.bytes / 1024)} KB
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() => {
+                            void (async () => {
+                              await clearPersistentOcrCache()
+                              refreshOcrCacheStats()
+                            })()
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </span>
+                    ) : null}
+                  </label>
+                  <label className="ocr-cache-row">
+                    <input
+                      type="checkbox"
+                      checked={persistPdfTextIndex}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                        setPersistPdfTextIndex(next)
+                        storeValue('extractmint.persistPdfTextIndex', next ? '1' : '0')
+                      }}
+                    />
+                    Persist PDF review index (faster row matching)
+                    {persistPdfTextIndex ? (
+                      <span className="ocr-cache-meta">
+                        {pdfTextIndexStats.entries} pages saved · {Math.round(pdfTextIndexStats.bytes / 1024)} KB
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() => {
+                            void (async () => {
+                              await clearPersistentPdfTextIndex()
+                              refreshPdfTextIndexStats()
+                            })()
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </span>
+                    ) : null}
+                  </label>
+                </div>
+              </div>
+            </details>
+
+            <details className="converter-disclosure privacy-panel" id="support">
+              <summary>Privacy and support</summary>
+              <div className="privacy-panel-body">
+                <section aria-label="Privacy details">
+                  <h4>Privacy details</h4>
+                  <p>
+                    ExtractMint reads files in your browser in this static build. Nothing is uploaded unless you later add a server-side
+                    conversion backend.
+                  </p>
+                  <ul>
+                    <li>
+                      <strong>Optional local caches:</strong> “Persist OCR cache” and “Persist PDF review index” store derived text in your
+                      browser (IndexedDB) for faster repeat exports and row matching.
+                    </li>
+                    <li>
+                      <strong>Review packs are exports:</strong> downloaded review JSON/ZIP can contain extracted rows (and optionally source
+                      PDFs) so treat them like financial documents.
+                    </li>
+                    <li>
+                      <strong>Support diagnostics are privacy-safe:</strong> the Diagnostic JSON contains only counts/signals (no statement
+                      text or transactions) so you can share it when a bank format fails.
+                    </li>
+                    <li>
+                      <strong>Clear anytime:</strong> remove cached OCR + PDF index data from this browser with one click.
+                    </li>
+                  </ul>
+                  <div className="privacy-actions">
+                    <button type="button" onClick={clearAllLocalCaches} disabled={cacheClearStatus === 'clearing'}>
+                      {cacheClearStatus === 'clearing'
+                        ? 'Clearing local caches…'
+                        : cacheClearStatus === 'done'
+                          ? 'Cleared'
+                          : cacheClearStatus === 'error'
+                            ? 'Clear failed (retry)'
+                            : 'Clear all local caches'}
+                    </button>
+                    <small>
+                      Clears persistent OCR + PDF index caches (and in-memory review caches) for this browser profile.
+                    </small>
+                  </div>
+                </section>
+                <section>
+                  <h4>Support tools</h4>
+                  <p>
+                    Telemetry stays in your browser and only stores counts/signals (no statement text, rows, or filenames). Use it to spot
+                    patterns like “OCR needed” or “balance discrepancy”.
+                  </p>
+                  <div className="privacy-actions">
+                    <button type="button" onClick={copySupportRequest} disabled={!activeResult}>
+                      Copy support request (privacy-safe)
+                    </button>
+                    <small>
+                      Copies a pre-filled support request (JSON) to your clipboard. Paste into email and optionally attach the Diagnostic
+                      export.
+                    </small>
+                    {supportMailtoHref ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            window.location.href = supportMailtoHref
+                          }}
+                        >
+                          Email support
+                        </button>
+                        <small>Opens your email client with a pre-filled template (attach Diagnostic + optional redacted sample).</small>
+                      </>
+                    ) : null}
+                    <button type="button" onClick={clearTelemetry} disabled={telemetryEvents.length === 0}>
+                      Clear telemetry history
+                    </button>
+                  </div>
+                  {telemetryEvents.length > 0 ? (
+                    <ul>
+                      {telemetryEvents.slice(0, 8).map((event, index) => (
+                        <li key={`${event.at}-${event.shaPrefix ?? index}`}>
+                          <strong>{new Date(event.at).toLocaleString()}</strong> — {event.fileType} · {event.rows} rows ·{' '}
+                          {Math.round(event.confidence * 100)}% confidence · {event.validationStatus}
+                          {event.hasBalanceTrail && event.discrepancy !== undefined
+                            ? ` · discrepancy ${event.discrepancy.toFixed(2)}`
+                            : ''}
+                          {event.usedOcr ? ' · OCR' : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  <div className="support-redaction">
+                    <p>
+                      Need to share a sample page? Use the redaction helper to blackout account numbers and names before emailing support.
+                    </p>
+                    {activeResult?.fileType === 'application/pdf' && activePdfUrl && pdfDoc ? (
+                      <PdfRedactionTool
+                        key={`${activeSha ?? activeResult.fileName}:${pdfPage}`}
+                        pdf={pdfDoc}
+                        pageNumber={pdfPage}
+                        fileName={activeResult.fileName}
+                      />
+                    ) : (
+                      <div className="support-redaction-empty">
+                        Attach the original PDF (via the Source PDF preview panel) to enable redaction downloads.
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </details>
+
           </motion.div>
         </motion.div>
       </section>
