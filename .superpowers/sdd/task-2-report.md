@@ -23,3 +23,10 @@
 ## Concerns
 
 - No known functional concerns. Styling for the new disclosure and result classes is deferred to Task 3, which owns `src/App.css`.
+
+## Follow-up review fixes
+
+- Added a keyboard-accessible **Privacy and support details** link from the browser-processing note to the existing `#support` disclosure.
+- Gated balance status on `activeResult && !isProcessing`, preserving its existing threshold, labels, and default-open discrepancy details.
+- Follow-up code commit: `cbd9b17` — `Link privacy note and gate balance status`.
+- No tests or build were run, per instruction. `git diff --check` passed before this follow-up commit.
