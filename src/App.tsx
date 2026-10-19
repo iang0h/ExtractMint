@@ -7,7 +7,6 @@ import {
   Bot,
   CheckCircle2,
   ChevronRight,
-  Copy,
   FileArchive,
   FileSpreadsheet,
   FileText,

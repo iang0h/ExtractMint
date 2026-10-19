@@ -30,3 +30,8 @@
 - Gated balance status on `activeResult && !isProcessing`, preserving its existing threshold, labels, and default-open discrepancy details.
 - Follow-up code commit: `cbd9b17` — `Link privacy note and gate balance status`.
 - No tests or build were run, per instruction. `git diff --check` passed before this follow-up commit.
+
+## TypeScript import cleanup
+
+- Removed the unused lucide `Copy` import reported by TypeScript; the privacy-safe support action remains available as text under Privacy and support.
+- No tests or build were run for this focused fix, per instruction.
