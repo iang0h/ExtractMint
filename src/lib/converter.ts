@@ -2563,7 +2563,8 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const merchant = merchantLine?.replace(/^\s*merchant\s*[:#-]\s*/i, '').replace(datePattern, '').replace(amountPattern, '').trim()
   const taxQualifier = /\b(?:before|excluding|excl|pre)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:excluded|excluding|excl|pre|before)\b/
   const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/i
-  const taxCalculationContext = /\btaxable\s+(?:base|amount)\b|\b(?:tax|vat|gst|sst)\b[^%]*\d+(?:[.,]\d+)?\s*%\s*(?:on|of)\b/i
+  // A monetary value after "tax on/of" is a calculation base, even before its rate.
+  const taxCalculationContext = /\btaxable\s+(?:base|amount)\b|\b(?:tax|vat|gst|sst)\s+(?:base|basis)\b|\b(?:tax|vat|gst|sst)\b[^%]*\d+(?:[.,]\d+)?\s*%\s*(?:on|of)\b|\b(?:tax|vat|gst|sst)\s+(?:on|of)\s*(?:\(\s*)?(?:(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)\s*)?(?=[+-]?\s*(?:[SAC]?\$|[€£¥])?\s*\(?\s*\d)/i
   const amountLabelPattern = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst|cash(?:\s+tendered)?|(?:(?:credit|debit)\s+)?card|(?:amount\s+)?tendered|change|payment(?:\s+(?:method|received))?|visa|mastercard|amex)\b/gi
   const labelsInAmountLine = (line: string) =>
     [...line.matchAll(new RegExp(amountLabelPattern.source, amountLabelPattern.flags))].filter((candidate) => {
@@ -2641,7 +2642,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     const isParenthesized = openParen > closeParen
     const annotationPrefix = isParenthesized ? before.slice(openParen + 1) : before
     if (!inclusiveTaxQualifier.test(annotationPrefix)
-      || taxCalculationContext.test(annotationPrefix)
+      || taxCalculationContext.test(`${annotationPrefix}${match[0]}`)
       || !/\b(?:tax|vat|gst|sst)\b/i.test(annotationPrefix)) return false
     if (isParenthesized) {
       const prefixWithoutRates = annotationPrefix.replace(/\b\d+(?:[.,]\d+)?\s*%\s*/g, '')
