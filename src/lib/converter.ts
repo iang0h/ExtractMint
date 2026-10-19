@@ -2478,11 +2478,12 @@ function looksLikeReceipt(lines: string[], fileName: string) {
   const invoiceEvidence = hasInvoiceEvidence(lines, fileName)
   // Negated payment statuses cannot override invoice evidence; independent paid labels still can.
   const paymentText = text.replace(/\b(?:(?:not|never|un|non)[\s-]+(?:(?:yet|fully|been)[\s-]+)*paid|unpaid|nonpaid|(?:yet[\s-]+)?to[\s-]+be[\s-]+paid|paid\s*[:=-]\s*(?:no|false))\b/gi, '')
-  const receiptOrPaidEvidence = /\b(?:receipt|pos|point[\s-]+of[\s-]+sale)\b/i.test(text) || /\bpaid\b/i.test(paymentText)
+  const paidEvidence = /\bpaid\b/i.test(paymentText)
+  const receiptOrPaidEvidence = /\b(?:receipt|pos|point[\s-]+of[\s-]+sale)\b/i.test(text) || paidEvidence
   if (invoiceEvidence && !receiptOrPaidEvidence) return false
   if (/\b(subtotal|tax|vat|gst|sst|total\s+paid|amount\s+paid|grand\s+total|merchant|pos|receipt|amount\s+due)\b/i.test(text)) return true
-  // A bare payable TOTAL is receipt evidence; invoice/statement totals keep their document route.
-  return !invoiceEvidence && !/\bstatement\b/i.test(text) && lines.some((line) => {
+  // A bare payable TOTAL is receipt evidence; invoices also need positive payment evidence.
+  return (!invoiceEvidence || paidEvidence) && !/\bstatement\b/i.test(text) && lines.some((line) => {
     const label = /^\s*total\b\s*[:#-]?\s*/i.exec(line)
     if (!label) return false
     const value = line.slice(label[0].length).replace(/^(?:[A-Z]{3}|RM)\s+/i, '')
@@ -2542,7 +2543,8 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const labeledMerchantLine = lines.find((line) => /^\s*merchant\s*[:#-]\s*\S/i.test(line))
   const merchantLine = labeledMerchantLine ?? lines.find((line) => {
     const withoutDate = line.replace(datePattern, '').trim()
-    if (/^(?:[T, -]*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?)?$/i.test(withoutDate)) return false
+    // ISO's T can keep the date from matching datePattern's trailing word boundary.
+    if (/^(?:(?:\d{4}-\d{1,2}-\d{1,2})?[T, -]*\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s*[ap]m)?(?:\s*(?:Z|[+-]\d{2}:?\d{2}))?)?$/i.test(withoutDate)) return false
     const stripped = withoutDate.replace(amountPattern, '').trim()
     if (/^\s*(?:(?:page|pg)\.?\s*\d+(?:\s*(?:of|\/)\s*\d+)?|\d+\s*(?:of|\/)\s*\d+)\s*$/i.test(line)) return false
     if (/^\s*(?:date|time|payment)\s*$/i.test(line)) return false
