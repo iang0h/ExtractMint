@@ -46,12 +46,12 @@
 - Create: `src-tauri/capabilities/default.json`
 - Create: `src-tauri/icons/icon.png` (generated from `public/favicon.svg`)
 
-- [ ] Add `@tauri-apps/cli` as a development dependency; add `@tauri-apps/api`, `@tauri-apps/plugin-dialog`, and `@tauri-apps/plugin-fs` as runtime dependencies. Add the npm scripts `desktop:dev` (`tauri dev`), `desktop:build` (`tauri build`), and `build:desktop` (`tsc -b && vite build --mode desktop`).
-- [ ] Make Vite use `base: './'` only when `mode === 'desktop'`; leave the web base unchanged.
-- [ ] Configure Tauri to run `npm run dev -- --host 127.0.0.1` in development and `npm run build:desktop` before bundling in release mode.
-- [ ] Configure `frontendDist` to `../dist`, product name `ExtractMint`, identifier `com.iangoh.extractmint`, one resizable 1440×960 main window with 1100×720 minimum size, and bundle targets `dmg` for macOS and `nsis` for Windows.
-- [ ] Register Tauri's dialog and filesystem plugins in Rust; request only the permissions needed to show a Save dialog and write the selected file.
-- [ ] Generate a platform-ready app icon from the existing `public/favicon.svg` using the Tauri icon command.
+- [x] Add `@tauri-apps/cli` as a development dependency; add `@tauri-apps/api`, `@tauri-apps/plugin-dialog`, and `@tauri-apps/plugin-fs` as runtime dependencies. Add the npm scripts `desktop:dev` (`tauri dev`), `desktop:build` (`tauri build`), and `build:desktop` (`tsc -b && vite build --mode desktop`).
+- [x] Make Vite use `base: './'` only when `mode === 'desktop'`; leave the web base unchanged.
+- [x] Configure Tauri to run `npm run dev -- --host 127.0.0.1 --mode desktop` in development and `npm run build:desktop` before bundling in release mode.
+- [x] Configure `frontendDist` to `../dist`, product name `ExtractMint`, identifier `com.iangoh.extractmint`, one resizable 1440×960 main window with 1100×720 minimum size, and bundle targets `dmg` for macOS and `nsis` for Windows.
+- [x] Register Tauri's dialog and filesystem plugins in Rust; request only the permissions needed to show a Save dialog and write the selected file.
+- [x] Generate a platform-ready app icon from the existing `public/favicon.svg` using the Tauri icon command.
 
 ### Task 2: Keep desktop privacy boundaries and use native export dialogs
 
@@ -65,13 +65,13 @@
 - Modify: `src-tauri/src/main.rs`
 - Modify: `src-tauri/capabilities/default.json`
 
-- [ ] Render `<Analytics />` only when `import.meta.env.MODE !== 'desktop'`.
-- [ ] Make `trackExtractMintEvent` return without calling Vercel `track` when `import.meta.env.MODE === 'desktop'`.
-- [ ] In desktop mode, prevent `askAgent` from posting to `/api/agent/` and hide the remote assistant prompt; keep web assistant behavior unchanged.
-- [ ] Add a `saveExport(blob, filename, mimeType)` helper. In desktop mode it opens the native Save dialog and writes the selected file with the Tauri filesystem plugin. In web mode it keeps the current object-URL download behavior.
-- [ ] Route every export action (single XLSX/CSV/DOCX/PDF/QBO, combined workbook, receipt batches, review packs, diagnostics, and PDF redaction PNG/ZIP outputs) through `saveExport` without changing file content or naming. Keep support request copy on the clipboard.
-- [ ] Handle dialog cancellation as a no-op and show a user-facing error if a chosen destination cannot be written.
-- [ ] Keep uploaded source files, OCR output, and passwords out of dialog metadata, logs, and remote requests.
+- [x] Render `<Analytics />` only when `import.meta.env.MODE !== 'desktop'`.
+- [x] Make `trackExtractMintEvent` return without calling Vercel `track` when `import.meta.env.MODE === 'desktop'`.
+- [x] In desktop mode, prevent `askAgent` from posting to `/api/agent/` and hide the remote assistant prompt; keep web assistant behavior unchanged.
+- [x] Add a `saveExport(blob, filename, mimeType)` helper. In desktop mode it opens the native Save dialog and writes the selected file with the Tauri filesystem plugin. In web mode it keeps the current object-URL download behavior.
+- [x] Route every export action (single XLSX/CSV/DOCX/PDF/QBO, combined workbook, receipt batches, review packs, diagnostics, and PDF redaction PNG/ZIP outputs) through `saveExport` without changing file content or naming. Keep support request copy on the clipboard.
+- [x] Handle dialog cancellation as a no-op and show a user-facing error if a chosen destination cannot be written.
+- [x] Keep uploaded source files, OCR output, and passwords out of dialog metadata, logs, and remote requests.
 
 ### Task 3: Build cross-platform preview artifacts in CI
 
