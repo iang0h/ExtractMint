@@ -1,0 +1,284 @@
+name: Signed desktop draft release
+
+on:
+  push:
+    tags:
+      - "extractmint-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Check release version and signing credentials
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Check all release version declarations
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/check-desktop-release-version.mjs "$RELEASE_TAG"
+
+      - name: Require every signing secret
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          node --input-type=module <<'NODE'
+          const names = [
+            'APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_ID',
+            'APPLE_PASSWORD', 'APPLE_TEAM_ID', 'KEYCHAIN_PASSWORD',
+            'WINDOWS_CERTIFICATE', 'WINDOWS_CERTIFICATE_PASSWORD',
+          ]
+          const missing = names.filter((name) => !process.env[name]?.trim())
+          for (const name of missing) console.error(`Missing secret: ${name}`)
+          if (missing.length) process.exit(1)
+          NODE
+
+  macos:
+    name: Sign and notarize universal macOS installer
+    needs: preflight
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Set up stable Rust and both Mac targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Import Developer ID signing certificate
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          certificate_path="$RUNNER_TEMP/extractmint-apple.p12"
+          keychain_path="$RUNNER_TEMP/extractmint-signing.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$certificate_path" -k "$keychain_path" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign > /dev/null
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain_path" > /dev/null
+          security list-keychains -d user -s "$keychain_path" "$HOME/Library/Keychains/login.keychain-db"
+          identities="$(security find-identity -v -p codesigning "$keychain_path" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p')"
+          if [ -z "$identities" ] || [ "$(printf '%s\n' "$identities" | wc -l | tr -d ' ')" -ne 1 ]; then
+            echo 'Expected exactly one valid Developer ID Application signing identity.' >&2
+            exit 1
+          fi
+          printf 'APPLE_SIGNING_IDENTITY=%s\n' "$identities" >> "$GITHUB_ENV"
+          rm -f "$certificate_path"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build signed and notarized universal DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run desktop:build -- --bundles dmg --target universal-apple-darwin
+
+      - name: Verify signed app, stapled notarization, and both architectures
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apps=(src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app)
+          dmgs=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          if [ "${#apps[@]}" -ne 1 ] || [ "${#dmgs[@]}" -ne 1 ]; then
+            echo 'Expected exactly one macOS app and one DMG.' >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict "${apps[0]}"
+          xcrun stapler validate "${apps[0]}"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${apps[0]}/Contents/Info.plist")"
+          architectures="$(lipo -archs "${apps[0]}/Contents/MacOS/$executable")"
+          if [ "$architectures" != 'x86_64 arm64' ] && [ "$architectures" != 'arm64 x86_64' ]; then
+            echo 'Expected both x86_64 and arm64 in the macOS executable.' >&2
+            exit 1
+          fi
+          mkdir -p release-assets
+          mv "${dmgs[0]}" release-assets/ExtractMint-macOS-universal.dmg
+
+      - name: Remove temporary macOS signing material
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/extractmint-apple.p12"
+          keychain_path="$RUNNER_TEMP/extractmint-signing.keychain-db"
+          if [ -f "$keychain_path" ]; then
+            security delete-keychain "$keychain_path"
+          fi
+
+      - name: Upload verified macOS installer
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: extractmint-macos-signed
+          path: release-assets/ExtractMint-macOS-universal.dmg
+          if-no-files-found: error
+          retention-days: 1
+
+  windows:
+    name: Sign Windows x64 installer
+    needs: preflight
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Import signing certificate and generate temporary Tauri config
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+            throw 'The Windows release requires an x64 runner.'
+          }
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'extractmint-windows.pfx'
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $certificates = @(Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password)
+          $signingCertificates = @($certificates | Where-Object { $_.HasPrivateKey })
+          if ($signingCertificates.Count -ne 1) {
+            throw 'Expected exactly one Windows signing certificate with a private key.'
+          }
+          $thumbprint = $signingCertificates[0].Thumbprint
+          "WINDOWS_SIGNING_THUMBPRINT=$thumbprint" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          @{
+            bundle = @{
+              windows = @{
+                certificateThumbprint = $thumbprint
+                digestAlgorithm = 'sha256'
+                timestampUrl = 'http://timestamp.digicert.com'
+              }
+            }
+          } | ConvertTo-Json -Depth 4 | Set-Content -Path src-tauri/tauri.windows-release.conf.json -Encoding utf8
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build signed Windows NSIS installer
+        run: npm run desktop:build -- --bundles nsis --config src-tauri/tauri.windows-release.conf.json
+
+      - name: Verify Authenticode signature and stage installer
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installers = @(Get-ChildItem -Path src-tauri/target/release/bundle/nsis -Filter *.exe -File)
+          if ($installers.Count -ne 1) {
+            throw 'Expected exactly one Windows NSIS installer.'
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installers[0].FullName
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $env:WINDOWS_SIGNING_THUMBPRINT) {
+            throw 'The Windows installer must have a valid signature from the imported signing certificate.'
+          }
+          New-Item -ItemType Directory -Path release-assets -Force | Out-Null
+          Move-Item -LiteralPath $installers[0].FullName -Destination release-assets/ExtractMint-Windows-x64-setup.exe
+
+      - name: Remove temporary Windows signing material
+        if: always()
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($path in @((Join-Path $env:RUNNER_TEMP 'extractmint-windows.pfx'), 'src-tauri/tauri.windows-release.conf.json')) {
+            if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+          }
+          if ($env:WINDOWS_SIGNING_THUMBPRINT) {
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$env:WINDOWS_SIGNING_THUMBPRINT" -Force
+          }
+
+      - name: Upload verified Windows installer
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: extractmint-windows-signed
+          path: release-assets/ExtractMint-Windows-x64-setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+  draft-release:
+    name: Create owner-reviewed draft release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified macOS installer
+        uses: actions/download-artifact@v8
+        with:
+          name: extractmint-macos-signed
+          path: release-assets
+
+      - name: Download verified Windows installer
+        uses: actions/download-artifact@v8
+        with:
+          name: extractmint-windows-signed
+          path: release-assets
+
+      - name: Create draft with exactly the two verified installers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$(find release-assets -type f | wc -l)" -ne 2 ] ||
+             [ ! -s release-assets/ExtractMint-macOS-universal.dmg ] ||
+             [ ! -s release-assets/ExtractMint-Windows-x64-setup.exe ]; then
+            echo 'Expected exactly the two verified desktop installers.' >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            release-assets/ExtractMint-macOS-universal.dmg \
+            release-assets/ExtractMint-Windows-x64-setup.exe \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --draft \
+            --title "ExtractMint ${RELEASE_TAG#extractmint-v}" \
+            --notes 'Signed desktop installers. Owner review and manual publication are required.'
