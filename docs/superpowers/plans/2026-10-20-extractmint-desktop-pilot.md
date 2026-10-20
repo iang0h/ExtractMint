@@ -106,9 +106,9 @@
 - [x] Run `npm run desktop:build -- --bundles app` on macOS and confirm the `.app` is produced; package it as a DMG without Finder GUI automation and confirm both artifacts exist. The Tauri DMG bundler's Finder layout script stalled locally, so the app bundle was packaged with Tauri's bundled DMG helper using `--skip-jenkins`.
 - [ ] Open the desktop app, load the built-in synthetic statement, review its converted result, and save an XLSX through the native Save dialog.
 - [x] Inspect the desktop build output and confirm it contains neither the Vercel Analytics component nor the `/api/agent/` endpoint; source guards also disable both paths in desktop mode.
-- [ ] Confirm the Windows CI job produces the NSIS installer artifact; do not claim Windows runtime validation until the installer is exercised on Windows.
+- [x] Confirm the Windows CI job produces the NSIS installer artifact; do not claim Windows runtime validation until the installer is exercised on Windows. GitHub Actions run `39382518017` completed successfully on 2026-10-20 and uploaded the Windows ZIP alongside the Mac artifacts; artifacts expire after 14 days.
 
-Builds completed on macOS arm64 on 2026-10-20. The `.app` and DMG were produced; the generated executable is Mach-O arm64 and the artifacts are unsigned. The web and desktop Vite builds retain the existing advisory about large JavaScript chunks. Runtime Save-dialog behavior, the synthetic conversion flow inside the desktop window, GitHub Actions execution, and Windows artifacts remain unverified. The Rust dependency lockfile was committed as `eecee48`.
+Builds completed on macOS arm64 and GitHub-hosted Mac/Windows runners on 2026-10-20. The local `.app` and DMG were produced; its executable is Mach-O arm64. CI run `39382518017` successfully built and uploaded the Mac DMG, Mac app bundle tar, and Windows NSIS setup ZIP. All are unsigned previews and the CI artifacts expire after 14 days. The web and desktop Vite builds retain the existing advisory about large JavaScript chunks. Runtime Save-dialog behavior, the synthetic conversion flow inside the desktop window, and Windows installer execution remain unverified. The Rust dependency lockfile was committed as `eecee48`.
 
 ## Self-review
 
