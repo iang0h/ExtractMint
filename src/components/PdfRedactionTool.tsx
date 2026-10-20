@@ -96,6 +96,7 @@ export function PdfRedactionTool({
   const [draft, setDraft] = useState<RedactionRectPx | null>(null)
   const [dragging, setDragging] = useState<{ startX: number; startY: number } | null>(null)
   const [zipPagesInput, setZipPagesInput] = useState<string>('current')
+  const [pngStatus, setPngStatus] = useState<string | null>(null)
   const [zipStatus, setZipStatus] = useState<string | null>(null)
   const zipBusyRef = useRef(false)
 
@@ -287,6 +288,7 @@ export function PdfRedactionTool({
   }
 
   const download = () => {
+    setPngStatus(null)
     const baseCanvas = baseCanvasRef.current
     const overlayCanvas = overlayCanvasRef.current
     if (!baseCanvas || !overlayCanvas) return
@@ -308,7 +310,7 @@ export function PdfRedactionTool({
             trackExtractMintEvent('export_started')
           }
         } catch {
-          setZipStatus('Could not save the redacted PNG. Choose another destination and try again.')
+          setPngStatus('Could not save the redacted PNG. Choose another destination and try again.')
         }
       })()
     }, 'image/png')
@@ -387,6 +389,7 @@ export function PdfRedactionTool({
           </button>
         </div>
       </div>
+      {pngStatus ? <div className="redaction-export-status" role="status" aria-live="polite">{pngStatus}</div> : null}
 
       <div className="redaction-controls" aria-label="Redaction export options">
         <div className="redaction-page-nav">
