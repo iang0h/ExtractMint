@@ -45,9 +45,14 @@ ExtractMint is a browser-based financial document extraction product for operato
 ## Key Pages
 
 - [Home and converter](https://extractmint.iangoh.com/)
+- [Desktop app](https://extractmint.iangoh.com/desktop/)
 - [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
 - [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
 - [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)
+
+## Markdown Mirrors
+
+- [Desktop app Markdown](https://extractmint.iangoh.com/desktop/index.md)
 
 ## FAQ
 

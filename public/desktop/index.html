@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Desktop app | ExtractMint</title>
+    <meta name="description" content="ExtractMint Desktop brings local document conversion, review, and export to Mac and Windows. Signed desktop downloads are being prepared." />
+    <link rel="canonical" href="https://extractmint.iangoh.com/desktop/" />
+    <link rel="stylesheet" href="/seo.css" />
+    <meta property="og:title" content="Desktop app | ExtractMint" />
+    <meta property="og:description" content="Your documents stay on your computer. Local document conversion, review, and export for Mac and Windows." />
+    <meta property="og:image" content="https://extractmint.iangoh.com/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <style>
+      [hidden] { display: none !important; }
+      @media (min-width: 821px) {
+        #desktop-downloads { grid-template-columns: repeat(2, 1fr); }
+      }
+    </style>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "ExtractMint Desktop",
+        "url": "https://extractmint.iangoh.com/desktop/",
+        "isPartOf": { "@type": "WebSite", "name": "ExtractMint", "url": "https://extractmint.iangoh.com/" }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <nav class="nav" aria-label="Primary navigation">
+        <a class="brand" href="/">
+          <span class="mark" aria-hidden="true">EM</span>
+          ExtractMint
+        </a>
+        <div class="nav-links">
+          <a href="/#converter">Converter</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/privacy/">Privacy</a>
+        </div>
+      </nav>
+
+      <main>
+        <section class="hero">
+          <div>
+            <span class="eyebrow">ExtractMint Desktop</span>
+            <h1>Your documents stay on your computer.</h1>
+            <p class="lede">
+              A local-first Mac and Windows app that reuses ExtractMint’s conversion, review, and export workflow. Core document processing runs on your computer.
+            </p>
+            <div class="cta-row">
+              <a class="button" href="/#converter">Use the browser converter</a>
+            </div>
+          </div>
+          <div class="panel">
+            <h2 id="download-status" role="status">Signed desktop downloads are being prepared.</h2>
+            <p id="download-preparation-note">No desktop installer is available yet. Signed installers will appear here after publication.</p>
+            <p>Convert bank statements, receipts, invoices, and office documents, review extracted rows, and export clean working files.</p>
+          </div>
+        </section>
+
+        <section id="desktop-downloads" class="grid" aria-label="Desktop downloads" hidden>
+          <article class="panel">
+            <h2>Mac</h2>
+            <p>Universal macOS app for Apple silicon and Intel Macs.</p>
+            <a id="download-macos" class="button">Download for Mac</a>
+          </article>
+          <article class="panel">
+            <h2>Windows</h2>
+            <p>Windows installer for x64 computers.</p>
+            <a id="download-windows" class="button">Download for Windows</a>
+          </article>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>ExtractMint</span>
+        <a href="/#converter">Use the browser converter</a>
+      </footer>
+    </div>
+    <script>
+      (async () => {
+        try {
+          const response = await fetch("/desktop/downloads.json", { cache: "no-store" });
+          if (!response.ok) return;
+          const manifest = await response.json();
+          if (
+            !manifest ||
+            typeof manifest !== "object" ||
+            Array.isArray(manifest) ||
+            manifest.available !== true ||
+            typeof manifest.version !== "string" ||
+            typeof manifest.releaseTag !== "string" ||
+            !/^extractmint-v\d+\.\d+\.\d+$/.test(manifest.releaseTag) ||
+            typeof manifest.publishedAt !== "string"
+          ) return;
+
+          const releaseUrl = `https://github.com/iang0h/ExtractMint/releases/download/${encodeURIComponent(manifest.releaseTag)}`;
+          const macDownload = document.getElementById("download-macos");
+          const windowsDownload = document.getElementById("download-windows");
+          macDownload.href = `${releaseUrl}/ExtractMint-macOS-universal.dmg`;
+          windowsDownload.href = `${releaseUrl}/ExtractMint-Windows-x64-setup.exe`;
+          macDownload.rel = "noopener";
+          windowsDownload.rel = "noopener";
+          document.getElementById("download-status").textContent = `Signed desktop downloads for version ${manifest.version} are available.`;
+          document.getElementById("download-preparation-note").hidden = true;
+          document.getElementById("desktop-downloads").hidden = false;
+        } catch {
+          // Keep the preparation state when the manifest cannot be read or validated.
+        }
+      })();
+    </script>
+  </body>
+</html>

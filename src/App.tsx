@@ -1758,6 +1758,7 @@ function App() {
           <a href="#converter">Converter</a>
           <a href="#formats">Formats</a>
           <a href="/convert/bank-statement-to-excel/">Bank statement guide</a>
+          <a href="/desktop/">Desktop app</a>
           <a href="/pricing/">Pricing</a>
           <a href="#faq">FAQ</a>
         </nav>
@@ -3069,6 +3070,7 @@ function App() {
           <a href="/convert/pdf-bank-statement-to-excel/">PDF statement to Excel</a>
           <a href="/convert/scanned-bank-statement-to-excel/">Scanned statement to Excel</a>
           <a href="/#support">Support</a>
+          <a href="/desktop/">Desktop app</a>
           <a href="/pricing/">Pricing</a>
           <a href="/privacy/">Privacy</a>
           <a href="/security/">Security</a>

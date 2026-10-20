@@ -52,6 +52,7 @@ Primary service area: global web app, with guides for bank statement conversion,
 ## HTML Pages
 
 - Home and converter: https://extractmint.iangoh.com/
+- Desktop app: https://extractmint.iangoh.com/desktop/
 - Pricing: https://extractmint.iangoh.com/pricing/
 - Privacy: https://extractmint.iangoh.com/privacy/
 - Security: https://extractmint.iangoh.com/security/
@@ -62,6 +63,7 @@ Primary service area: global web app, with guides for bank statement conversion,
 ## Markdown Mirrors
 
 - Home Markdown: https://extractmint.iangoh.com/index.md
+- Desktop app Markdown: https://extractmint.iangoh.com/desktop/index.md
 - Pricing Markdown: https://extractmint.iangoh.com/pricing/index.md
 - Privacy Markdown: https://extractmint.iangoh.com/privacy/index.md
 - Security Markdown: https://extractmint.iangoh.com/security/index.md
