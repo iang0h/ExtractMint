@@ -90,14 +90,41 @@ connection may be needed to obtain assets that are not already available.
 The **Desktop preview builds** workflow can be started manually in GitHub
 Actions or by pushing a `desktop-v*` tag. It produces unsigned preview
 artifacts: a macOS DMG and app bundle, and a Windows NSIS setup executable.
-Download them from the completed workflow run's artifacts. CI artifacts are
-temporary previews, not signed public installers.
+These artifacts are temporary CI previews only. They are not public downloads
+and must not be presented as signed installers.
 
-Direct macOS distribution outside the Mac App Store requires Developer ID
-signing and Apple notarization. Public Windows distribution requires a trusted
-signing route or distribution through the Microsoft Store. Signing
-credentials, notarization, and commercial installer setup are not configured
-by this pilot.
+Public desktop downloads will be listed at
+[`/desktop/`](https://extractmint.iangoh.com/desktop/). To prepare the first public
+release, an owner must choose a semantic version and set that same version in
+all four version declarations: `package.json`, `package-lock.json`,
+`src-tauri/tauri.conf.json`, and the `[package]` section of
+`src-tauri/Cargo.toml`. Do not guess or change the version as part of this
+implementation. Before tagging, configure the signing credentials as GitHub
+repository or environment secrets with these exact names:
+
+- `APPLE_CERTIFICATE`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_ID`
+- `APPLE_PASSWORD`
+- `APPLE_TEAM_ID`
+- `KEYCHAIN_PASSWORD`
+- `WINDOWS_CERTIFICATE`
+- `WINDOWS_CERTIFICATE_PASSWORD`
+
+After the version and secrets are ready, push an `extractmint-vX.Y.Z` tag for
+that version. The signed release workflow builds and verifies the macOS and
+Windows installers, then creates a draft GitHub release with both assets.
+An owner must review both assets in the draft and publish it manually. macOS
+distribution requires Developer ID signing and Apple notarization. Signed
+Windows downloads can still show Microsoft Defender SmartScreen warnings while
+the publisher and installer reputation accumulates.
+
+Publishing a complete draft release automatically updates
+`public/desktop/downloads.json` on the repository's default branch. Vercel then
+deploys from that branch, and the desktop page enables the signed downloads
+when the published manifest is available. Installers are not ready for public
+download until owner secrets are configured and a signed release has been
+verified.
 
 This pilot does not include firm or client accounts, cloud sync,
 billing/licensing, accounting software integrations, or receipt line-item
