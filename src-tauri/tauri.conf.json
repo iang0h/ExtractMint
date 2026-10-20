@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "identifier": "com.iangoh.extractmint",
   "build": {
-    "beforeDevCommand": "npm run dev -- --host 127.0.0.1",
+    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --mode desktop",
     "devUrl": "http://127.0.0.1:5173",
     "beforeBuildCommand": "npm run build:desktop",
     "frontendDist": "../dist"

@@ -37,3 +37,12 @@ Sources consulted:
 ## Plan adjustments
 
 The initial brief's file list named only `icons/icon.png`; working macOS and Windows bundles also require platform icon formats. The generated desktop icon set is included. The parent explicitly requested the API/dialog/filesystem JavaScript dependencies in this task, together with the frontend desktop build script referenced by Tauri.
+
+## Review follow-up: preserve web development port fallback
+
+Changed files: `vite.config.ts`, `src-tauri/tauri.conf.json`, and this report.
+
+- Changed Vite's `server.strictPort` to `mode === 'desktop'`, so normal `npm run dev` can advance to another available port while desktop development requires port 5173.
+- Added `--mode desktop` to Tauri's `beforeDevCommand` so the desktop dev server enables strict binding and relative asset paths explicitly.
+- Static verification: inspected the focused diff and the development script (`dev` remains `vite`). The mode comparison now makes strict binding false for normal development and true for desktop development; the configured Tauri development URL remains `http://127.0.0.1:5173`.
+- No tests, builds, or runtime checks were run, as instructed. Runtime port fallback has not been exercised.
