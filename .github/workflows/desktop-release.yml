@@ -16,6 +16,7 @@ jobs:
   preflight:
     name: Check release version and signing credentials
     runs-on: ubuntu-latest
+    environment: desktop-signing
     steps:
       - name: Check out source
         uses: actions/checkout@v7.0.1
@@ -59,6 +60,7 @@ jobs:
     name: Sign and notarize universal macOS installer
     needs: preflight
     runs-on: macos-latest
+    environment: desktop-signing
     steps:
       - name: Check out source
         uses: actions/checkout@v7.0.1
@@ -157,6 +159,7 @@ jobs:
     name: Sign Windows x64 installer
     needs: preflight
     runs-on: windows-latest
+    environment: desktop-signing
     defaults:
       run:
         shell: pwsh

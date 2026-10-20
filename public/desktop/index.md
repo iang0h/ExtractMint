@@ -8,6 +8,6 @@ Convert bank statements, receipts, invoices, and office documents, review extrac
 
 ## Availability
 
-Signed desktop downloads are being prepared. No desktop installer is available yet. Signed Mac and Windows installers will appear on the [desktop page](https://extractmint.iangoh.com/desktop/) after publication.
+Check the [desktop page](https://extractmint.iangoh.com/desktop/) for the current signed installer availability. Published Mac and Windows downloads will be listed there.
 
 [Use the browser converter](https://extractmint.iangoh.com/#converter).

@@ -15,11 +15,13 @@ jobs:
   update-manifest:
     name: Enable downloads for a complete public desktop release
     runs-on: ubuntu-latest
+    env:
+      VERCEL_PRODUCTION_BRANCH: codex/receipt-extraction
     steps:
-      - name: Check out the default branch
+      - name: Check out the Vercel production branch
         uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: codex/receipt-extraction
 
       - name: Set up Node.js 24
         uses: actions/setup-node@v7.1.0
@@ -31,8 +33,6 @@ jobs:
         run: node scripts/update-desktop-downloads-manifest.mjs
 
       - name: Commit and push the changed manifest
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           git add -- public/desktop/downloads.json
@@ -43,4 +43,4 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'chore: publish desktop downloads manifest' -- public/desktop/downloads.json
-          git push origin "HEAD:$DEFAULT_BRANCH"
+          git push origin "HEAD:$VERCEL_PRODUCTION_BRANCH"

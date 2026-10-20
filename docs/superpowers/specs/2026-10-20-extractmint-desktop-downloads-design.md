@@ -11,7 +11,7 @@ Make the local-first ExtractMint desktop app easy to find from the website and p
 - Explain that the Mac and Windows apps process documents locally and reuse the existing conversion, review, and export flows.
 - Until the first signed release is published, show an explicit “Signed desktop downloads are being prepared” status and a link to use the browser converter. Do not show broken download buttons or link to temporary CI artifacts.
 - Keep the initial release manifest at `public/desktop/downloads.json` with availability disabled. The page reads this same-origin file and shows download buttons only when the manifest identifies a published release tag.
-- When a GitHub Release is published, a small release-published workflow updates the manifest on the repository's default branch. Vercel's normal Git deployment then updates the page without requiring a manual code edit.
+- When a GitHub Release is published, a small release-published workflow updates the manifest on the Vercel production branch. Vercel's normal Git deployment then updates the page without requiring a manual code edit. At implementation time that branch is `codex/receipt-extraction`.
 - After a signed public release exists, show links to that release's macOS universal DMG and Windows x64 installer. Use stable asset names `ExtractMint-macOS-universal.dmg` and `ExtractMint-Windows-x64-setup.exe`; include the explicit release tag in each URL.
 - Add the page to `sitemap.xml`, `public/index.md`, and `public/llms.txt` so it can be found by crawlers and assistants.
 
@@ -21,7 +21,7 @@ Make the local-first ExtractMint desktop app easy to find from the website and p
 - Add a release workflow for version tags `extractmint-v*` that builds a macOS universal DMG and a Windows x64 NSIS installer, code signs both, and notarizes the macOS app.
 - Publish the signed installers as assets on a GitHub Release, using stable names `ExtractMint-macOS-universal.dmg` and `ExtractMint-Windows-x64-setup.exe`.
 - Create each GitHub Release as a draft for owner review. Publishing that release triggers the manifest update, so the website reveals download buttons only after the release and its signed assets are public.
-- Store signing credentials only in GitHub Actions secrets. The workflow must stop with a clear message when required secrets are absent and must never fall back to an unsigned public release.
+- Store signing credentials only in the `desktop-signing` GitHub Actions environment or repository secrets. The workflow must stop with a clear message when required secrets are absent and must never fall back to an unsigned public release.
 - macOS signing uses a Developer ID Application identity and Apple notarization credentials. Windows signing uses a trusted signing certificate/service configured for the Tauri bundle. Signed Windows builds may still show SmartScreen warnings until reputation accumulates.
 
 ## Privacy and scope

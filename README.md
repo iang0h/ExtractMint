@@ -99,8 +99,9 @@ release, an owner must choose a semantic version and set that same version in
 all four version declarations: `package.json`, `package-lock.json`,
 `src-tauri/tauri.conf.json`, and the `[package]` section of
 `src-tauri/Cargo.toml`. Do not guess or change the version as part of this
-implementation. Before tagging, configure the signing credentials as GitHub
-repository or environment secrets with these exact names:
+implementation. Before tagging, create the GitHub Actions environment named
+`desktop-signing` and add the signing credentials there, or add them as
+repository secrets, using these exact names:
 
 - `APPLE_CERTIFICATE`
 - `APPLE_CERTIFICATE_PASSWORD`
@@ -111,20 +112,28 @@ repository or environment secrets with these exact names:
 - `WINDOWS_CERTIFICATE`
 - `WINDOWS_CERTIFICATE_PASSWORD`
 
+Store `APPLE_CERTIFICATE` as base64-encoded Developer ID `.p12` data and
+`WINDOWS_CERTIFICATE` as base64-encoded `.pfx` data. `APPLE_PASSWORD` must be an
+Apple app-specific password used for notarization.
+
 After the version and secrets are ready, push an `extractmint-vX.Y.Z` tag for
-that version. The signed release workflow builds and verifies the macOS and
-Windows installers, then creates a draft GitHub release with both assets.
-An owner must review both assets in the draft and publish it manually. macOS
-distribution requires Developer ID signing and Apple notarization. Signed
-Windows downloads can still show Microsoft Defender SmartScreen warnings while
-the publisher and installer reputation accumulates.
+that version from a commit containing the release workflows. The signed release
+workflow builds and verifies the macOS and Windows installers, then creates a
+draft GitHub release with both assets. An owner must review both assets in the
+draft and publish it manually. macOS distribution requires Developer ID signing
+and Apple notarization. Signed Windows downloads can still show Microsoft
+Defender SmartScreen warnings while the publisher and installer reputation
+accumulates.
 
 Publishing a complete draft release automatically updates
-`public/desktop/downloads.json` on the repository's default branch. Vercel then
-deploys from that branch, and the desktop page enables the signed downloads
-when the published manifest is available. Installers are not ready for public
-download until owner secrets are configured and a signed release has been
-verified.
+`public/desktop/downloads.json` on `codex/receipt-extraction`, the current Vercel
+production branch. That push starts a production deployment, and the desktop
+page enables signed downloads when the published manifest is available. If the
+Vercel production branch changes, update the branch in
+`.github/workflows/desktop-release-published.yml` in both the checkout ref and
+`VERCEL_PRODUCTION_BRANCH` before publishing a release.
+Installers are not ready for public download until owner secrets are configured
+and a signed release has been verified.
 
 This pilot does not include firm or client accounts, cloud sync,
 billing/licensing, accounting software integrations, or receipt line-item

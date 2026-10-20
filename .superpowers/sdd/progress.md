@@ -60,4 +60,8 @@
 - Task 3: complete — published-release event validation and manifest updater committed as `ec03912`; independent spec and quality review approved. Node syntax, YAML parse, and staged diff checks passed. Live GitHub push and Vercel deployment await the first valid signed release.
 - Task 4: in progress — release instructions and final production-build inspection.
 - Task 4: complete — README release/owner instructions committed as `d6f0281`; review found the preview artifact retrieval line had been removed, restored in `e3253c6`, and re-review approved. The production build and requested static artifact inspection passed; no tests ran.
-- Final review: in progress — full desktop-downloads change set since `origin/codex/receipt-extraction`.
+- Final review: passed — full desktop-downloads change set since `origin/codex/receipt-extraction`; integration fixes were independently re-reviewed with no blockers.
+- Recent Vercel production deployment metadata identifies `codex/receipt-extraction` as the deployed production branch. The publisher now checks out and pushes its manifest update there. GitHub release events use the tagged release commit, so the tag must contain the release workflow files.
+- All secret-reading jobs now use the `desktop-signing` GitHub Actions environment. README also supports repository secrets and documents base64 P12/PFX formats plus the Apple app-specific password.
+- `public/desktop/index.md` directs readers to the live page for current availability.
+- `npm run build`, workflow YAML parsing, generated-manifest inspection (`available: false`), and `git diff --check` passed. The build retains the existing large-chunk advisory. No test suites were run.

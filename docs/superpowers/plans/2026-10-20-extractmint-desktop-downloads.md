@@ -4,7 +4,7 @@
 
 **Goal:** Add a discoverable ExtractMint desktop page and a signed-release pipeline that reveals Mac and Windows downloads only after an owner publishes a verified release.
 
-**Architecture:** Serve `/desktop/` as a static SEO page. It reads a same-origin JSON manifest and builds fixed GitHub release asset URLs only when that manifest names a valid release tag. GitHub Actions builds and signs draft releases; a separate `release.published` workflow validates the release event and updates the manifest on the default branch, allowing the existing Vercel Git integration to deploy the new state.
+**Architecture:** Serve `/desktop/` as a static SEO page. It reads a same-origin JSON manifest and builds fixed GitHub release asset URLs only when that manifest names a valid release tag. GitHub Actions builds and signs draft releases; a separate `release.published` workflow validates the release event and updates the manifest on Vercel's production branch (`codex/receipt-extraction` at implementation time), allowing the existing Vercel Git integration to deploy the new state.
 
 **Tech Stack:** React/Vite homepage, static HTML/Markdown SEO artifacts, Node.js scripts, Tauri v2, GitHub Actions, macOS signing/notarization, Windows Authenticode signing, Vercel Git deployments.
 
@@ -75,7 +75,7 @@
 - The script consumes the event JSON path in `GITHUB_EVENT_PATH`, requires a non-draft, non-prerelease release with a valid `extractmint-vX.Y.Z` tag and both exact installer asset names, and writes the Task 1 manifest schema with `available: true`, the tag-derived version, and the event’s `published_at` value.
 
 - [ ] Implement the updater with Node built-ins only. Validate `release.draft === false`, `release.prerelease === false`, the tag pattern, both exact `release.assets[].name` values, and a parseable `published_at`; fail without modifying the manifest if any check fails. Write formatted JSON and a trailing newline.
-- [ ] Create `.github/workflows/desktop-release-published.yml` for `release: types: [published]`; check out `github.event.repository.default_branch`, run the updater against `GITHUB_EVENT_PATH`, and commit/push only when `public/desktop/downloads.json` changed. Set the commit author to `github-actions[bot]`; do not add a skip-deploy marker because the Vercel Git deployment must see the manifest update.
+- [ ] Create `.github/workflows/desktop-release-published.yml` for `release: types: [published]`; check out the Vercel production branch (`codex/receipt-extraction` at implementation time), run the updater against `GITHUB_EVENT_PATH`, and commit/push only when `public/desktop/downloads.json` changed. Set the commit author to `github-actions[bot]`; do not add a skip-deploy marker because the Vercel Git deployment must see the manifest update.
 - [ ] Inspect that draft creation, prerelease publication, malformed tags, or missing assets cannot enable downloads, and that the workflow contains no signing credentials.
 
 ### Task 4: Document the public release and owner setup
@@ -87,8 +87,8 @@
 - Keep the current preview-build instructions but distinguish them clearly from signed public releases.
 - Document the desktop page URL, release tag/version procedure, exact GitHub secret names from Task 2, draft-review/publish sequence, automatic manifest update, and the SmartScreen reputation caveat.
 
-- [ ] Update the “Unsigned CI previews and public distribution” section to explain that `desktop-v*` artifacts are temporary unsigned previews and never public downloads; `extractmint-v*` tags create signed draft releases; owners publish a draft after reviewing both assets; publishing updates the website manifest and Vercel deploys from the default branch.
-- [ ] Document that the first release requires one matching semantic version in all four version files, that no version should be guessed during this implementation, and that secrets must be configured in GitHub repository/environment secrets using these exact names: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, `KEYCHAIN_PASSWORD`, `WINDOWS_CERTIFICATE`, and `WINDOWS_CERTIFICATE_PASSWORD`.
+- [ ] Update the “Unsigned CI previews and public distribution” section to explain that `desktop-v*` artifacts are temporary unsigned previews and never public downloads; `extractmint-v*` tags create signed draft releases; owners publish a draft after reviewing both assets; publishing updates the website manifest and pushes it to the current Vercel production branch.
+- [ ] Document that the first release requires one matching semantic version in all four version files, that no version should be guessed during this implementation, and that secrets must be configured in the `desktop-signing` GitHub Actions environment or as repository secrets using these exact names: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, `KEYCHAIN_PASSWORD`, `WINDOWS_CERTIFICATE`, and `WINDOWS_CERTIFICATE_PASSWORD`. Explain the required base64 certificate formats and Apple app-specific password.
 - [ ] State that macOS distribution requires Developer ID signing and notarization, and signed Windows downloads can still show SmartScreen warnings while reputation accumulates. Keep existing desktop privacy and extraction-scope statements intact.
 - [ ] Run `npm run build`, inspect `dist/desktop/index.html`, `dist/desktop/downloads.json`, `dist/sitemap.xml`, `dist/index.md`, and `dist/llms.txt`, then review `git diff --check`. Do not add or run test suites. Do not claim installers are ready until owner secrets are configured and a signed release has been verified.
 
