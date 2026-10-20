@@ -37,3 +37,10 @@
 - Task 3: complete — single and batch receipt XLSX/CSV exports committed as `c763528`; independent static spec and quality review approved. Build verification is deferred to Task 4; no tests were run.
 - Final follow-up fixes: complete — whole-branch review findings were addressed across `23a5436` through `a6aaeb3`, including statement-vs-receipt routing, payable totals, currency headers, tax boundaries, and base-first tax calculations. The focused review of `a6aaeb3` and final independent whole-branch review both approved with no remaining actionable findings.
 - Task 4: complete — fresh `npm run build` exited 0; Vite retains its large-chunk advisory. `git diff --check` passes. Static source review confirmed statement handling and exports remain intact, receipt metadata stays out of analytics and `/api/agent/`, and receipt review/export paths follow the spec. No tests were added or run, per developer instruction. Browser OCR and generated workbook runtime behavior were not independently exercised. No deployment was performed.
+
+# ExtractMint desktop pilot progress
+
+- Design and implementation plan complete; scope: local-first Tauri desktop wrapper, native export save dialog, web behavior preserved, no desktop analytics or remote assistant.
+- Worktree ready at `.worktrees/clean-converter-workspace` on branch `codex/receipt-extraction`.
+- Task 1: complete — Tauri shell, desktop build mode, relative assets, scoped Save-dialog capability, platform icons, and desktop scripts; commits `a5549b5` and `7a5b798`; independent spec and quality review approved after the strict-port fix. Native compilation remains unverified because Rust is not installed. No tests or builds were run.
+- Task 2: pending.

@@ -44,7 +44,7 @@
 - Create: `src-tauri/capabilities/default.json`
 - Create: `src-tauri/icons/icon.png` (generated from `public/favicon.svg`)
 
-- [ ] Add `@tauri-apps/cli` as a development dependency; add `@tauri-apps/api`, `@tauri-apps/plugin-dialog`, and `@tauri-apps/plugin-fs` as runtime dependencies. Add the npm scripts `desktop:dev` (`tauri dev`) and `desktop:build` (`tauri build`).
+- [ ] Add `@tauri-apps/cli` as a development dependency; add `@tauri-apps/api`, `@tauri-apps/plugin-dialog`, and `@tauri-apps/plugin-fs` as runtime dependencies. Add the npm scripts `desktop:dev` (`tauri dev`), `desktop:build` (`tauri build`), and `build:desktop` (`tsc -b && vite build --mode desktop`).
 - [ ] Make Vite use `base: './'` only when `mode === 'desktop'`; leave the web base unchanged.
 - [ ] Configure Tauri to run `npm run dev -- --host 127.0.0.1` in development and `npm run build:desktop` before bundling in release mode.
 - [ ] Configure `frontendDist` to `../dist`, product name `ExtractMint`, identifier `com.iangoh.extractmint`, one resizable 1440×960 main window with 1100×720 minimum size, and bundle targets `dmg` for macOS and `nsis` for Windows.
@@ -61,7 +61,6 @@
 - Modify: `src-tauri/src/main.rs`
 - Modify: `src-tauri/capabilities/default.json`
 
-- [ ] Add a `build:desktop` script using `vite build --mode desktop` and the existing TypeScript build; do not run the homepage prerender step for the desktop bundle.
 - [ ] Render `<Analytics />` only when `import.meta.env.MODE !== 'desktop'`.
 - [ ] In desktop mode, prevent `askAgent` from posting to `/api/agent/` and hide the remote assistant prompt; keep web assistant behavior unchanged.
 - [ ] Add a `saveExport(blob, filename, mimeType)` helper. In desktop mode it opens the native Save dialog and writes the selected file with the Tauri filesystem plugin. In web mode it keeps the current object-URL download behavior.
