@@ -108,7 +108,7 @@
 - [x] Inspect the desktop build output and confirm it contains neither the Vercel Analytics component nor the `/api/agent/` endpoint; source guards also disable both paths in desktop mode.
 - [ ] Confirm the Windows CI job produces the NSIS installer artifact; do not claim Windows runtime validation until the installer is exercised on Windows.
 
-Builds completed on macOS arm64 on 2026-10-20. The `.app` and DMG were produced; the generated executable is Mach-O arm64 and the artifacts are unsigned. The web and desktop Vite builds retain the existing advisory about large JavaScript chunks. Runtime Save-dialog behavior, the synthetic conversion flow inside the desktop window, static bundle privacy inspection, GitHub Actions execution, and Windows artifacts remain unverified. The Rust dependency lockfile was committed as `eecee48`.
+Builds completed on macOS arm64 on 2026-10-20. The `.app` and DMG were produced; the generated executable is Mach-O arm64 and the artifacts are unsigned. The web and desktop Vite builds retain the existing advisory about large JavaScript chunks. Runtime Save-dialog behavior, the synthetic conversion flow inside the desktop window, GitHub Actions execution, and Windows artifacts remain unverified. The Rust dependency lockfile was committed as `eecee48`.
 
 ## Self-review
 

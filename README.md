@@ -36,8 +36,10 @@ npm run deploy:vercel
 
 ## Desktop preview
 
-ExtractMint also has a local-first desktop preview for macOS and Windows. It
-uses the existing bank-statement conversion, review, and export flow, plus
+ExtractMint also has a local-first desktop preview. The current macOS preview
+targets Apple Silicon (arm64); Intel Macs need a separate build that this pilot
+does not yet provide. A Windows preview is configured in CI. It uses the
+existing bank-statement conversion, review, and export flow, plus
 receipt-level extraction that exports one row per receipt (such as date,
 merchant, total, tax, currency, and category when detected). It does not
 extract individual receipt line items.
