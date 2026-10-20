@@ -89,12 +89,12 @@
 **Files:**
 - Modify: `README.md`
 
-- [ ] Add desktop development prerequisites: Node.js, Rust toolchain, and platform-specific build tools.
-- [ ] Document `npm run desktop:dev` and `npm run desktop:build`.
-- [ ] Explain that desktop document processing stays local, analytics and remote assistant are disabled, and OCR engine assets may still be downloaded separately from source documents.
-- [ ] Explain how CI produces unsigned macOS DMG and Windows NSIS preview artifacts.
-- [ ] State that public Mac release needs Developer ID signing and notarization, and that public Windows distribution needs a trusted signing/Store path; do not imply this pilot includes those credentials.
-- [ ] List the excluded firm workspace features so the pilot is not presented as a Dext replacement.
+- [x] Add desktop development prerequisites: Node.js, Rust toolchain, and platform-specific build tools.
+- [x] Document `npm run desktop:dev`, `npm run desktop:build`, and `npm run build:desktop`.
+- [x] Explain that desktop document processing stays local, analytics and remote assistant are disabled, and OCR engine assets may still be downloaded separately from source documents.
+- [x] Explain how CI produces unsigned macOS DMG and Windows NSIS preview artifacts.
+- [x] State that direct public Mac distribution outside the App Store needs Developer ID signing and notarization, and that public Windows distribution needs a trusted signing/Store path; do not imply this pilot includes those credentials.
+- [x] List the excluded firm workspace features so the pilot is not presented as a Dext replacement.
 
 ### Task 5: Build and exercise the desktop flow
 
