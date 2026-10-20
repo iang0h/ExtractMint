@@ -2388,11 +2388,11 @@ function money(value?: number, currencyCode = 'USD') {
 
 function detectCurrencyCode(rawText: string, fileName: string): { code: string; detected: boolean } {
   const combined = `${fileName}\n${rawText}`.toLowerCase()
-  if (/\bmyr\b|\brm\b/.test(combined) || combined.includes('rm ')) return { code: 'MYR', detected: true }
+  if (/\bmyr\b|\brm(?=\s*\d)/.test(combined) || combined.includes('rm ')) return { code: 'MYR', detected: true }
   if (/\bsgd\b/.test(combined) || combined.includes('s$')) return { code: 'SGD', detected: true }
   if (/\beur\b|€/.test(combined)) return { code: 'EUR', detected: true }
   if (/\bgbp\b|£/.test(combined)) return { code: 'GBP', detected: true }
-  if (/\bjpy\b|¥/.test(combined)) return { code: 'JPY', detected: true }
+  if (/\bjpy\b|[¥￥]\s*[-+]?\s*\(?\d|[\d,.]+\s*[¥￥]/.test(combined)) return { code: 'JPY', detected: true }
   if (/\baud\b/.test(combined) || combined.includes('a$')) return { code: 'AUD', detected: true }
   if (/\bcad\b/.test(combined) || combined.includes('c$')) return { code: 'CAD', detected: true }
   if (/\busd\b|\$/.test(combined)) return { code: 'USD', detected: true }
@@ -2503,7 +2503,7 @@ const receiptExpenseDateLabel = /\b(?:(?:receipt|transaction|purchase|sale)\s+da
 
 function selectReceiptDate(lines: string[]) {
   const nonExpenseDate = /\b(?:valid(?:ity)?|exp(?:iry|iration|ires?)?|best\s+before|use\s+by)\b/i
-  const genericDateLabel = /^\s*date(?:\s*[/&]\s*time)?\s*[:#-]?\s*$/i
+  const genericDateLabel = /^\s*(?:\d{1,2}\s+)?(?:date(?:\s*[/&]\s*time)?|time)\s*[:#-]?\s*$/i
   const dateContextFragment = /^\s*(?:(?:date|time|valid(?:ity)?|exp(?:iry|iration|ires?)?|best|before|use|by|until|from)\b[\s:/&#-]*)+$/i
   const labeled: { date: string; priority: number }[] = []
   const fallback = new Set<string>()
@@ -2565,7 +2565,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   const inclusiveTaxQualifier = /\b(?:incl(?:uding)?|inclusive(?:\s+of)?|with)\s+(?:the\s+)?(?:tax|vat|gst|sst)\b|\b(?:tax|vat|gst|sst)\s+(?:included|inclusive(?:\s+of)?)\b/i
   // A monetary value after "tax on/of" is a calculation base, even before its rate.
   const taxCalculationContext = /\btaxable\s+(?:base|amount)\b|\b(?:tax|vat|gst|sst)\s+(?:base|basis)\b|\b(?:tax|vat|gst|sst)\b[^%]*\d+(?:[.,]\d+)?\s*%\s*(?:on|of)\b|\b(?:tax|vat|gst|sst)\s+(?:on|of)\s*(?:\(\s*)?(?:(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)\s*)?(?=[+-]?\s*(?:[SAC]?\$|[€£¥])?\s*\(?\s*\d)/i
-  const amountLabelPattern = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst|cash(?:\s+tendered)?|(?:(?:credit|debit)\s+)?card|(?:amount\s+)?tendered|change|payment(?:\s+(?:method|received))?|visa|mastercard|amex)\b/gi
+  const amountLabelPattern = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|grand\s+total|total\s+paid|amount\s+(?:paid|due)|balance\s+due|sub[\s-]*total|total|tax|vat|gst|sst|e[\s-]?wallet|ewallet|cash(?:\s+tendered)?|(?:(?:credit|debit)\s+)?card|(?:amount\s+)?tendered|change|payment(?:\s+(?:method|received))?|visa|mastercard|amex)\b/gi
   const labelsInAmountLine = (line: string) =>
     [...line.matchAll(new RegExp(amountLabelPattern.source, amountLabelPattern.flags))].filter((candidate) => {
       // Tax qualifiers remain part of their label rather than starting another value span.
@@ -2673,6 +2673,20 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     ? amountsInLabelSegment(totalLine, payableLabelMatch, eligibleTotalMatches.filter((match) => !inlineTaxAmount(match) && !inlineTaxAnnotationAmount(match)))
     : []
   const totalMatch = payableCandidates.length === 1 ? payableCandidates[0] : undefined
+  const eWalletSegments = amountLines.filter(({ text }) => /\b(?:e[\s-]?wallet|ewallet)\b/i.test(text))
+  const eWalletPayments = eWalletSegments.flatMap((segment) => {
+    const label = segment.text.match(/\b(?:e[\s-]?wallet|ewallet)\b/i)
+    const amounts = [...segment.text.matchAll(new RegExp(amountPattern.source, amountPattern.flags))]
+      .filter((match) => !/^\s*(?:\)?\s*%|%\s*\)?)/.test(segment.text.slice((match.index ?? 0) + match[0].length)))
+    const ownedAmounts = amountsInLabelSegment(segment.text, label, amounts)
+    return ownedAmounts.length === 1 ? [{ segment, amount: ownedAmounts[0] }] : []
+  })
+  // A single e-wallet tender is a reliable paid total when no explicit payable total exists.
+  const eWalletFallback = payableSegments.length === 0 && eWalletSegments.length === 1 && eWalletPayments.length === 1
+    ? eWalletPayments[0]
+    : undefined
+  const selectedTotalMatch = totalMatch ?? eWalletFallback?.amount
+  const selectedTotalSegment = totalSegment ?? eWalletFallback?.segment
   const taxMetadataLabel = /\b(?:tax|vat|gst|sst)\b.{0,30}\b(?:id|identification|number|no|registration|registered)\b|\b(?:id|identification|number|registration|registered)\b.{0,30}\b(?:tax|vat|gst|sst)\b/i
   const nonTaxAmountLabel = /\b(?:sub total|total (?:pre tax|before tax|excluding tax|including tax|incl tax|with tax|inclusive of tax|included in tax)|(?:tax|vat|gst|sst) (?:included|inclusive|exempt(?:ed|ion)?)|exempt(?:ed)? (?:tax|vat|gst|sst)|(?:before|excluding) tax total|pre tax total|taxable amount|(?:tax|vat|gst|sst) rate|rate (?:of )?(?:tax|vat|gst|sst))\b/i
   const taxLabel = /\b(?:total\s+(?:sales\s+tax|tax|vat|gst|sst)|(?:tax|vat|gst|sst)\s+(?:amount|total)|tax|vat|gst|sst)\b/i
@@ -2701,7 +2715,7 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
     : undefined
   const categorySource = `${merchant ?? ''} ${lines.join(' ')}`.toLowerCase()
   let category = 'Uncategorized'
-  if (/\b(cafe|coffee|restaurant|food|grocery|market|bakery)\b/.test(categorySource)) category = 'Meals'
+  if (/\b(cafe|coffee|kopi|restaurant|food|grocery|market|bakery)\b/.test(categorySource)) category = 'Meals'
   else if (/\b(taxi|uber|grab|fuel|petrol|parking|transit|airline)\b/.test(categorySource)) category = 'Transport'
   else if (/\b(hotel|lodging|accommodation)\b/.test(categorySource)) category = 'Travel'
   else if (/\b(pharmacy|clinic|medical|dental)\b/.test(categorySource)) category = 'Healthcare'
@@ -2709,11 +2723,11 @@ function parseReceipt(lines: string[], fileName: string, _currencyCode: string, 
   return {
     date,
     description: merchant || '',
-    amount: totalMatch ? parseAmount(totalMatch[0]) : undefined,
+    amount: selectedTotalMatch ? parseAmount(selectedTotalMatch[0]) : undefined,
     tax: taxMatch ? parseAmount(taxMatch) : inlineTaxMatch ? parseAmount(inlineTaxMatch[0]) : undefined,
     category,
-    confidence: Math.max(20, Math.min(96, 96 - [date, merchant, totalMatch, currencyCodeDetected].filter((value) => !value).length * 16)),
-    source: totalSegment ? `Line ${totalSegment.lineIndex + 1}` : fileName || 'Receipt text',
+    confidence: Math.max(20, Math.min(96, 96 - [date, merchant, selectedTotalMatch, currencyCodeDetected].filter((value) => !value).length * 16)),
+    source: selectedTotalSegment ? `Line ${selectedTotalSegment.lineIndex + 1}` : fileName || 'Receipt text',
   }
 }
 
