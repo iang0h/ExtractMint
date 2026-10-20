@@ -90,8 +90,8 @@ connection may be needed to obtain assets that are not already available.
 The **Desktop preview builds** workflow can be started manually in GitHub
 Actions or by pushing a `desktop-v*` tag. It produces unsigned preview
 artifacts: a macOS DMG and app bundle, and a Windows NSIS setup executable.
-These artifacts are temporary CI previews only. They are not public downloads
-and must not be presented as signed installers.
+Download these artifacts from the completed GitHub Actions workflow run. They
+are temporary CI previews only, not public downloads or signed installers.
 
 Public desktop downloads will be listed at
 [`/desktop/`](https://extractmint.iangoh.com/desktop/). To prepare the first public
