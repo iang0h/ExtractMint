@@ -25,6 +25,7 @@
 - `vite.config.ts`: relative asset base in desktop mode.
 - `src/main.tsx`: omit Vercel Analytics from desktop builds.
 - `src/App.tsx`: use desktop-safe assistant behavior and native export helper where applicable.
+- `src/lib/analytics.ts`: make custom action events a no-op in desktop builds.
 - `src/lib/download.ts`: browser download fallback and Tauri Save-dialog implementation.
 - `src-tauri/tauri.conf.json`: bundled frontend path, app identity, window defaults, and platform bundle targets.
 - `src-tauri/Cargo.toml`, `src-tauri/build.rs`, `src-tauri/src/main.rs`: Tauri runtime and plugin registration.
@@ -57,11 +58,13 @@
 - Modify: `package.json`
 - Modify: `src/main.tsx`
 - Modify: `src/App.tsx`
+- Modify: `src/lib/analytics.ts`
 - Create: `src/lib/download.ts`
 - Modify: `src-tauri/src/main.rs`
 - Modify: `src-tauri/capabilities/default.json`
 
 - [ ] Render `<Analytics />` only when `import.meta.env.MODE !== 'desktop'`.
+- [ ] Make `trackExtractMintEvent` return without calling Vercel `track` when `import.meta.env.MODE === 'desktop'`.
 - [ ] In desktop mode, prevent `askAgent` from posting to `/api/agent/` and hide the remote assistant prompt; keep web assistant behavior unchanged.
 - [ ] Add a `saveExport(blob, filename, mimeType)` helper. In desktop mode it opens the native Save dialog and writes the selected file with the Tauri filesystem plugin. In web mode it keeps the current object-URL download behavior.
 - [ ] Route every export action (single XLSX/CSV/DOCX/PDF/QBO, combined workbook, receipt batches, review packs, diagnostics, and support copies) through `saveExport` without changing file content or naming.
