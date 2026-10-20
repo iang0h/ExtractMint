@@ -79,7 +79,7 @@
 - Create: `.github/workflows/desktop-build.yml`
 
 - [x] Add a workflow triggered by manual dispatch and version tags `desktop-v*`.
-- [x] Use a macOS runner for `npm ci`, stable Rust setup, and `npm run desktop:build -- --bundles dmg`; upload the generated DMG and app bundle as workflow artifacts.
+- [x] Use a macOS runner for `npm ci`, stable Rust setup, and `npm run desktop:build -- --bundles app`; create the DMG without Finder GUI automation and upload it with the app bundle as workflow artifacts.
 - [x] Use a Windows runner for `npm ci`, stable Rust setup, and `npm run desktop:build -- --bundles nsis`; upload the generated setup executable as a workflow artifact.
 - [x] Do not configure signing secrets or publish a GitHub Release in this workflow. Label outputs as unsigned preview artifacts.
 - [x] Fail clearly when platform packaging fails; retain build logs in the workflow output.
@@ -101,12 +101,14 @@
 **Files:**
 - No additional files unless a build issue requires a focused fix.
 
-- [ ] Run `npm run build` and confirm the current web build still succeeds.
-- [ ] Run `npm run build:desktop` and confirm the desktop-mode frontend bundles successfully.
-- [ ] Run `npm run desktop:build -- --bundles dmg` on macOS and confirm a DMG and `.app` are produced.
+- [x] Run `npm run build` and confirm the current web build still succeeds.
+- [x] Run `npm run build:desktop` and confirm the desktop-mode frontend bundles successfully.
+- [x] Run `npm run desktop:build -- --bundles app` on macOS and confirm the `.app` is produced; package it as a DMG without Finder GUI automation and confirm both artifacts exist. The Tauri DMG bundler's Finder layout script stalled locally, so the app bundle was packaged with Tauri's bundled DMG helper using `--skip-jenkins`.
 - [ ] Open the desktop app, load the built-in synthetic statement, review its converted result, and save an XLSX through the native Save dialog.
-- [ ] Confirm the desktop build excludes the `@vercel/analytics` component and that its assistant flow cannot POST to `/api/agent/`.
+- [x] Inspect the desktop build output and confirm it contains neither the Vercel Analytics component nor the `/api/agent/` endpoint; source guards also disable both paths in desktop mode.
 - [ ] Confirm the Windows CI job produces the NSIS installer artifact; do not claim Windows runtime validation until the installer is exercised on Windows.
+
+Builds completed on macOS arm64 on 2026-10-20. The `.app` and DMG were produced; the generated executable is Mach-O arm64 and the artifacts are unsigned. The web and desktop Vite builds retain the existing advisory about large JavaScript chunks. Runtime Save-dialog behavior, the synthetic conversion flow inside the desktop window, static bundle privacy inspection, GitHub Actions execution, and Windows artifacts remain unverified. The Rust dependency lockfile was committed as `eecee48`.
 
 ## Self-review
 

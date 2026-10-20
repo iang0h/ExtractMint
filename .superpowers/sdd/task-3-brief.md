@@ -11,10 +11,11 @@ Create `.github/workflows/desktop-build.yml` so GitHub Actions can produce separ
 - Trigger manually with `workflow_dispatch` and on tags matching `desktop-v*`.
 - Provide independent macOS and Windows jobs using GitHub-hosted runners.
 - Each job checks out the repository, installs Node.js 24, sets up stable Rust, runs `npm ci`, then runs the matching command:
-  - macOS: `npm run desktop:build -- --bundles dmg`
+  - macOS: `npm run desktop:build -- --bundles app`; create the DMG from the app bundle with `hdiutil` or the Tauri helper, skipping Finder GUI automation so the runner cannot hang while arranging icons.
   - Windows: `npm run desktop:build -- --bundles nsis`
 - Upload the generated macOS DMG and `.app` bundle, and the Windows setup executable, as workflow artifacts. Use separate artifact names and sensible retention.
 - Name/describe artifacts as unsigned previews. Do not sign, notarize, create releases, deploy, or configure secrets.
+- Static review follow-up: use the `app` bundle target plus `hdiutil` packaging to avoid Finder GUI automation on CI runners.
 - Use current action versions verified from official GitHub sources; keep workflow permissions minimal and read-only.
 - Do not edit application source, package manifests, Tauri config, or README in this task.
 
