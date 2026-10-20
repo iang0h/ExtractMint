@@ -25,6 +25,7 @@ import './App.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
 import { trackExtractMintEvent } from './lib/analytics'
+import { saveExport } from './lib/download'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
@@ -1397,43 +1398,54 @@ function App() {
   const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo') => {
     if (!activeResult) return
 
-    const converter = await loadConverter()
-    const creators = {
-      xlsx: converter.createExcelBlob,
-      csv: converter.createCsvBlob,
-      docx: converter.createDocxBlob,
-      pdf: converter.createPdfBlob,
-      qbo: converter.createQboBlob,
+    try {
+      const converter = await loadConverter()
+      const creators = {
+        xlsx: converter.createExcelBlob,
+        csv: converter.createCsvBlob,
+        docx: converter.createDocxBlob,
+        pdf: converter.createPdfBlob,
+        qbo: converter.createQboBlob,
+      }
+      const blob = await creators[format](activeResult)
+      const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
+      if (await saveExport(blob, `${baseName}.${format}`, blob.type)) {
+        trackExtractMintEvent('export_started')
+      }
+    } catch (error) {
+      setProgress({
+        fileName: activeResult.fileName,
+        stage: 'error',
+        percent: 100,
+        detail: error instanceof Error ? error.message : 'Export failed',
+      })
     }
-    const blob = await creators[format](activeResult)
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
-    anchor.href = url
-    anchor.download = `${baseName}.${format}`
-    anchor.click()
-    trackExtractMintEvent('export_started')
-    URL.revokeObjectURL(url)
   }
 
   const downloadReviewJson = () => {
     if (!activeResult) return
     void (async () => {
-      const converter = await loadConverter()
-      const blob = converter.createReviewJsonBlob(activeResult)
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
-      anchor.href = url
-      anchor.download = `${baseName}.extractmint-review.json`
-      anchor.click()
-      trackExtractMintEvent('export_started')
-      URL.revokeObjectURL(url)
+      try {
+        const converter = await loadConverter()
+        const blob = converter.createReviewJsonBlob(activeResult)
+        const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
+        if (await saveExport(blob, `${baseName}.extractmint-review.json`, blob.type)) {
+          trackExtractMintEvent('export_started')
+        }
+      } catch (error) {
+        setProgress({
+          fileName: activeResult.fileName,
+          stage: 'error',
+          percent: 100,
+          detail: error instanceof Error ? error.message : 'Review JSON export failed',
+        })
+      }
     })()
   }
 
   const downloadReviewPack = async () => {
     if (results.length === 0) return
+    const previousProgress = progress
     setIsProcessing(true)
     setProgress({
       fileName: results.length === 1 ? results[0].fileName : `${results.length} files`,
@@ -1479,14 +1491,12 @@ function App() {
       }
 
       const blob = await converter.createReviewPackZipBlob(results, sourcesBySha)
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
       const stamp = new Date().toISOString().slice(0, 10)
-      anchor.href = url
-      anchor.download = `extractmint-review-pack-${stamp}.zip`
-      anchor.click()
+      if (!(await saveExport(blob, `extractmint-review-pack-${stamp}.zip`, 'application/zip'))) {
+        setProgress(previousProgress)
+        return
+      }
       trackExtractMintEvent('export_started')
-      URL.revokeObjectURL(url)
       setProgress({
         fileName: `${results.length} files`,
         stage: 'complete',
@@ -1508,17 +1518,22 @@ function App() {
   const downloadDiagnostic = () => {
     if (!activeResult) return
     void (async () => {
-      const converter = await loadConverter()
-      const blob = converter.createPrivacySafeDiagnosticBlob(activeResult)
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      const sha = activeResult.fileMeta.sha256
-      const stamp = new Date().toISOString().slice(0, 10)
-      anchor.href = url
-      anchor.download = `extractmint-diagnostic-${sha ? sha.slice(0, 10) : stamp}.json`
-      anchor.click()
-      trackExtractMintEvent('export_started')
-      URL.revokeObjectURL(url)
+      try {
+        const converter = await loadConverter()
+        const blob = converter.createPrivacySafeDiagnosticBlob(activeResult)
+        const sha = activeResult.fileMeta.sha256
+        const stamp = new Date().toISOString().slice(0, 10)
+        if (await saveExport(blob, `extractmint-diagnostic-${sha ? sha.slice(0, 10) : stamp}.json`, blob.type)) {
+          trackExtractMintEvent('export_started')
+        }
+      } catch (error) {
+        setProgress({
+          fileName: activeResult.fileName,
+          stage: 'error',
+          percent: 100,
+          detail: error instanceof Error ? error.message : 'Diagnostic export failed',
+        })
+      }
     })()
   }
 
@@ -1578,6 +1593,7 @@ function App() {
 
   const downloadCombinedWorkbook = async () => {
     if (results.length < 2) return
+    const previousProgress = progress
     setIsProcessing(true)
     setProgress({
       fileName: `${results.length} files`,
@@ -1588,14 +1604,12 @@ function App() {
     try {
       const converter = await loadConverter()
       const blob = await converter.createCombinedExcelBlob(results)
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
       const stamp = new Date().toISOString().slice(0, 10)
-      anchor.href = url
-      anchor.download = `extractmint-combined-${stamp}.xlsx`
-      anchor.click()
+      if (!(await saveExport(blob, `extractmint-combined-${stamp}.xlsx`, blob.type))) {
+        setProgress(previousProgress)
+        return
+      }
       trackExtractMintEvent('export_started')
-      URL.revokeObjectURL(url)
       setProgress({
         fileName: `${results.length} files`,
         stage: 'complete',
@@ -1616,6 +1630,7 @@ function App() {
 
   const downloadReceiptBatch = async (format: 'xlsx' | 'csv') => {
     if (receiptResults.length === 0) return
+    const previousProgress = progress
     setIsProcessing(true)
     setProgress({
       fileName: `${receiptResults.length} receipts`,
@@ -1628,14 +1643,12 @@ function App() {
       const blob = format === 'xlsx'
         ? await converter.createCombinedExcelBlob(receiptResults)
         : converter.createReceiptBatchCsvBlob(receiptResults)
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
       const stamp = new Date().toISOString().slice(0, 10).replaceAll('-', '')
-      anchor.href = url
-      anchor.download = `extractmint-receipts-${stamp}.${format}`
-      anchor.click()
+      if (!(await saveExport(blob, `extractmint-receipts-${stamp}.${format}`, blob.type))) {
+        setProgress(previousProgress)
+        return
+      }
       trackExtractMintEvent('export_started')
-      URL.revokeObjectURL(url)
       setProgress({
         fileName: `${receiptResults.length} receipts`,
         stage: 'complete',
@@ -1655,6 +1668,8 @@ function App() {
   }
 
   const askAgent = async () => {
+    if (import.meta.env.MODE === 'desktop') return
+
     const question = agentQuestion.trim()
     if (activeResult?.summary.documentKind === 'Receipt' || !question || isAgentThinking) return
 
@@ -2950,7 +2965,7 @@ function App() {
         </div>
       </section>
 
-      {!isReceipt ? (
+      {import.meta.env.MODE !== 'desktop' && !isReceipt ? (
       <section className="agent-section" id="agent">
         <div className="section-heading">
           <span className="eyebrow">Ask ExtractMint</span>

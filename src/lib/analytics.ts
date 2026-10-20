@@ -10,5 +10,6 @@ export type ExtractMintAnalyticsEvent =
   | 'sample_conversion_failed'
 
 export function trackExtractMintEvent(event: ExtractMintAnalyticsEvent) {
+  if (import.meta.env.MODE === 'desktop') return
   if (import.meta.env.PROD) track(event)
 }

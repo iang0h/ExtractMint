@@ -5,6 +5,7 @@ import JSZip from 'jszip'
 
 import type { PdfDocumentProxy } from './PdfCanvasViewer'
 import { trackExtractMintEvent } from '../lib/analytics'
+import { saveExport } from '../lib/download'
 
 type RedactionRectPx = { x: number; y: number; width: number; height: number }
 type RedactionRectPct = { x: number; y: number; width: number; height: number }
@@ -301,19 +302,23 @@ export function PdfRedactionTool({
 
     output.toBlob((blob) => {
       if (!blob) return
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = `${safeBaseName}-redacted-p${currentPage}.png`
-      anchor.click()
-      trackExtractMintEvent('export_started')
-      URL.revokeObjectURL(url)
+      void (async () => {
+        try {
+          if (await saveExport(blob, `${safeBaseName}-redacted-p${currentPage}.png`, 'image/png')) {
+            trackExtractMintEvent('export_started')
+          }
+        } catch {
+          setZipStatus('Could not save the redacted PNG. Choose another destination and try again.')
+        }
+      })()
     }, 'image/png')
   }
 
   const downloadZip = () => {
     if (!pageCount) return
     if (zipBusyRef.current) return
+    const previousZipStatus = zipStatus
+    let saveCancelled = false
     zipBusyRef.current = true
     setZipStatus('Preparing ZIP…')
 
@@ -336,20 +341,21 @@ export function PdfRedactionTool({
 
         setZipStatus('Compressing ZIP…')
         const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' })
-        const url = URL.createObjectURL(zipBlob)
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = `${safeBaseName}-redacted-pages.zip`
-        anchor.click()
+        if (!(await saveExport(zipBlob, `${safeBaseName}-redacted-pages.zip`, 'application/zip'))) {
+          saveCancelled = true
+          setZipStatus(previousZipStatus)
+          return
+        }
         trackExtractMintEvent('export_started')
-        URL.revokeObjectURL(url)
         setZipStatus('ZIP downloaded.')
       } catch (error) {
-        console.warn('ZIP export failed', error)
-        setZipStatus('ZIP export failed. Try fewer pages or refresh and retry.')
+        if (import.meta.env.MODE !== 'desktop') console.warn('ZIP export failed', error)
+        setZipStatus(import.meta.env.MODE === 'desktop'
+          ? 'Could not export the ZIP. Try another destination or fewer pages.'
+          : 'ZIP export failed. Try fewer pages or refresh and retry.')
       } finally {
         zipBusyRef.current = false
-        window.setTimeout(() => setZipStatus(null), 4000)
+        if (!saveCancelled) window.setTimeout(() => setZipStatus(null), 4000)
       }
     })()
   }
@@ -420,7 +426,7 @@ export function PdfRedactionTool({
             aria-label="Pages to include in ZIP"
           />
         </label>
-        {zipStatus ? <div className="redaction-zip-status">{zipStatus}</div> : null}
+        {zipStatus ? <div className="redaction-zip-status" role="status" aria-live="polite">{zipStatus}</div> : null}
       </div>
 
       <div ref={containerRef} className="redaction-stage" aria-label="Redaction canvas">

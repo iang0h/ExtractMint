@@ -8,7 +8,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <>
       <App />
-      <Analytics />
+      {import.meta.env.MODE !== 'desktop' ? <Analytics /> : null}
     </>
   </StrictMode>,
 )
