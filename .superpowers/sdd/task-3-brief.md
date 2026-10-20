@@ -28,5 +28,5 @@ Create `.github/workflows/desktop-build.yml` so GitHub Actions can produce separ
 
 - Inspect the final workflow source for correct triggers, job platforms, build commands, artifact paths, names, and permissions.
 - Run `git diff --check` only if needed for whitespace; no tests/builds.
-- Commit only `.github/workflows/desktop-build.yml` and this report at `.superpowers/sdd/task-3-report.md`.
+- Commit only `.github/workflows/desktop-build.yml` and this report at `.superpowers/sdd/task-3-desktop-ci-report.md`.
 - In the report, list the change, action versions, static inspection, and explicitly state that no build or CI execution was performed.

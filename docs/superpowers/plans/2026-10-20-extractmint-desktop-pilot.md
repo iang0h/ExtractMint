@@ -78,11 +78,11 @@
 **Files:**
 - Create: `.github/workflows/desktop-build.yml`
 
-- [ ] Add a workflow triggered by manual dispatch and version tags `desktop-v*`.
-- [ ] Use a macOS runner for `npm ci`, stable Rust setup, and `npm run desktop:build -- --bundles dmg`; upload the generated DMG and app bundle as workflow artifacts.
-- [ ] Use a Windows runner for `npm ci`, stable Rust setup, and `npm run desktop:build -- --bundles nsis`; upload the generated setup executable as a workflow artifact.
-- [ ] Do not configure signing secrets or publish a GitHub Release in this workflow. Label outputs as unsigned preview artifacts.
-- [ ] Fail clearly when platform packaging fails; retain build logs in the workflow output.
+- [x] Add a workflow triggered by manual dispatch and version tags `desktop-v*`.
+- [x] Use a macOS runner for `npm ci`, stable Rust setup, and `npm run desktop:build -- --bundles dmg`; upload the generated DMG and app bundle as workflow artifacts.
+- [x] Use a Windows runner for `npm ci`, stable Rust setup, and `npm run desktop:build -- --bundles nsis`; upload the generated setup executable as a workflow artifact.
+- [x] Do not configure signing secrets or publish a GitHub Release in this workflow. Label outputs as unsigned preview artifacts.
+- [x] Fail clearly when platform packaging fails; retain build logs in the workflow output.
 
 ### Task 4: Document setup and commercial release requirements
 

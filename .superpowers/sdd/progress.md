@@ -44,4 +44,5 @@
 - Worktree ready at `.worktrees/clean-converter-workspace` on branch `codex/receipt-extraction`.
 - Task 1: complete — Tauri shell, desktop build mode, relative assets, scoped Save-dialog capability, platform icons, and desktop scripts; commits `a5549b5` and `7a5b798`; independent spec and quality review approved after the strict-port fix. Native compilation remains unverified because Rust is not installed. No tests or builds were run.
 - Task 2: complete — desktop-only analytics and remote assistant are disabled, all generated exports use the native Save dialog and selected-path write, browser download behavior and support clipboard copy are preserved, and redaction PNG save errors have a dedicated accessible status; implementation `5ab4021`, clarity fix `54aad12`; independent review approved with no remaining issues. No tests, builds, or runtime checks were run; native dialog and write behavior remain unverified.
-- Task 3: pending — cross-platform unsigned preview workflow.
+- Task 3: complete — GitHub Actions builds macOS DMG/app and Windows NSIS unsigned preview artifacts on manual dispatch or `desktop-v*` tags; implementation `bb44d00`; independent review approved. CI has not been triggered, and Windows runtime remains unverified.
+- Task 4: pending — desktop setup, privacy, and preview-release documentation.
