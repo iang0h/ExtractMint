@@ -27,6 +27,7 @@
 - `src/App.tsx`: use desktop-safe assistant behavior and native export helper where applicable.
 - `src/lib/analytics.ts`: make custom action events a no-op in desktop builds.
 - `src/lib/download.ts`: browser download fallback and Tauri Save-dialog implementation.
+- `src/components/PdfRedactionTool.tsx`: route generated redacted output through the shared save helper.
 - `src-tauri/tauri.conf.json`: bundled frontend path, app identity, window defaults, and platform bundle targets.
 - `src-tauri/Cargo.toml`, `src-tauri/build.rs`, `src-tauri/src/main.rs`: Tauri runtime and plugin registration.
 - `src-tauri/capabilities/default.json`: minimal dialog and selected-path write permissions.
@@ -60,6 +61,7 @@
 - Modify: `src/App.tsx`
 - Modify: `src/lib/analytics.ts`
 - Create: `src/lib/download.ts`
+- Modify: `src/components/PdfRedactionTool.tsx`
 - Modify: `src-tauri/src/main.rs`
 - Modify: `src-tauri/capabilities/default.json`
 
@@ -67,7 +69,7 @@
 - [ ] Make `trackExtractMintEvent` return without calling Vercel `track` when `import.meta.env.MODE === 'desktop'`.
 - [ ] In desktop mode, prevent `askAgent` from posting to `/api/agent/` and hide the remote assistant prompt; keep web assistant behavior unchanged.
 - [ ] Add a `saveExport(blob, filename, mimeType)` helper. In desktop mode it opens the native Save dialog and writes the selected file with the Tauri filesystem plugin. In web mode it keeps the current object-URL download behavior.
-- [ ] Route every export action (single XLSX/CSV/DOCX/PDF/QBO, combined workbook, receipt batches, review packs, diagnostics, and support copies) through `saveExport` without changing file content or naming.
+- [ ] Route every export action (single XLSX/CSV/DOCX/PDF/QBO, combined workbook, receipt batches, review packs, diagnostics, and PDF redaction PNG/ZIP outputs) through `saveExport` without changing file content or naming. Keep support request copy on the clipboard.
 - [ ] Handle dialog cancellation as a no-op and show a user-facing error if a chosen destination cannot be written.
 - [ ] Keep uploaded source files, OCR output, and passwords out of dialog metadata, logs, and remote requests.
 
