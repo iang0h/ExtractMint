@@ -17,3 +17,9 @@ Status: complete.
 - `git diff --check` passed. No test suites were added or run. No release, deployment, or installer readiness claim was made.
 
 Concerns: no task-specific concerns. Live release availability and signed installer validation belong to the release workflow tasks.
+
+## Review follow-up: version and release tag agreement
+
+- Added the required `releaseTag === "extractmint-v" + version` relationship to the manifest guard before any DOM mutation. A mismatched version leaves the preparation status and hidden downloads intact.
+- `npm run build` passed again (exit 0); the existing large-chunk advisory remains. Inspected the generated desktop HTML to confirm the equality check is present before URL assignment and downloads remain initially hidden without installer href values.
+- `git diff --check` passed. No tests were added or run.

@@ -93,6 +93,7 @@
             manifest.available !== true ||
             typeof manifest.version !== "string" ||
             typeof manifest.releaseTag !== "string" ||
+            manifest.releaseTag !== "extractmint-v" + manifest.version ||
             !/^extractmint-v\d+\.\d+\.\d+$/.test(manifest.releaseTag) ||
             typeof manifest.publishedAt !== "string"
           ) return;
