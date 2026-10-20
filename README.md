@@ -91,10 +91,11 @@ artifacts: a macOS DMG and app bundle, and a Windows NSIS setup executable.
 Download them from the completed workflow run's artifacts. CI artifacts are
 temporary previews, not signed public installers.
 
-Public macOS distribution requires Developer ID signing and Apple
-notarization. Public Windows distribution requires a trusted signing route or
-distribution through the Microsoft Store. Signing credentials, notarization,
-and commercial installer setup are not configured by this pilot.
+Direct macOS distribution outside the Mac App Store requires Developer ID
+signing and Apple notarization. Public Windows distribution requires a trusted
+signing route or distribution through the Microsoft Store. Signing
+credentials, notarization, and commercial installer setup are not configured
+by this pilot.
 
 This pilot does not include firm or client accounts, cloud sync,
 billing/licensing, accounting software integrations, or receipt line-item
