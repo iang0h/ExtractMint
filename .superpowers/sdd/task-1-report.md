@@ -1,25 +1,48 @@
-# Desktop downloads Task 1 report
+# Task 1 implementation report
 
-Status: complete.
+## Result
+
+Implemented the Tauri v2 desktop shell and desktop Vite mode. The renderer remains the existing React application; the existing web build command is unchanged.
 
 ## Changes
 
-- Added `/desktop/` with the shared SEO stylesheet, canonical metadata, WebPage JSON-LD, local-processing copy, preparation status, and browser converter action.
-- Added hidden Mac and Windows download cards with no initial installer href values, plus a disabled four-field manifest and Markdown mirror.
-- Added a fail-closed page script: no-store fetch, HTTP and JSON error handling, required field type checks, exact release-tag pattern, fixed GitHub repository and installer filenames, and textContent for the published version. The preparation note disappears only when valid release data reveals downloads.
-- Added the desktop page to homepage navigation/footer, sitemap, key pages, and Markdown discovery links. `public/index.md` had no Markdown Mirrors section, so one was added for this page.
+- Added the Tauri CLI as a development dependency and the API, dialog, and filesystem JavaScript packages as runtime dependencies, with npm lockfile updates.
+- Added `desktop:dev` (`tauri dev`), `desktop:build` (`tauri build`), and `build:desktop` (`tsc -b && vite build --mode desktop`). The desktop frontend build deliberately skips the web homepage prerender script.
+- Vite uses relative asset paths only for desktop mode, retaining the existing `/` base for web builds. The development server uses port 5173 with strict port binding so the Tauri dev URL cannot point at the wrong server after an automatic port fallback.
+- Added the Rust entry point, build script, and Cargo manifest. Registered dialog and filesystem plugins.
+- Configured product name `ExtractMint`, identifier `com.iangoh.extractmint`, local `../dist` release assets, development URL `http://127.0.0.1:5173`, and the specified frontend development/build hooks.
+- Added one resizable main window at 1440 × 960 with minimum dimensions 1100 × 720.
+- Configured `dmg` and `nsis` bundle targets and generated desktop PNG, ICNS, and ICO assets from the existing favicon via `npx tauri icon public/favicon.svg`. Removed generated mobile and Appx assets because they are outside the pilot scope.
+- Added `src-tauri/.gitignore` for generated Rust build output and capability schemas.
 
-## Verification and self-review
+## Permission model
 
-- `npm run build` passed (exit 0). The existing Vite large-chunk advisory remains.
-- Inspected `dist/desktop/index.html`, `dist/desktop/downloads.json`, the generated homepage, and crawl artifacts. The manifest is disabled; the cards retain `hidden`; the stylesheet enforces hidden display; installer anchors have no href; the browser converter action is present.
-- Reviewed the script to confirm invalid or unavailable manifest data returns before DOM mutations, only the validated tag enters fixed asset URLs, and version text is assigned safely through textContent.
-- `git diff --check` passed. No test suites were added or run. No release, deployment, or installer readiness claim was made.
+The main window receives only `dialog:allow-save` and `fs:allow-write-file`. There is no static broad directory scope, default filesystem permission set, read permission, open-dialog permission, persisted scope, or remote capability. Tauri's Save dialog adds the selected file path to the filesystem scope for the application session, so the later export implementation can pass binary bytes to `writeFile` at that path.
 
-Concerns: no task-specific concerns. Live release availability and signed installer validation belong to the release workflow tasks.
+Sources consulted:
 
-## Review follow-up: version and release tag agreement
+- https://v2.tauri.app/reference/javascript/dialog/
+- https://v2.tauri.app/plugin/file-system/
+- https://v2.tauri.app/develop/icons/
 
-- Added the required `releaseTag === "extractmint-v" + version` relationship to the manifest guard before any DOM mutation. A mismatched version leaves the preparation status and hidden downloads intact.
-- `npm run build` passed again (exit 0); the existing large-chunk advisory remains. Inspected the generated desktop HTML to confirm the equality check is present before URL assignment and downloads remain initially hidden without installer href values.
-- `git diff --check` passed. No tests were added or run.
+## Commands and limitations
+
+- Dependency installation completed successfully.
+- The Tauri icon command completed successfully and produced the required desktop icon formats.
+- Inspected the package, lockfile, Vite, and scaffold changes for task scope.
+- No tests, frontend builds, native compilation, or runtime checks were run, per the task instruction. Rust is unavailable in this environment and no system toolchain was installed. Native packaging and runtime behavior remain unverified.
+- npm installation reported 26 dependency vulnerabilities (1 low, 8 moderate, 17 high); no broad dependency remediation was attempted as part of this scaffold task.
+- Desktop privacy controls and the actual export flow belong to later tasks and are not implemented here.
+
+## Plan adjustments
+
+The initial brief's file list named only `icons/icon.png`; working macOS and Windows bundles also require platform icon formats. The generated desktop icon set is included. The parent explicitly requested the API/dialog/filesystem JavaScript dependencies in this task, together with the frontend desktop build script referenced by Tauri.
+
+## Review follow-up: preserve web development port fallback
+
+Changed files: `vite.config.ts`, `src-tauri/tauri.conf.json`, and this report.
+
+- Changed Vite's `server.strictPort` to `mode === 'desktop'`, so normal `npm run dev` can advance to another available port while desktop development requires port 5173.
+- Added `--mode desktop` to Tauri's `beforeDevCommand` so the desktop dev server enables strict binding and relative asset paths explicitly.
+- Static verification: inspected the focused diff and the development script (`dev` remains `vite`). The mode comparison now makes strict binding false for normal development and true for desktop development; the configured Tauri development URL remains `http://127.0.0.1:5173`.
+- No tests, builds, or runtime checks were run, as instructed. Runtime port fallback has not been exercised.

@@ -47,3 +47,17 @@
 - Task 3: complete — GitHub Actions builds macOS DMG/app and Windows NSIS unsigned preview artifacts on manual dispatch or `desktop-v*` tags; implementation `bb44d00`, Finder-free packaging follow-up `5388ed7`; independent reviews approved. Tag `desktop-v0.0.0-preview.1` triggered run `39382518017`, which completed successfully and uploaded all three artifacts. Windows runtime remains unverified.
 - Task 4: complete — README covers desktop prerequisites/commands, local-processing and OCR asset boundaries, unsigned CI artifacts, direct-distribution signing requirements, and excluded firm features; implementation `b13550b`, wording correction `565cb8b`; independent review approved. No tests or builds were run for the documentation task.
 - Task 5: partial — `npm run build`, `npm run build:desktop`, and `npm run desktop:build -- --bundles app` succeeded on macOS arm64. A 4.7 MB unsigned DMG was created using Tauri's bundled DMG helper with Finder automation skipped; the `.app` is 13 MB and contains an arm64 Mach-O executable. The preview currently targets Apple Silicon; Intel Mac is not included. CI run `39382518017` succeeded on macOS and Windows and uploaded the DMG, `.app` tar, and Windows NSIS setup ZIP; artifacts expire 2026-11-03. The regular Tauri DMG command stalled while arranging icons in Finder, which is why CI builds the app and uses `hdiutil` directly. Existing large-chunk advisories remain. Static inspection of desktop JavaScript found no Vercel Analytics module or `/api/agent/` endpoint. The runtime save-dialog flow, synthetic conversion inside the app, and Windows installer execution remain unverified. Rust dependencies were locked in `eecee48`.
+
+# ExtractMint desktop downloads progress
+
+- Plan committed as `3b6a6c9`; execution uses the existing managed worktree on `codex/receipt-extraction`.
+- No plan/global-constraint conflict found in the pre-flight scan.
+- Task 1: in progress — desktop landing page, disabled manifest, homepage links, and SEO artifacts.
+- Task 1: complete — desktop page, disabled manifest, homepage links, and SEO discovery committed as `13e55d7`; reviewer found an Important version/tag mismatch guard gap, fixed in `568e25d` after tightening the plan in `fec8c29`; re-review approved. The production build and diff check passed; no tests were run.
+- Task 2: in progress — fail-closed signed Mac/Windows release workflow and version guard.
+- Task 2: complete — signed Mac/Windows draft workflow and version guard committed as `78132e2`; report commit `7d7fdb8`; independent spec and quality review approved. Static Node, YAML, and Bash syntax checks plus diff checks passed. No signing/build/release operation was run because owner credentials are not configured.
+- Task 3: in progress — publish-event validation and fail-closed manifest update.
+- Task 3: complete — published-release event validation and manifest updater committed as `ec03912`; independent spec and quality review approved. Node syntax, YAML parse, and staged diff checks passed. Live GitHub push and Vercel deployment await the first valid signed release.
+- Task 4: in progress — release instructions and final production-build inspection.
+- Task 4: complete — README release/owner instructions committed as `d6f0281`; review found the preview artifact retrieval line had been removed, restored in `e3253c6`, and re-review approved. The production build and requested static artifact inspection passed; no tests ran.
+- Final review: in progress — full desktop-downloads change set since `origin/codex/receipt-extraction`.
