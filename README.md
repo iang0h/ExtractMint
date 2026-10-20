@@ -34,6 +34,72 @@ npm run preview
 npm run deploy:vercel
 ```
 
+## Desktop preview
+
+ExtractMint also has a local-first desktop preview for macOS and Windows. It
+uses the existing bank-statement conversion, review, and export flow, plus
+receipt-level extraction that exports one row per receipt (such as date,
+merchant, total, tax, currency, and category when detected). It does not
+extract individual receipt line items.
+
+### Developer prerequisites
+
+- Node.js 24 and npm.
+- The stable Rust toolchain, including Cargo.
+- macOS: Xcode Command Line Tools.
+- Windows: Microsoft C++ Build Tools with the MSVC toolchain, and WebView2.
+
+### Run or build the desktop app
+
+Install the JavaScript dependencies, then start the app in desktop development
+mode:
+
+```bash
+npm ci
+npm run desktop:dev
+```
+
+Build just the desktop-mode frontend bundle with:
+
+```bash
+npm run build:desktop
+```
+
+Package the app for the current platform with:
+
+```bash
+npm run desktop:build
+```
+
+The desktop packaging command uses the platform target configured for the
+machine running it: a DMG on macOS and an NSIS setup executable on Windows.
+
+### Privacy and OCR assets
+
+Desktop builds disable Vercel Analytics and the remote ExtractMint assistant.
+Bank statements and receipts are processed on the device; source document
+bytes, extracted text, and PDF passwords stay on the device. When OCR is
+needed, Tesseract may separately download its worker and language data. These
+are OCR engine assets, not uploads of the user's documents, and an internet
+connection may be needed to obtain assets that are not already available.
+
+### Unsigned CI previews and public distribution
+
+The **Desktop preview builds** workflow can be started manually in GitHub
+Actions or by pushing a `desktop-v*` tag. It produces unsigned preview
+artifacts: a macOS DMG and app bundle, and a Windows NSIS setup executable.
+Download them from the completed workflow run's artifacts. CI artifacts are
+temporary previews, not signed public installers.
+
+Public macOS distribution requires Developer ID signing and Apple
+notarization. Public Windows distribution requires a trusted signing route or
+distribution through the Microsoft Store. Signing credentials, notarization,
+and commercial installer setup are not configured by this pilot.
+
+This pilot does not include firm or client accounts, cloud sync,
+billing/licensing, accounting software integrations, or receipt line-item
+extraction.
+
 ## Statement extraction benchmark
 
 Run the offline statement benchmark with:
