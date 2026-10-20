@@ -31,8 +31,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build unsigned macOS DMG preview
-        run: npm run desktop:build -- --bundles dmg
+      - name: Build unsigned macOS app bundle
+        run: npm run desktop:build -- --bundles app
+
+      - name: Create unsigned macOS DMG preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          staging_dir="$(mktemp -d)"
+          trap 'rm -rf "$staging_dir"' EXIT
+          mkdir -p src-tauri/target/release/bundle/dmg
+          cp -R src-tauri/target/release/bundle/macos/ExtractMint.app "$staging_dir/ExtractMint.app"
+          ln -s /Applications "$staging_dir/Applications"
+          hdiutil create \
+            -volname "ExtractMint Preview" \
+            -srcfolder "$staging_dir" \
+            -ov \
+            -format UDZO \
+            src-tauri/target/release/bundle/dmg/ExtractMint-unsigned-preview.dmg
 
       - name: Upload unsigned macOS DMG preview
         uses: actions/upload-artifact@v7.0.2
