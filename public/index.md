@@ -1,4 +1,4 @@
-# ExtractMint
+# ExtractMint (Beta)
 
 > ExtractMint converts bank statements, receipts, invoices, scans, PDFs, DOCX files, spreadsheets, CSV, and plain text into clean working files for reconciliation and review.
 
@@ -40,12 +40,13 @@ ExtractMint is a browser-based financial document extraction product for operato
 - Balance-trail checks for bank statement reconciliation.
 - Review JSON import and export for resume-later workflows.
 - QuickBooks QBO export for accountant handoff.
-- FreeLLMAPI-ready Ask ExtractMint agent for conversion questions.
+- Optional Ask ExtractMint assistant for conversion questions.
 
 ## Key Pages
 
 - [Home and converter](https://extractmint.iangoh.com/)
 - [Desktop app](https://extractmint.iangoh.com/desktop/)
+- [Report an issue](https://github.com/iang0h/ExtractMint/issues/new)
 - [Bank statement to Excel](https://extractmint.iangoh.com/convert/bank-statement-to-excel/)
 - [PDF bank statement to Excel](https://extractmint.iangoh.com/convert/pdf-bank-statement-to-excel/)
 - [Scanned bank statement to Excel](https://extractmint.iangoh.com/convert/scanned-bank-statement-to-excel/)

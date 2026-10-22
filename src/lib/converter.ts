@@ -19,7 +19,10 @@ export type ProgressEvent = {
 }
 
 export type ExtractedRow = {
+  /** ISO date for the active statement date-format choice. */
   date?: string
+  /** Date exactly as printed on the source page. */
+  sourceDate?: string
   description: string
   amount?: number
   withdrawal?: number
@@ -29,7 +32,9 @@ export type ExtractedRow = {
   reference?: string
   category: string
   confidence: number
+  extractionConfidence?: number
   source: string
+  reviewIssues?: string[]
 }
 
 export type ValidationIssue = {
@@ -50,6 +55,14 @@ export type ValidationSummary = {
   issues: ValidationIssue[]
 }
 
+export type StatementDateFormat = 'DMY' | 'MDY' | 'YMD' | 'named' | 'ambiguous'
+export type DateFormatSource = 'statement' | 'inferred' | 'ambiguous' | 'user'
+export type StatementDateFormatInfo = {
+  detected: StatementDateFormat
+  selected: StatementDateFormat
+  source: DateFormatSource
+}
+
 export type ConversionResult = {
   fileName: string
   fileType: string
@@ -60,6 +73,7 @@ export type ConversionResult = {
     end?: string
     source: 'explicit' | 'inferred'
   }
+  dateFormat?: StatementDateFormatInfo
   fileMeta: {
     size: number
     lastModified: number
@@ -113,8 +127,26 @@ const datePattern =
 const amountPattern =
   /(?<![\d.,])(?:[-+]?€\s*\(?\d+,\d{2}\)?|[-+]?(?:[$€£]\s*)?\(?\d{1,3}(?:,\d{3})+(?:\.\d{2})?\)?|[-+]?(?:[$€£]\s*)?\(?\d+\.\d{2}\)?|[-+]?[$€£]\s*\(?\d+\)?)(?!\d|[.,]\d)/g
 
-export function revalidateRows(rows: ExtractedRow[], currencyCode: string) {
-  return validateBalances(rows, currencyCode)
+async function loadExcelJs() {
+  const loaded = await import('exceljs') as unknown as {
+    Workbook?: unknown
+    default?: { Workbook?: unknown }
+  }
+  if (typeof loaded.Workbook === 'function') return loaded as typeof import('exceljs')
+  if (typeof loaded.default?.Workbook === 'function') return loaded.default as typeof import('exceljs')
+  throw new Error('ExcelJS is unavailable in this runtime.')
+}
+
+export function revalidateRows(
+  rows: ExtractedRow[],
+  currencyCode: string,
+  previous?: Pick<ValidationSummary, 'openingBalance' | 'closingBalance'>,
+) {
+  return validateBalances(rows, currencyCode, previous)
+}
+
+export function refreshConfidence(fileType: string, rows: ExtractedRow[], rawText: string, validation: ValidationSummary) {
+  return scoreConfidence(fileType, rows, rawText, validation)
 }
 
 export function refreshStatementPeriod(
@@ -124,6 +156,37 @@ export function refreshStatementPeriod(
   if (previous?.source === 'explicit') return previous
   const inferred = inferStatementPeriodFromRows(rows)
   return inferred ? { ...inferred, source: 'inferred' } : undefined
+}
+
+export function reinterpretResultDateFormat(
+  result: ConversionResult,
+  selected: Exclude<StatementDateFormat, 'named' | 'ambiguous'>,
+): ConversionResult {
+  const rows = result.rows.map((row) => {
+    const sourceDate = row.sourceDate ?? row.date
+    return {
+      ...row,
+      sourceDate,
+      date: sourceDate ? parseDateToIso(sourceDate, selected) : undefined,
+    }
+  })
+  const dateIssues = dateReviewIssues(rows)
+  const validation = validateBalances(rows, result.currencyCode, result.validation, dateIssues)
+  const dateFormat: StatementDateFormatInfo = {
+    detected: result.dateFormat?.detected ?? 'ambiguous',
+    selected,
+    source: 'user',
+  }
+  const lines = result.rawText.split(/\r?\n/)
+
+  return {
+    ...result,
+    rows: applyReviewConfidence(rows, validation),
+    dateFormat,
+    statementPeriod: detectStatementPeriod(lines, rows, selected),
+    validation,
+    confidence: scoreConfidence(result.fileType, rows, result.rawText, validation),
+  }
 }
 
 export async function convertFiles(
@@ -295,7 +358,7 @@ function receiptCsvBlob(results: ConversionResult[], includeFileName: boolean): 
 }
 
 export async function createExcelBlob(result: ConversionResult) {
-  const ExcelJS = await import('exceljs')
+  const ExcelJS = await loadExcelJs()
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'ExtractMint'
   workbook.created = new Date()
@@ -489,7 +552,7 @@ export async function createExcelBlob(result: ConversionResult) {
     })
     result.rows.forEach((row, index) => {
       rows.addRow({
-        date: row.date ?? '',
+        date: row.date ?? row.sourceDate ?? '',
         description: row.description,
         reference: row.reference ?? '',
         withdrawal: numberOrNull(row.withdrawal),
@@ -516,7 +579,7 @@ export async function createExcelBlob(result: ConversionResult) {
 }
 
 export async function createCombinedExcelBlob(results: ConversionResult[]) {
-  const ExcelJS = await import('exceljs')
+  const ExcelJS = await loadExcelJs()
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'ExtractMint'
   workbook.created = new Date()
@@ -697,7 +760,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       })
       result.rows.forEach((row, index) => {
         rowsSheet.addRow({
-          date: row.date ?? '',
+          date: row.date ?? row.sourceDate ?? '',
           description: row.description,
           reference: row.reference ?? '',
           withdrawal: numberOrNull(row.withdrawal),
@@ -755,7 +818,7 @@ export function createCsvBlob(result: ConversionResult) {
       'Source',
     ],
     ...result.rows.map((row, index) => [
-      row.date ?? '',
+      row.date ?? row.sourceDate ?? '',
       row.description,
       row.reference ?? '',
       String(row.withdrawal ?? ''),
@@ -972,7 +1035,7 @@ export async function createDocxBlob(result: ConversionResult) {
       (row, index) =>
         new TableRow({
           children: [
-            row.date ?? '',
+            row.date ?? row.sourceDate ?? '',
             row.description,
             row.reference ?? '',
             money(row.withdrawal, result.currencyCode),
@@ -1041,6 +1104,7 @@ export function createReviewJsonBlob(result: ConversionResult) {
     fileMeta: result.fileMeta,
     processedAt: result.processedAt,
     confidence: result.confidence,
+    dateFormat: result.dateFormat,
     summary: result.summary,
     rows: result.rows,
     rowCount: result.rows.length,
@@ -1272,6 +1336,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
 
     return {
       date: asString(record.date)?.trim() || undefined,
+      sourceDate: asString(record.sourceDate)?.trim() || undefined,
       description,
       amount,
       withdrawal,
@@ -1282,12 +1347,33 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
       category,
       confidence,
       source,
+      reviewIssues: Array.isArray(record.reviewIssues)
+        ? record.reviewIssues.filter((issue): issue is string => typeof issue === 'string')
+        : undefined,
     }
   })
 
+  const validationRecord = typeof payload.validation === 'object' && payload.validation
+    ? payload.validation as Partial<ValidationSummary>
+    : undefined
+  const validationSeed = {
+    openingBalance: asFiniteNumber(validationRecord?.openingBalance),
+    closingBalance: asFiniteNumber(validationRecord?.closingBalance),
+  }
+  const rawDateFormat = typeof payload.dateFormat === 'object' && payload.dateFormat
+    ? payload.dateFormat as Partial<StatementDateFormatInfo>
+    : undefined
+  const validDateFormats: StatementDateFormat[] = ['DMY', 'MDY', 'YMD', 'named', 'ambiguous']
+  const dateFormat = rawDateFormat && validDateFormats.includes(rawDateFormat.selected ?? 'ambiguous')
+    && validDateFormats.includes(rawDateFormat.detected ?? 'ambiguous')
+    ? rawDateFormat as StatementDateFormatInfo
+    : !isReceipt
+      ? detectStatementDateFormat([], rows)
+      : undefined
+
   const validation = isReceipt
     ? { status: 'missing' as const, checkedRows: 0, issueCount: 0, issues: [] }
-    : revalidateRows(rows, currencyCode)
+    : revalidateRows(rows, currencyCode, validationSeed)
   const statementPeriod = isReceipt
     ? undefined
     : typeof payload.statementPeriod === 'object' && payload.statementPeriod
@@ -1300,10 +1386,13 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
     currencyCode,
     currencyCodeDetected,
     statementPeriod,
+    dateFormat,
     fileMeta,
     rawText: '',
-    rows,
-    confidence: asFiniteNumber(payload.confidence) ?? Math.round((summary.total ?? 0) > 0 ? 84 : 0),
+    rows: isReceipt ? rows : applyReviewConfidence(rows, validation),
+    confidence: isReceipt
+      ? asFiniteNumber(payload.confidence) ?? Math.round((summary.total ?? 0) > 0 ? 84 : 0)
+      : scoreConfidence(fileType, rows, '', validation),
     validation,
     processedAt,
     summary: isReceipt ? { ...summary, vendor: rows[0]?.description || undefined } : summary,
@@ -1462,7 +1551,7 @@ async function createPdfBlobAsync(result: ConversionResult) {
       pdf.addPage()
       y = margin
     }
-    pdf.text(row.date ?? '-', margin, y)
+    pdf.text(row.date ?? row.sourceDate ?? '-', margin, y)
     pdf.text(pdf.splitTextToSize(row.description, 210), margin + 82, y)
     pdf.text(money(row.withdrawal, result.currencyCode), margin + 310, y)
     pdf.text(money(row.deposit, result.currencyCode), margin + 390, y)
@@ -1713,7 +1802,7 @@ async function extractDocxText(file: File) {
 }
 
 async function extractWorkbookText(file: File) {
-  const ExcelJS = await import('exceljs')
+  const ExcelJS = await loadExcelJs()
   const buffer = await file.arrayBuffer()
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(buffer)
@@ -1827,36 +1916,42 @@ function parseRawText(
     .map((line) => line.replace(/^ +| +$/g, ''))
     .filter((line) => line.replace(/\t/g, '').trim())
 
-  const structuredRows = parseStatementTable(lines)
+  const statementTable = parseStatementTable(lines)
+  const structuredRows = statementTable?.rows ?? []
   const genericStatementTable = structuredRows.length === 0 && hasGenericStatementTable(lines, fileName)
   const currency = detectCurrencyCode(normalized, fileName)
   const receipt = structuredRows.length === 0 && !genericStatementTable && looksLikeReceipt(lines, fileName)
-  const rows = structuredRows.length > 0
+  const extractedRows = structuredRows.length > 0
     ? structuredRows
     : receipt
       ? [parseReceipt(lines, fileName, currency.code, currency.detected)]
       : lines.flatMap((line, index) => parseLine(line, index + 1))
-  const fallbackRows = rows.length > 0 ? rows : buildFallbackRows(lines)
-  const statementPeriod = receipt ? undefined : detectStatementPeriod(lines, fallbackRows)
+  const fallbackRows = extractedRows.length > 0 ? extractedRows : buildFallbackRows(lines)
+  const dateFormat = receipt ? undefined : detectStatementDateFormat(lines, fallbackRows)
+  const datedRows = receipt ? fallbackRows : applyStatementDateFormat(fallbackRows, dateFormat?.selected ?? 'ambiguous')
+  const statementPeriod = receipt ? undefined : detectStatementPeriod(lines, datedRows, dateFormat?.selected)
   const currencyCode = currency.code
   const validation = receipt
     ? { status: 'missing' as const, checkedRows: 0, issueCount: 0, issues: [] }
-    : validateBalances(fallbackRows, currencyCode)
+    : validateBalances(datedRows, currencyCode, {
+        openingBalance: statementTable?.openingBalance,
+        closingBalance: statementTable?.closingBalance,
+      })
   const summary = receipt
     ? {
         title: fileName.replace(/\.[^.]+$/, '') || fileName,
         documentKind: 'Receipt',
-        total: fallbackRows[0]?.amount,
-        vendor: fallbackRows[0]?.description || undefined,
-        notes: fallbackRows[0]?.amount === undefined ? ['Receipt total not found; review required'] : [],
+        total: datedRows[0]?.amount,
+        vendor: datedRows[0]?.description || undefined,
+        notes: datedRows[0]?.amount === undefined ? ['Receipt total not found; review required'] : [],
       }
     : {
-        ...summarize(lines, fallbackRows, fileName, validation),
+        ...summarize(lines, datedRows, fileName, validation),
         ...(structuredRows.length > 0 || genericStatementTable ? { documentKind: 'Statement' } : {}),
       }
   const confidence = receipt
-    ? fallbackRows[0]?.confidence ?? 0
-    : scoreConfidence(fileType, fallbackRows, normalized, validation)
+    ? datedRows[0]?.confidence ?? 0
+    : scoreConfidence(fileType, datedRows, normalized, validation)
 
   return {
     fileName,
@@ -1864,9 +1959,10 @@ function parseRawText(
     currencyCode,
     currencyCodeDetected: currency.detected,
     statementPeriod,
+    dateFormat,
     fileMeta,
     rawText: normalized,
-    rows: fallbackRows,
+    rows: applyReviewConfidence(datedRows, validation),
     confidence,
     validation,
     processedAt: new Date().toISOString(),
@@ -1914,96 +2010,220 @@ function normalizeStatementHeader(value: string) {
 
 function parseStatementMoneyCell(value: string) {
   // Financial columns must contain a whole monetary value, not receipt labels or dates.
-  const text = value.trim().replace(/\s*(?:DR|CR)$/i, '').replace(/^(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)\s*/i, '').replace(/\s*(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)$/i, '').trim()
+  const original = value.trim()
+  const text = original.replace(/\s*(?:DR|CR)$/i, '').replace(/^(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)\s*/i, '').replace(/\s*(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)$/i, '').trim()
   const amount = new RegExp(`^(?:${amountPattern.source})$`).exec(text)
-  return amount ? parseAmount(amount[0]) : undefined
+  if (!amount) return undefined
+  const parsed = parseAmount(amount[0])
+  if (/\bDR\s*$/i.test(original)) return -Math.abs(parsed)
+  if (/\bCR\s*$/i.test(original)) return Math.abs(parsed)
+  return parsed
 }
 
-function parseStatementTable(lines: string[]): ExtractedRow[] {
-  const statementAmountHeader = /^(?:(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)\s+)?(?:(?:withdrawals?|debit)(?:\s+pengeluaran)?|pengeluaran|(?:deposits?|credit)(?:\s+deposit)?|(?:running\s+)?balance(?:\s+baki)?|baki)(?:\s+(?:USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD|RM)|\s*\([^)]*\))?$/i
-  const hasStatementColumns = lines.some(
-    (line) => line.includes('\t') && splitStatementColumns(line)
-      .filter((_, index) => index === 3 || index === 4 || index === 6)
-      .some((column) => statementAmountHeader.test(normalizeStatementHeader(column))),
-  )
-  if (!hasStatementColumns) return []
+type ParsedStatementTable = {
+  rows: ExtractedRow[]
+  openingBalance?: number
+  closingBalance?: number
+}
 
+function parseStatementTable(lines: string[]): ParsedStatementTable | undefined {
+  const headerIndex = lines.findIndex((line) => line.includes('\t') && statementColumnIndices(splitStatementColumns(line)))
+  const headerColumns = headerIndex >= 0 ? splitStatementColumns(lines[headerIndex] ?? '') : undefined
+  const headerMap = headerColumns ? statementColumnIndices(headerColumns) : undefined
+  const dateIndex = headerMap?.date ?? 0
+  const descriptionIndex = headerMap?.description ?? 1
+  const referenceIndex = headerMap?.reference ?? 2
+  const balanceIndex = headerMap?.balance ?? 6
+
+  const datedLines = lines
+    .map((line) => splitStatementColumns(line))
+    .filter((columns) => Boolean(columns[dateIndex]?.match(datePattern)))
+  const hasExplicitMarkers = lines.some((line) => /\b(?:opening|closing)\s+balance\b/i.test(line.replace(/\t/g, ' ')))
+  const hasHeaderedBalanceTrail = Boolean(headerMap && headerMap.balance !== undefined && datedLines.length > 0)
+  const hasHeaderlessBalanceTrail = !headerMap && hasExplicitMarkers && datedLines.some((columns) =>
+    parseStatementMoneyCell(columns[balanceIndex] ?? '') !== undefined,
+  )
+  if (!hasHeaderedBalanceTrail && !hasHeaderlessBalanceTrail) return undefined
+
+  const observedMoneyColumns = new Set<number>()
+  for (const columns of datedLines) {
+    for (let columnIndex = 3; columnIndex <= 5; columnIndex += 1) {
+      if (parseStatementMoneyCell(columns[columnIndex] ?? '') !== undefined) observedMoneyColumns.add(columnIndex)
+    }
+  }
+
+  const hasDebitCreditHeaders = Boolean(headerMap && (headerMap.withdrawal !== undefined || headerMap.deposit !== undefined))
+  const singleAmountIndex = headerMap?.amount ?? (!hasDebitCreditHeaders && observedMoneyColumns.size < 2
+    ? [...observedMoneyColumns][0]
+    : undefined)
+  const withdrawalIndex = headerMap?.withdrawal ?? (!headerMap && observedMoneyColumns.size >= 2 ? 3 : undefined)
+  const depositIndex = headerMap?.deposit ?? (!headerMap && observedMoneyColumns.size >= 2 ? 4 : undefined)
+  const taxIndex = headerMap?.tax ?? (headerMap ? undefined : 5)
+
+  let openingBalance: number | undefined
+  let closingBalance: number | undefined
+  let previousBalance: number | undefined
   const rows: ExtractedRow[] = []
-  let current: (ExtractedRow & { descriptionParts: string[] }) | undefined
-  let sourceLine = 0
+  let current: {
+    sourceDate: string
+    descriptionParts: string[]
+    reference?: string
+    debitCell?: string
+    creditCell?: string
+    amountCell?: string
+    taxCell?: string
+    balance?: number
+    source: string
+  } | undefined
+  let lineNumber = 0
 
   const finishCurrent = () => {
     if (!current) return
-    const { descriptionParts, ...row } = current
-    row.description = compactDescription(descriptionParts)
-    rows.push(row)
+    const date = current.sourceDate
+    const description = compactDescription(current.descriptionParts)
+    const delta = current.balance !== undefined && previousBalance !== undefined
+      ? roundMoney(current.balance - previousBalance)
+      : undefined
+    const rowIssues: string[] = []
+    const tax = parseStatementMoneyCell(current.taxCell ?? '')
+    let withdrawal: number | undefined
+    let deposit: number | undefined
+    let amount: number | undefined
+    let rowConfidence = current.balance !== undefined ? 94 : 74
+
+    if (hasDebitCreditHeaders || (withdrawalIndex !== undefined || depositIndex !== undefined)) {
+      const rawWithdrawal = parseStatementMoneyCell(current.debitCell ?? '')
+      const rawDeposit = parseStatementMoneyCell(current.creditCell ?? '')
+      if (rawWithdrawal !== undefined && rawDeposit !== undefined && Math.abs(rawWithdrawal) > 0.01 && Math.abs(rawDeposit) > 0.01) {
+        rowIssues.push('Both withdrawal and deposit columns contain an amount.')
+      }
+      if (rawWithdrawal !== undefined) withdrawal = Math.abs(rawWithdrawal)
+      if (rawDeposit !== undefined) deposit = Math.abs(rawDeposit)
+      amount = (deposit ?? 0) - (withdrawal ?? 0)
+      if (withdrawal === undefined && deposit === undefined && delta !== undefined && Math.abs(delta) > 0.01) {
+        if (delta < 0) withdrawal = Math.abs(delta)
+        else deposit = delta
+        amount = delta
+        rowConfidence = Math.min(rowConfidence, 82)
+      }
+    } else {
+      const rawAmountText = current.amountCell ?? ''
+      const rawAmount = parseStatementMoneyCell(rawAmountText)
+      const explicitSign = /[+-]\s*(?:[$€£]|RM|USD|MYR|SGD|EUR|GBP|JPY|AUD|CAD)?\s*\d|\(\s*\d/.test(rawAmountText)
+      if (rawAmount !== undefined) {
+        const direction = explicitSign ? rawAmount : delta ?? rawAmount
+        amount = direction < 0 ? -Math.abs(rawAmount) : Math.abs(rawAmount)
+        if (amount < 0) withdrawal = Math.abs(amount)
+        else if (amount > 0) deposit = amount
+      } else if (delta !== undefined && Math.abs(delta) > 0.01) {
+        amount = delta
+        if (delta < 0) withdrawal = Math.abs(delta)
+        else deposit = delta
+        rowConfidence = Math.min(rowConfidence, 82)
+      }
+      if (rawAmount !== undefined && delta !== undefined && Math.abs(roundMoney(amount ?? 0) - delta) > 0.01) {
+        rowIssues.push('Transaction amount does not match the movement between running balances.')
+      }
+    }
+
+    if (amount === undefined || Math.abs(amount) < 0.005) {
+      rowIssues.push('Transaction amount could not be resolved from its columns or balance movement.')
+    } else if (delta !== undefined && Math.abs(amount - delta) > 0.01) {
+      rowIssues.push('Transaction direction or amount does not match the movement between running balances.')
+    }
+    if (!description) rowIssues.push('Transaction description could not be resolved.')
+    if (current.balance === undefined) rowIssues.push('Transaction running balance is missing.')
+
+    rows.push({
+      date,
+      sourceDate: date,
+      description: description || 'Transaction needs review',
+      reference: current.reference || undefined,
+      withdrawal,
+      deposit,
+      tax,
+      amount,
+      balance: current.balance,
+      category: classifyStructuredRow(description, amount),
+      confidence: rowIssues.length > 0 ? Math.min(rowConfidence, 74) : rowConfidence,
+      source: current.source,
+      reviewIssues: rowIssues,
+    })
+    previousBalance = current.balance ?? previousBalance
     current = undefined
   }
 
   for (const line of lines) {
-    sourceLine += 1
+    lineNumber += 1
+    if (isStatementNoise(line) || lineNumber - 1 === headerIndex) continue
     const columns = splitStatementColumns(line)
-    const [dateColumn, descriptionColumn, referenceColumn, withdrawalColumn, depositColumn, taxColumn, balanceColumn] =
-      columns
-    const candidateDate = dateColumn.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)?.[0]
+    const flat = columns.join(' ')
+    const descriptionColumn = columns[descriptionIndex] ?? ''
 
-    if (isStatementNoise(line)) continue
-
-    if (/^OPENING BALANCE$/i.test(descriptionColumn) || /^CLOSING BALANCE/i.test(descriptionColumn)) {
+    if (/\b(?:opening balance|balance brought forward|balance b\/?f)\b/i.test(flat)) {
       finishCurrent()
-      const balance = parseStatementMoneyCell(balanceColumn)
-      if (balance === undefined) continue
-      rows.push({
-        description: descriptionColumn,
-        balance,
-        category: 'Balance',
-        confidence: 96,
-        source: `Line ${sourceLine}`,
-      })
+      openingBalance = parseStatementMoneyCell(columns[balanceIndex] ?? '')
+      previousBalance = openingBalance
+      continue
+    }
+    if (/\b(?:closing balance|balance carried forward|balance c\/?f)\b/i.test(flat)) {
+      finishCurrent()
+      closingBalance = parseStatementMoneyCell(columns[balanceIndex] ?? '')
       continue
     }
 
-    if (candidateDate) {
+    const dateCell = columns[dateIndex] ?? ''
+    const sourceDate = dateCell.match(datePattern)?.[0]
+    if (sourceDate) {
       finishCurrent()
-      const withdrawal = parseStatementMoneyCell(withdrawalColumn)
-      const deposit = parseStatementMoneyCell(depositColumn)
-      const tax = parseStatementMoneyCell(taxColumn)
-      const balance = parseStatementMoneyCell(balanceColumn)
-      // A receipt date/time row has no monetary cells in the statement columns.
-      if ([withdrawal, deposit, tax, balance].every((value) => value === undefined)) continue
-      const amount = deposit ?? (withdrawal !== undefined ? -withdrawal : undefined)
-      const initialDescription = dateColumn.replace(candidateDate, '').trim()
+      const balance = parseStatementMoneyCell(columns[balanceIndex] ?? '')
       current = {
-        date: candidateDate,
-        description: initialDescription,
-        descriptionParts: [initialDescription, descriptionColumn],
-        reference: referenceColumn || undefined,
-        withdrawal,
-        deposit,
-        tax,
-        amount,
+        sourceDate,
+        descriptionParts: [dateCell.replace(sourceDate, '').trim(), descriptionColumn],
+        reference: columns[referenceIndex] || undefined,
+        debitCell: withdrawalIndex !== undefined ? columns[withdrawalIndex] : undefined,
+        creditCell: depositIndex !== undefined ? columns[depositIndex] : undefined,
+        amountCell: singleAmountIndex !== undefined ? columns[singleAmountIndex] : undefined,
+        taxCell: taxIndex !== undefined ? columns[taxIndex] : undefined,
         balance,
-        category: classifyStructuredRow(initialDescription, amount),
-        confidence: balance !== undefined && (amount !== undefined || tax !== undefined) ? 98 : 84,
-        source: `Line ${sourceLine}`,
+        source: `Line ${lineNumber}`,
       }
       continue
     }
 
     if (current) {
-      if (descriptionColumn && !isStatementNoise(descriptionColumn)) {
-        current.descriptionParts.push(descriptionColumn)
-      }
-      if (referenceColumn && !isStatementNoise(referenceColumn)) {
-        current.reference = current.reference
-          ? `${current.reference} ${referenceColumn}`.trim()
-          : referenceColumn
-      }
+      const continuation = descriptionColumn
+      if (continuation && !isStatementNoise(continuation)) current.descriptionParts.push(continuation)
+      if (referenceIndex !== descriptionIndex && columns[referenceIndex]) current.reference = [current.reference, columns[referenceIndex]].filter(Boolean).join(' ')
     }
   }
-
   finishCurrent()
-  return rows
+
+  return { rows, openingBalance, closingBalance }
+}
+
+function statementColumnIndices(columns: string[]) {
+  const normalized = columns.map(normalizeStatementHeader)
+  const date = normalized.findIndex((value) => /^(?:date|transaction date|date posted|tarikh)$/i.test(value))
+  const description = normalized.findIndex((value) => /^(?:description|details?|narrative|particulars|diskripsi)$/i.test(value))
+  const reference = normalized.findIndex((value) => /^(?:ref(?:erence)?(?: no\.?)?|transaction id|no\. rujukan)$/i.test(value))
+  const withdrawal = normalized.findIndex((value) => /^(?:withdrawals?|debit|pengeluaran)(?:\s+\([^)]*\))?$/i.test(value))
+  const deposit = normalized.findIndex((value) => /^(?:deposits?|credit)(?:\s+\([^)]*\))?$/i.test(value))
+  const amount = normalized.findIndex((value) => /^(?:transaction )?amount(?:\s+\([^)]*\))?$/i.test(value))
+  const tax = normalized.findIndex((value) => /^(?:tax|vat|gst|sst|cukai)$/i.test(value))
+  const balance = normalized.findIndex((value) => /^(?:(?:running|closing|available) )?balance(?:\s+\([^)]*\))?$|^baki$/i.test(value))
+  const hasMoney = [withdrawal, deposit, amount].some((index) => index >= 0)
+  if (date < 0 || description < 0 || balance < 0 || !hasMoney) return undefined
+  return {
+    date,
+    description,
+    reference: reference >= 0 ? reference : undefined,
+    withdrawal: withdrawal >= 0 ? withdrawal : undefined,
+    deposit: deposit >= 0 ? deposit : undefined,
+    amount: amount >= 0 ? amount : undefined,
+    tax: tax >= 0 ? tax : undefined,
+    balance,
+  }
 }
 
 function splitStatementColumns(line: string) {
@@ -2066,7 +2286,7 @@ function extractDatesFromLine(line: string) {
   return Array.from(new Set(matches.map((value) => value.trim()))).slice(0, 6)
 }
 
-function parseDateToIso(input: string) {
+function parseDateToIso(input: string, dateFormat?: StatementDateFormat) {
   const value = input.trim()
   if (!value) return undefined
 
@@ -2084,7 +2304,14 @@ function parseDateToIso(input: string) {
     const first = Number(slash[1])
     const second = Number(slash[2])
     const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
-    const [month, day] = first > 12 ? [second, first] : [first, second]
+    let month: number
+    let day: number
+    if (dateFormat === 'DMY') [month, day] = [second, first]
+    else if (dateFormat === 'MDY') [month, day] = [first, second]
+    else if (dateFormat === 'YMD') return undefined
+    else if (first > 12 && second <= 12) [month, day] = [second, first]
+    else if (second > 12 && first <= 12) [month, day] = [first, second]
+    else return undefined
     if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
@@ -2107,13 +2334,83 @@ function parseDateToIso(input: string) {
   return undefined
 }
 
+function detectStatementDateFormat(lines: string[], rows: ExtractedRow[]): StatementDateFormatInfo {
+  const text = lines.join('\n')
+  const explicitMatch = text.match(/\bdate\s+format\s*(?::|-)?\s*(DD\s*[/.-]\s*MM|MM\s*[/.-]\s*DD|YYYY\s*[/.-]\s*MM)\s*[/.-]\s*(?:YYYY|DD)\b/i)
+  const explicit = explicitMatch
+    ? /^DD/i.test(explicitMatch[1] ?? '') ? 'DMY' : /^MM/i.test(explicitMatch[1] ?? '') ? 'MDY' : 'YMD'
+    : undefined
+  const conventions = new Set<StatementDateFormat>()
+  let sawNamedDate = false
+  const rawDates = rows.map((row) => row.sourceDate ?? row.date).filter((value): value is string => Boolean(value))
+
+  for (const value of rawDates) {
+    const iso = value.match(/^\d{4}[-/.]/)
+    if (iso) {
+      conventions.add('YMD')
+      continue
+    }
+    const slash = value.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
+    if (slash) {
+      const first = Number(slash[1])
+      const second = Number(slash[2])
+      if (first > 12 && second <= 12) conventions.add('DMY')
+      else if (second > 12 && first <= 12) conventions.add('MDY')
+      continue
+    }
+    if (/^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2},?\s+\d{2,4}$/i.test(value)) {
+      sawNamedDate = true
+    }
+  }
+
+  if (explicit && conventions.size > 0 && (conventions.size > 1 || !conventions.has(explicit))) {
+    return { detected: 'ambiguous', selected: 'ambiguous', source: 'ambiguous' }
+  }
+  if (explicit) return { detected: explicit, selected: explicit, source: 'statement' }
+  if (conventions.size === 1) {
+    const detected = [...conventions][0] ?? 'ambiguous'
+    return { detected, selected: detected, source: 'inferred' }
+  }
+  if (conventions.size > 1) return { detected: 'ambiguous', selected: 'ambiguous', source: 'ambiguous' }
+  if (sawNamedDate) return { detected: 'named', selected: 'named', source: 'inferred' }
+  return { detected: 'ambiguous', selected: 'ambiguous', source: 'ambiguous' }
+}
+
+function applyStatementDateFormat(rows: ExtractedRow[], selected: StatementDateFormat) {
+  return rows.map((row) => {
+    const sourceDate = row.sourceDate ?? row.date
+    const date = selected === 'ambiguous' ? undefined : parseDateToIso(sourceDate ?? '', selected)
+    return { ...row, sourceDate, date }
+  })
+}
+
+function dateReviewIssues(rows: ExtractedRow[]): ValidationIssue[] {
+  return rows.flatMap((row, rowIndex) => {
+    if (!row.sourceDate && !row.date) {
+      return [{ severity: 'error' as const, rowIndex, message: 'Transaction date could not be resolved.' }]
+    }
+    if (!row.date) {
+      return [{
+        severity: 'error' as const,
+        rowIndex,
+        message: `Date ${row.sourceDate ?? ''} is ambiguous or invalid. Choose the statement date format before export.`,
+      }]
+    }
+    return []
+  })
+}
+
 function normalizeIsoRange(start?: string, end?: string) {
   if (!start && !end) return undefined
   if (start && end && start > end) return { start: end, end: start }
   return { start, end }
 }
 
-function detectStatementPeriod(lines: string[], rows: ExtractedRow[]): ConversionResult['statementPeriod'] | undefined {
+function detectStatementPeriod(
+  lines: string[],
+  rows: ExtractedRow[],
+  dateFormat?: StatementDateFormat,
+): ConversionResult['statementPeriod'] | undefined {
   for (const line of lines) {
     const text = line.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim()
     if (!text) continue
@@ -2121,8 +2418,8 @@ function detectStatementPeriod(lines: string[], rows: ExtractedRow[]): Conversio
 
     const dates = extractDatesFromLine(text)
     if (dates.length < 2) continue
-    const first = parseDateToIso(dates[0] ?? '')
-    const second = parseDateToIso(dates[1] ?? '')
+    const first = parseDateToIso(dates[0] ?? '', dateFormat)
+    const second = parseDateToIso(dates[1] ?? '', dateFormat)
     const normalized = normalizeIsoRange(first, second)
     if (normalized?.start || normalized?.end) {
       return { ...normalized, source: 'explicit' }
@@ -2135,7 +2432,7 @@ function detectStatementPeriod(lines: string[], rows: ExtractedRow[]): Conversio
 
 function inferStatementPeriodFromRows(rows: ExtractedRow[]) {
   const parsed = rows
-    .map((row) => parseDateToIso(row.date ?? ''))
+    .map((row) => row.date)
     .filter((value): value is string => Boolean(value))
     .sort()
   if (parsed.length === 0) return undefined
@@ -2230,70 +2527,117 @@ function scoreConfidence(
   if (rows.some((row) => row.balance !== undefined)) score += 8
   if (validation.status === 'valid') score += 2
   if (validation.status === 'review') score -= Math.min(16, validation.issueCount * 4)
+  if (validation.status === 'review') score = Math.min(score, Math.max(55, 80 - validation.issueCount * 2))
+  if (validation.status === 'missing') score = Math.min(score, 68)
   return Math.max(20, Math.min(98, score))
 }
 
-function validateBalances(rows: ExtractedRow[], currencyCode: string): ValidationSummary {
-  const issues: ValidationIssue[] = []
-  const rowsWithBalances = rows
-    .map((row, index) => ({ row, index }))
-    .filter(({ row }) => row.balance !== undefined)
-  const openingRow = rows.find((row) => /^OPENING BALANCE$/i.test(row.description))
-  const closingRow = [...rows].reverse().find((row) => /^CLOSING BALANCE/i.test(row.description))
+type ValidationSeed = Pick<ValidationSummary, 'openingBalance' | 'closingBalance'>
+
+function validateBalances(
+  rows: ExtractedRow[],
+  currencyCode: string,
+  seed?: ValidationSeed,
+  additionalIssues: ValidationIssue[] = [],
+): ValidationSummary {
+  const issues: ValidationIssue[] = [...additionalIssues, ...dateReviewIssues(rows)]
+  rows.forEach((row, rowIndex) => {
+    row.reviewIssues?.forEach((message) => {
+      issues.push({ severity: 'error', rowIndex, message })
+    })
+  })
+  const openingBalance = seed?.openingBalance
+  const closingBalance = seed?.closingBalance ?? rows.at(-1)?.balance
   let checkedRows = 0
+  let previousBalance = openingBalance
 
-  for (let position = 1; position < rowsWithBalances.length; position += 1) {
-    const previous = rowsWithBalances[position - 1]
-    const current = rowsWithBalances[position]
-    const amount = amountForBalanceCheck(current.row)
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex]
+    if (!row) continue
+    const amount = amountForBalanceCheck(row)
 
-    if (amount === undefined || previous.row.balance === undefined || current.row.balance === undefined) {
-      if (current.row.date) {
-        issues.push({
-          severity: 'warning',
-          rowIndex: current.index,
-          message: 'Balance present but no debit/deposit amount was detected for this row.',
-        })
-      }
+    if (amount === undefined) {
+      issues.push({ severity: 'error', rowIndex, message: 'Transaction amount could not be resolved.' })
+      continue
+    }
+    if (row.balance === undefined) {
+      issues.push({ severity: 'error', rowIndex, message: 'Transaction running balance is missing.' })
+      continue
+    }
+    if (previousBalance === undefined) {
+      previousBalance = row.balance
       continue
     }
 
     checkedRows += 1
-    const expectedBalance = roundMoney(previous.row.balance + amount)
-    const actualBalance = roundMoney(current.row.balance)
+    const expectedBalance = roundMoney(previousBalance + amount)
+    const actualBalance = roundMoney(row.balance)
     const delta = roundMoney(actualBalance - expectedBalance)
 
     if (Math.abs(delta) > 0.01) {
       issues.push({
         severity: Math.abs(delta) > 1 ? 'error' : 'warning',
-        rowIndex: current.index,
+        rowIndex,
         expectedBalance,
         actualBalance,
         delta,
         message: `Expected balance ${money(expectedBalance, currencyCode)} after ${money(amount, currencyCode)}, but found ${money(actualBalance, currencyCode)}.`,
       })
     }
+    previousBalance = actualBalance
   }
 
-  const transactionRowsWithBalance = rowsWithBalances.filter(({ row }) => row.date).length
-  if (transactionRowsWithBalance > 1 && checkedRows === 0) {
+  if (rows.length > 0 && openingBalance === undefined) {
     issues.push({
-      severity: 'warning',
-      message: 'Balance columns were detected, but there were not enough debit/deposit amounts to validate the trail.',
+      severity: 'error',
+      message: 'The statement opening balance was not found. Verify it before relying on reconciliation.',
     })
+  }
+  if (rows.length > 0 && closingBalance === undefined) {
+    issues.push({ severity: 'error', message: 'The statement closing balance was not found.' })
+  }
+
+  const allAmountsResolved = rows.every((row) => amountForBalanceCheck(row) !== undefined)
+  if (openingBalance !== undefined && closingBalance !== undefined && allAmountsResolved) {
+    const transactionNet = roundMoney(rows.reduce((sum, row) => sum + (amountForBalanceCheck(row) ?? 0), 0))
+    const expectedClosingBalance = roundMoney(openingBalance + transactionNet)
+    const discrepancy = roundMoney(closingBalance - expectedClosingBalance)
+    if (Math.abs(discrepancy) > 0.01 && !issues.some((issue) => issue.message.startsWith('Expected balance'))) {
+      issues.push({
+        severity: Math.abs(discrepancy) > 1 ? 'error' : 'warning',
+        expectedBalance: expectedClosingBalance,
+        actualBalance: closingBalance,
+        delta: discrepancy,
+        message: `Opening balance plus deposits minus withdrawals does not equal closing balance; discrepancy ${money(discrepancy, currencyCode)}.`,
+      })
+    }
   }
 
   const status: ValidationSummary['status'] =
-    checkedRows === 0 ? 'missing' : issues.length > 0 ? 'review' : 'valid'
+    rows.length === 0 && issues.length === 0 ? 'missing' : issues.length > 0 ? 'review' : checkedRows > 0 ? 'valid' : 'missing'
 
   return {
     status,
     checkedRows,
     issueCount: issues.length,
-    openingBalance: openingRow?.balance ?? rowsWithBalances.at(0)?.row.balance,
-    closingBalance: closingRow?.balance ?? rowsWithBalances.at(-1)?.row.balance,
+    openingBalance,
+    closingBalance,
     issues,
   }
+}
+
+export function applyReviewConfidence(rows: ExtractedRow[], validation: ValidationSummary) {
+  if (validation.status === 'valid') {
+    return rows.map((row) => {
+      const confidence = row.extractionConfidence ?? row.confidence
+      return { ...row, extractionConfidence: confidence, confidence }
+    })
+  }
+  const cap = validation.status === 'review' ? Math.max(50, 78 - validation.issueCount) : 68
+  return rows.map((row) => {
+    const confidence = row.extractionConfidence ?? row.confidence
+    return { ...row, extractionConfidence: confidence, confidence: Math.min(confidence, cap) }
+  })
 }
 
 function amountForBalanceCheck(row: ExtractedRow) {
@@ -2318,14 +2662,14 @@ function rowReviewIssues(validation: ValidationSummary, rowIndex: number) {
 
 function rowReviewStatus(validation: ValidationSummary, rowIndex: number) {
   const issues = rowReviewIssues(validation, rowIndex)
-  if (issues.some((issue) => issue.severity === 'error')) return 'Review'
-  if (issues.length > 0) return 'Check'
-  if (validation.checkedRows > 0) return 'Verified'
-  return 'Unvalidated'
+  if (validation.status !== 'valid') return 'Needs review'
+  if (issues.length > 0) return 'Needs review'
+  return validation.checkedRows > 0 ? 'Verified' : 'Needs review'
 }
 
 function rowReviewNotes(validation: ValidationSummary, rowIndex: number) {
-  return rowReviewIssues(validation, rowIndex)
+  const issues = rowReviewIssues(validation, rowIndex)
+  return (issues.length > 0 ? issues : validation.status !== 'valid' ? validation.issues : [])
     .map((issue) => issue.message)
     .join(' ')
 }

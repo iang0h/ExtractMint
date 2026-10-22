@@ -29,6 +29,7 @@ const expectedSitemapUrls = [
   `${origin}/pricing/`,
   `${origin}/privacy/`,
   `${origin}/security/`,
+  `${origin}/desktop/`,
   `${origin}/convert/bank-statement-to-excel/`,
   `${origin}/convert/pdf-bank-statement-to-excel/`,
   `${origin}/convert/scanned-bank-statement-to-excel/`,
@@ -167,12 +168,19 @@ assert.match(llms, /OpenAPI/)
 assert.ok(llms.includes(`${origin}/openapi.json`))
 
 assert.match(homepage, /<title>Free Bank Statement Converter: PDF to Excel &amp; CSV \| ExtractMint<\/title>/)
+assert.match(app, /beta-label/)
+assert.match(app, /Report an issue/)
+assert.doesNotMatch(app, /FreeLLMAPI-ready via Vercel environment variables|Ready for SaaS scale|Can this become a paid SaaS\?/)
+assert.doesNotMatch(homepageMarkdown, /FreeLLMAPI-ready|Ready for SaaS scale|Can this become a paid SaaS\?/)
+assert.doesNotMatch(llms, /FreeLLMAPI-ready|Ready for SaaS scale|Can this become a paid SaaS\?/)
+const primaryNavigation = app.match(/<nav aria-label="Primary navigation">([\s\S]*?)<\/nav>/)?.[1] ?? ''
+assert.doesNotMatch(primaryNavigation, /Desktop app|Pricing/, 'desktop and pricing remain secondary homepage links')
 assert.equal(packageJson.scripts['sample:statement'], 'node scripts/generate-synthetic-sample.mjs')
 assert.doesNotMatch(app, /40\+['"], 'file and table patterns'/)
 assert.match(app, /When you click Ask, your question and the file name/)
 assert.match(app, /up to five extracted rows/)
 assert.match(app, /id="load-synthetic-sample"/)
-assert.match(app, /Load synthetic example/)
+assert.match(app, /Try a sample statement/)
 assert.match(app, /invented figures/i)
 assert.match(app, /runs in your browser/i)
 assert.match(app, /href=\{SYNTHETIC_SAMPLE_URL\}/)
@@ -188,6 +196,7 @@ for (const event of ['upload_started', 'conversion_completed', 'export_started']
 
 for (const privacyCopy of [privacyHtml, privacyMarkdown]) {
   assert.match(privacyCopy, /Ask ExtractMint/)
+  assert.match(privacyCopy, /question[\s\S]*file name/i)
   assert.match(privacyCopy, /up to five extracted rows/i)
   assert.match(privacyCopy, /AI provider is configured/i)
   assert.match(privacyCopy, /upload_started/)
@@ -199,6 +208,7 @@ for (const privacyCopy of [privacyHtml, privacyMarkdown]) {
   assert.match(privacyCopy, /sample_conversion_cancelled/)
   assert.match(privacyCopy, /demo-only events carry no properties/i)
   assert.match(privacyCopy, /no filenames or statement contents/i)
+  assert.doesNotMatch(privacyCopy, /everything (?:always )?stays on[- ]device/i)
 }
 
 for (const path of [

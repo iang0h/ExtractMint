@@ -16,7 +16,6 @@ import {
   ReceiptText,
   SendHorizontal,
   ShieldCheck,
-  Sparkles,
   Table2,
   UploadCloud,
 } from 'lucide-react'
@@ -26,7 +25,7 @@ import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './com
 import { PdfRedactionTool } from './components/PdfRedactionTool'
 import { trackExtractMintEvent } from './lib/analytics'
 import { saveExport } from './lib/download'
-import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
+import type { ConversionResult, ProgressEvent, StatementDateFormat, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
   clearPersistentPdfTextIndex,
@@ -214,11 +213,6 @@ const faqItems = [
       'Scanned statements can use browser OCR, but results depend on scan quality. Review extracted dates, amounts, and balances against the original before using an export.',
   },
   {
-    question: 'Can this become a paid SaaS?',
-    answer:
-      'Yes. The current version is a deployable static prototype. Accounts, credits, batch jobs, API access, and audit logs can be added with a backend.',
-  },
-  {
     question: 'Can I resume a conversion later?',
     answer:
       'Yes. Download the review JSON (or the review pack ZIP). Later, upload the .extractmint-review.json file to restore the extracted rows, validations, and continue exporting without re-processing the original PDF.',
@@ -313,7 +307,7 @@ function bestMatchingPage(pages: ParsedPage[], row: ConversionResult['rows'][num
 
 function rankMatchingPages(pages: ParsedPage[], row: ConversionResult['rows'][number] | undefined) {
   if (!row || pages.length === 0) return [{ pageNumber: pages[0]?.pageNumber ?? 1, score: 0 }]
-  const dateHint = normalizeSearchText(row.date ?? '')
+  const dateHint = normalizeSearchText(row.sourceDate ?? row.date ?? '')
   const descHint = normalizeSearchText(row.description).split(' ').slice(0, 8).join(' ')
   if (!dateHint && !descHint) return [{ pageNumber: pages[0]?.pageNumber ?? 1, score: 0 }]
 
@@ -563,7 +557,7 @@ function App() {
   const pdfHighlightQueries = useMemo(() => {
     if (!selectedRow) return []
     const queries: string[] = []
-    if (selectedRow.date) queries.push(selectedRow.date)
+    if (selectedRow.sourceDate ?? selectedRow.date) queries.push(selectedRow.sourceDate ?? selectedRow.date ?? '')
 
     const descWords = (selectedRow.description ?? '')
       .split(/\s+/g)
@@ -956,9 +950,11 @@ function App() {
 
       const nextRows = [...target.rows]
       const nextRow = { ...originalRow }
+      nextRow.reviewIssues = []
 
       if (field === 'date') {
         nextRow.date = rawValue.trim() ? rawValue.trim() : undefined
+        nextRow.sourceDate = nextRow.date
       } else if (field === 'description') {
         nextRow.description = target.summary.documentKind === 'Receipt' ? rawValue.trim() : rawValue.trim() || nextRow.description
       } else if (field === 'reference') {
@@ -1005,15 +1001,18 @@ function App() {
 
       const converter = getConverterIfLoaded()
       const nextValidation = converter
-        ? converter.revalidateRows(nextRows, target.currencyCode || 'USD')
+        ? converter.revalidateRows(nextRows, target.currencyCode || 'USD', target.validation)
         : target.validation
       const nextResults = [...previous]
       nextResults[resultIndex] = {
         ...target,
-        rows: nextRows,
+        rows: converter ? converter.applyReviewConfidence(nextRows, nextValidation) : nextRows,
         validation: nextValidation,
+        confidence: converter
+          ? converter.refreshConfidence(target.fileType, nextRows, target.rawText, nextValidation)
+          : target.confidence,
         statementPeriod: converter
-          ? converter.refreshStatementPeriod(nextRows, target.statementPeriod)
+          ? converter.refreshStatementPeriod(nextRows, field === 'date' ? undefined : target.statementPeriod)
           : target.statementPeriod,
       }
       return nextResults
@@ -1029,6 +1028,14 @@ function App() {
     ))
   }
 
+  const updateStatementDateFormat = (dateFormat: Exclude<StatementDateFormat, 'named' | 'ambiguous'>) => {
+    const converter = getConverterIfLoaded()
+    if (!converter) return
+    setResults((previous) => previous.map((result, index) =>
+      index === activeIndex ? converter.reinterpretResultDateFormat(result, dateFormat) : result,
+    ))
+  }
+
   const visibleRows = useMemo(() => {
     const result = activeResult
     if (!result) return []
@@ -1037,7 +1044,7 @@ function App() {
       ? indexed.filter(({ row, index }) => {
           if (result.summary.documentKind === 'Receipt') return receiptReviewFields(result, row).length > 0 || rowConfidencePercent(row.confidence) < 85
           const review = rowReview(result.validation, index)
-          return review.status === 'Review' || review.status === 'Check'
+          return review.status === 'Needs review' || review.status === 'Review' || review.status === 'Check'
         })
       : indexed
     const filteredConfidence = onlyLowConfidence
@@ -1714,7 +1721,7 @@ function App() {
         {
           role: 'assistant',
           content:
-            'The agent API is not reachable in this environment. On Vercel, it will answer with the local fallback immediately, and it can use FreeLLMAPI once the gateway environment variables are set.',
+            'The assistant is temporarily unavailable. Please try again later or use the privacy-safe diagnostic export when reporting a problem.',
           provider: 'offline',
           warning: error instanceof Error ? error.message : 'Agent request failed',
         },
@@ -1752,14 +1759,13 @@ function App() {
           </span>
           <span className="brand-copy">
             <strong>ExtractMint</strong>
+            <small className="beta-label">Beta</small>
           </span>
         </a>
         <nav aria-label="Primary navigation">
           <a href="#converter">Converter</a>
           <a href="#formats">Formats</a>
           <a href="/convert/bank-statement-to-excel/">Bank statement guide</a>
-          <a href="/desktop/">Desktop app</a>
-          <a href="/pricing/">Pricing</a>
           <a href="#faq">FAQ</a>
         </nav>
         <a className="header-action" href="#converter">
@@ -1770,7 +1776,7 @@ function App() {
 
       <section id="top" className="hero-section">
         <div className="hero-copy">
-          <p className="eyebrow">Bank statement converter</p>
+          <p className="eyebrow">Bank statement converter · Beta</p>
           <h1 className="animated-headline">
             <span>Bank statements</span>
             <span>to Excel.</span>
@@ -1790,6 +1796,8 @@ function App() {
           </div>
           <p className="hero-guide-note">
             <a href="/convert/bank-statement-to-excel/">Bank statement to Excel guide</a>
+            <span aria-hidden="true"> · </span>
+            <a href="https://github.com/iang0h/ExtractMint/issues/new" target="_blank" rel="noreferrer">Report an issue</a>
           </p>
           <div className="hero-proof" aria-label="Product trust signals">
             <span>
@@ -1870,6 +1878,7 @@ function App() {
               <a href={SYNTHETIC_SAMPLE_URL} download={SYNTHETIC_SAMPLE_FILENAME}>
                 Download sample PDF
               </a>
+              <span className="synthetic-sample-note">Example uses invented figures</span>
             </div>
             <p className="local-processing-note">
               Conversion runs in your browser. <a href="#support">Privacy and support details</a>
@@ -2358,7 +2367,9 @@ function App() {
                     ) : (
                       <BadgeCheck size={16} />
                     )}
-                    {activeResult?.confidence ?? 0}% match
+                    {activeResult?.summary.documentKind === 'Statement' && activeResult.validation.status !== 'valid'
+                      ? `${activeResult.confidence}% confidence · Needs review`
+                      : `${activeResult?.confidence ?? 0}% match`}
                   </div>
                 </div>
                 {isReceipt && activeResult ? (
@@ -2390,6 +2401,37 @@ function App() {
                   <div>
                     <span>Statement period</span>
                     <strong>{statementPeriodLabel(activeResult?.statementPeriod)}</strong>
+                    {activeResult?.dateFormat ? (
+                      <div className="date-format-control">
+                        <label htmlFor="statement-date-format">Date format</label>
+                        <select
+                          id="statement-date-format"
+                          aria-label="Statement date format"
+                          value={['DMY', 'MDY', 'YMD'].includes(activeResult.dateFormat.selected)
+                            ? activeResult.dateFormat.selected
+                            : ''}
+                          onChange={(event) => {
+                            const selected = event.target.value
+                            if (selected === 'DMY' || selected === 'MDY' || selected === 'YMD') {
+                              updateStatementDateFormat(selected)
+                            }
+                          }}
+                        >
+                          {activeResult.dateFormat.selected === 'ambiguous' ? <option value="">Choose format</option> : null}
+                          {activeResult.dateFormat.selected === 'named' ? <option value="">Month names</option> : null}
+                          <option value="DMY">DD/MM/YYYY</option>
+                          <option value="MDY">MM/DD/YYYY</option>
+                          <option value="YMD">YYYY-MM-DD</option>
+                        </select>
+                        <small>
+                          {activeResult.dateFormat.source === 'statement'
+                            ? `Detected in statement: ${dateFormatLabel(activeResult.dateFormat.detected)}`
+                            : activeResult.dateFormat.detected === 'ambiguous'
+                              ? 'Date format is unclear. Choose the correct order.'
+                              : `Detected: ${dateFormatLabel(activeResult.dateFormat.detected)}`}
+                        </small>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="validation-card">
                     <span>Balance check</span>
@@ -2572,7 +2614,7 @@ function App() {
                             <tr
                               key={`${row.description}-${index}`}
                               className={[
-                                review.status === 'Review' ? 'needs-review' : '',
+                                review.status === 'Needs review' || review.status === 'Review' ? 'needs-review' : '',
                                 isSelected ? 'row-selected' : '',
                               ]
                                 .filter(Boolean)
@@ -2586,7 +2628,7 @@ function App() {
                                 {editRows ? (
                                   <input
                                     key={`${activeIndex}-${index}-date-${row.date ?? ''}`}
-                                    defaultValue={row.date ?? ''}
+                                  defaultValue={row.date ?? row.sourceDate ?? ''}
                                     placeholder="YYYY-MM-DD"
                                     onFocus={() => {
                                       setSelectedRowIndex(index)
@@ -2595,7 +2637,7 @@ function App() {
                                     onBlur={(event) => updateRow(activeIndex, index, 'date', event.target.value)}
                                   />
                                 ) : (
-                                  (row.date || 'Detected')
+                                  (row.date || row.sourceDate || 'Not found')
                                 )}
                               </td>
                               <td>
@@ -2961,8 +3003,8 @@ function App() {
         </div>
         <div>
           <ShieldCheck size={22} />
-          <h3>Ready for SaaS scale</h3>
-          <p>The product can grow into credits, API keys, team access, and audit logs.</p>
+          <h3>Review before export</h3>
+          <p>Check extracted dates and amounts against the source before using the file.</p>
         </div>
       </section>
 
@@ -2986,10 +3028,6 @@ function App() {
               When you click Ask, your question and the file name, document details, and up to five extracted rows are sent to our agent endpoint. If an AI provider is configured, it may receive that context. The PDF itself is not sent.{' '}
               <a href="/privacy/">Privacy details</a>
             </p>
-            <div className="agent-source">
-              <Sparkles size={16} />
-              <span>FreeLLMAPI-ready via Vercel environment variables</span>
-            </div>
           </div>
           <div className="agent-chat" aria-live="polite">
             <div className="agent-messages">
@@ -3069,6 +3107,7 @@ function App() {
           <a href="/convert/bank-statement-to-excel/">Bank statement to Excel</a>
           <a href="/convert/pdf-bank-statement-to-excel/">PDF statement to Excel</a>
           <a href="/convert/scanned-bank-statement-to-excel/">Scanned statement to Excel</a>
+          <a href="https://github.com/iang0h/ExtractMint/issues/new" target="_blank" rel="noreferrer">Report an issue</a>
           <a href="/#support">Support</a>
           <a href="/desktop/">Desktop app</a>
           <a href="/pricing/">Pricing</a>
@@ -3123,6 +3162,14 @@ function validationTitle(validation?: ValidationSummary) {
   return 'Not enough data'
 }
 
+function dateFormatLabel(format: StatementDateFormat) {
+  if (format === 'DMY') return 'DD/MM/YYYY'
+  if (format === 'MDY') return 'MM/DD/YYYY'
+  if (format === 'YMD') return 'YYYY-MM-DD'
+  if (format === 'named') return 'month-name dates'
+  return 'unclear'
+}
+
 function validationDescription(validation?: ValidationSummary) {
   if (!validation) return 'Upload a file to validate running balances.'
   if (validation.status === 'valid') {
@@ -3143,11 +3190,15 @@ function validationClass(status?: ValidationSummary['status']) {
 function rowReview(validation: ValidationSummary | undefined, rowIndex: number) {
   if (!validation) return { status: 'Unvalidated', note: '' }
   const issues = validation.issues.filter((issue) => issue.rowIndex === rowIndex)
-  const note = issues.map((issue) => issue.message).join(' ')
-  if (issues.some((issue) => issue.severity === 'error')) return { status: 'Review', note }
-  if (issues.length > 0) return { status: 'Check', note }
-  if (validation.checkedRows > 0) return { status: 'Verified', note: '' }
-  return { status: 'Unvalidated', note: '' }
+  const note = issues.length > 0
+    ? issues.map((issue) => issue.message).join(' ')
+    : validation.status !== 'valid'
+      ? validation.issues.map((issue) => issue.message).join(' ')
+      : ''
+  if (validation.status !== 'valid' || issues.length > 0) return { status: 'Needs review', note }
+  return validation.checkedRows > 0
+    ? { status: 'Verified', note: '' }
+    : { status: 'Needs review', note: 'There is not enough balance data to verify this row.' }
 }
 
 export default App

@@ -342,10 +342,11 @@ function printReport(report, jsonPath) {
 }
 
 async function runBenchmark() {
+  const benchmarkCases = statementCases.filter((statementCase) => statementCase.expectedValidation !== 'review')
   if (corpusMetadata.synthetic !== true) {
     throw new Error('Refusing to run: the statement benchmark corpus is not marked synthetic.')
   }
-  if (!statementCases.length) throw new Error('The synthetic statement corpus is empty.')
+  if (!benchmarkCases.length) throw new Error('The synthetic statement corpus is empty.')
 
   let viteServer
   try {
@@ -378,7 +379,7 @@ async function runBenchmark() {
     const { convertFiles } = await viteServer.ssrLoadModule('/src/lib/converter.ts')
     const scoredResults = []
 
-    for (const statementCase of statementCases) {
+    for (const statementCase of benchmarkCases) {
       const fileName = `${statementCase.id}.pdf`
       const file = new File([createStatementPdf(statementCase)], fileName, {
         type: 'application/pdf',
@@ -399,8 +400,8 @@ async function runBenchmark() {
       corpus: {
         name: corpusMetadata.name,
         disclaimer: corpusMetadata.disclaimer,
-        caseCount: statementCases.length,
-        transactionCount: statementCases.reduce((sum, item) => sum + item.expectedRows.length, 0),
+        caseCount: benchmarkCases.length,
+        transactionCount: benchmarkCases.reduce((sum, item) => sum + item.expectedRows.length, 0),
         scope: 'Digital text PDFs generated in memory from invented fixture data.',
       },
       limitation: disclaimer,

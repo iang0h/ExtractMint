@@ -38,7 +38,7 @@ Primary service area: global web app, with guides for bank statement conversion,
 - OCR fallback for scanned statements and images.
 - Optional local caches (OCR + PDF review index) can be persisted in the browser and cleared in-app.
 - Review JSON import/export so a conversion can be resumed later.
-- FreeLLMAPI-ready agent route for explaining validation issues and export choices.
+- Optional Ask assistant for explaining validation issues and export choices.
 - Asking the agent sends the question, filename, document details, and up to five extracted rows to the agent endpoint; a configured AI provider may receive this context. The original PDF is not included.
 - Vercel Web Analytics records page views and fixed `upload_started`, `conversion_completed`, and `export_started` events with no filenames or statement contents in custom event properties.
 
@@ -47,11 +47,12 @@ Primary service area: global web app, with guides for bank statement conversion,
 - Text-based PDFs are the strongest input.
 - Scanned statements rely on OCR and should be reviewed before export.
 - Financial extraction should be validated against opening and closing balances before accounting use.
-- The current app is a static browser-side prototype that can grow into a SaaS with accounts, credits, batch jobs, API access, audit logs, and server OCR.
+- ExtractMint is in beta. Review extracted dates, amounts, and balances against the original before using an export.
 
 ## HTML Pages
 
 - Home and converter: https://extractmint.iangoh.com/
+- Report an issue: https://github.com/iang0h/ExtractMint/issues/new
 - Desktop app: https://extractmint.iangoh.com/desktop/
 - Pricing: https://extractmint.iangoh.com/pricing/
 - Privacy: https://extractmint.iangoh.com/privacy/

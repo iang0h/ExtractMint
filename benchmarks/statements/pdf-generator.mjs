@@ -38,10 +38,23 @@ export function createStatementPdf(statementCase) {
 
   const columns = [20, 72, 250, 320, 395, 470, 510]
   pdf.setFontSize(8)
-  statementCase.tableRows.forEach((row) => {
-    row.cells.forEach((cell, columnIndex) => {
-      if (cell) pdf.text(String(cell), columns[columnIndex], y)
+  const writeCells = (cells, rowY) => {
+    cells.forEach((cell, columnIndex) => {
+      if (cell) pdf.text(String(cell), columns[columnIndex], rowY)
     })
+  }
+
+  if (statementCase.includeHeaders && statementCase.headers) {
+    writeCells(statementCase.headers, y)
+    y += 15
+  }
+
+  statementCase.tableRows.forEach((row) => {
+    if (row.pageBreakBefore) {
+      pdf.addPage()
+      y = 754
+    }
+    writeCells(row.cells, y)
     y += 15
   })
 

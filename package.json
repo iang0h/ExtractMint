@@ -13,6 +13,7 @@
     "benchmark:statements": "node scripts/benchmark-statements.mjs",
     "sample:statement": "node scripts/generate-synthetic-sample.mjs",
     "test:agent": "node tests/agent-core.test.mjs",
+    "test:statement-extraction": "node tests/statement-extraction.test.mjs",
     "test:seo": "node tests/seo-artifacts.test.mjs",
     "preview": "vite preview",
     "deploy:static": "npm run build",
