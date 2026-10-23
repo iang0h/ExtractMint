@@ -1,5 +1,7 @@
 import type { ConversionResult, ExtractedRow, ValidationSummary } from './converter'
 import { lowerRowConfidence } from './reviewStatus'
+import { summarizeRowAmounts } from './financialSummary'
+import { scanQualityWarningFor } from './scanQuality'
 import type { StatementDateConvention } from './statementDates'
 
 export type EditableRowField = 'date' | 'description' | 'reference' | 'withdrawal' | 'deposit' | 'amount' | 'balance'
@@ -83,6 +85,15 @@ export function updateConversionRow(
 
   const rows = [...result.rows]
   rows[rowIndex] = applyRowEdit(original, field, rawValue)
+  const currentAmounts = summarizeRowAmounts(rows, result.summary.documentKind)
+  const hasUnresolvedSourceEvidence = (result.provenance?.unattachedLineNumbers.length ?? 0) > 0
+  const scanAmountsUnreadable = result.scanAmountsUnreadable === true && (
+    hasUnresolvedSourceEvidence || currentAmounts.amountStatus !== 'readable'
+  )
+  const hadScanBalanceWarning = result.scanBalancesUnreadable === true ||
+    /running-balance values could not be read/i.test(result.scanQualityWarning ?? '')
+  const scanBalancesUnreadable = hadScanBalanceWarning && rows.some((row) => row.date && row.balance === undefined)
+  const scanQualityWarning = scanQualityWarningFor(scanAmountsUnreadable, scanBalancesUnreadable)
   let validation = result.validation
 
   if (converter) {
@@ -95,7 +106,9 @@ export function updateConversionRow(
           : result.validation.closingBalance,
     }
     validation = converter.revalidateRows(rows, result.currencyCode || 'USD', seeds)
-    const fileIssues = result.validation.issues.filter((issue) => issue.rowIndex === undefined)
+    const fileIssues = result.validation.issues.filter((issue) =>
+      issue.rowIndex === undefined && !(result.scanQualityWarning && issue.message === result.scanQualityWarning),
+    )
     if (fileIssues.length > 0) {
       const issueKeys = new Set(validation.issues.map(issueKey))
       validation.issues = [
@@ -104,6 +117,11 @@ export function updateConversionRow(
       ]
       validation.issueCount = validation.issues.length
       if (fileIssues.some((issue) => issue.severity !== 'info')) validation.status = 'review'
+    }
+    if (scanQualityWarning && !validation.issues.some((issue) => issue.message === scanQualityWarning)) {
+      validation.issues.push({ severity: 'warning', message: scanQualityWarning })
+      validation.issueCount = validation.issues.length
+      validation.status = 'review'
     }
   }
 
@@ -126,20 +144,30 @@ export function updateConversionRow(
   if (invalidEditIssues.length > 0) validation.status = 'review'
 
   const reviewedRows = lowerRowConfidence(rows, validation)
-  const total = roundMoney(reviewedRows.reduce((sum, row) => sum + Math.abs(row.amount ?? row.deposit ?? row.withdrawal ?? 0), 0))
+  const amountSummary = summarizeRowAmounts(
+    reviewedRows,
+    result.summary.documentKind,
+    scanAmountsUnreadable,
+  )
   const averageConfidence = reviewedRows.length === 0
     ? 0
     : Math.round(reviewedRows.reduce((sum, row) => sum + row.confidence, 0) / reviewedRows.length)
-  const confidence = validation.status === 'valid' ? averageConfidence : Math.min(68, averageConfidence)
+  const confidence = scanQualityWarning
+    ? Math.min(55, averageConfidence)
+    : validation.status === 'valid' ? averageConfidence : Math.min(68, averageConfidence)
 
   return {
     ...result,
     rows: reviewedRows,
     validation,
     confidence,
+    scanAmountsUnreadable,
+    scanBalancesUnreadable,
+    scanQualityWarning,
     summary: {
       ...result.summary,
-      total,
+      total: amountSummary.totalDetected,
+      amountStatus: amountSummary.amountStatus,
       notes: result.summary.notes.map((note, index) =>
         index === 0 ? `${reviewedRows.filter((row) => row.amount !== undefined).length} structured rows detected` : note,
       ),
@@ -181,8 +209,4 @@ function clearInvalidEdit(row: ExtractedRow, field: EditableRowField) {
 
 function issueKey(issue: ValidationSummary['issues'][number]) {
   return `${issue.rowIndex ?? 'file'}\u0000${issue.severity}\u0000${issue.message}`
-}
-
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100
 }

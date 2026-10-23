@@ -50,6 +50,7 @@ try {
   const converter = await server.ssrLoadModule('/src/lib/converter.ts')
   const review = await server.ssrLoadModule('/src/lib/reviewStatus.ts')
   const statementDates = await server.ssrLoadModule('/src/lib/statementDates.ts')
+  const financialSummary = await server.ssrLoadModule('/src/lib/financialSummary.ts')
   const dmyQbo = (result) => converter.createQboBlob(converter.applyDateConvention(result, 'DD/MM/YYYY'))
 
   for (const [format, expectedRows, expectedPeriod] of [
@@ -494,6 +495,18 @@ try {
   )
   const [builtInSample] = await converter.convertFiles([builtInSampleFile], () => {}, { persistOcrCache: false })
   const sampleTransactions = builtInSample.rows.filter((row) => row.date && row.amount !== undefined)
+  const sampleAmounts = financialSummary.summarizeRowAmounts(builtInSample.rows, builtInSample.summary.documentKind)
+  assert.equal(builtInSample.summary.total, sampleAmounts.totalDetected, 'sample total detected equals the transaction rows used for reconciliation')
+  assert.equal(builtInSample.summary.total, sampleAmounts.deposits + sampleAmounts.withdrawals, 'sample detected total is deposits plus withdrawals, not a balance value')
+  assert.equal(sampleAmounts.transactionNet, sampleAmounts.deposits - sampleAmounts.withdrawals, 'sample transaction net uses the same deposit and withdrawal rows')
+  const staleSummaryJson = JSON.parse(await converter.createReviewJsonBlob(builtInSample).text())
+  staleSummaryJson.summary.total = 999999
+  const restoredStaleSummary = await converter.importReviewJson(new File(
+    [JSON.stringify(staleSummaryJson)],
+    'synthetic-stale-total.extractmint-review.json',
+    { type: 'application/json' },
+  ))
+  assert.equal(restoredStaleSummary.summary.total, sampleAmounts.totalDetected, 'review import recomputes detected total from its rows')
   assert.equal(builtInSample.validation.openingBalance, 1000, 'built-in synthetic sample uses its stated opening balance')
   assert.deepEqual(sampleTransactions.map((row) => row.withdrawal ?? row.deposit), [125.5, 300, 62], 'built-in synthetic sample assigns transaction columns')
   assert.equal(builtInSample.validation.closingBalance, 1112.5, 'built-in synthetic sample uses its stated closing balance')
@@ -548,6 +561,27 @@ try {
     { size: imageOnlyBytes.length, lastModified: 1 },
     [{ page: 1, method: 'ocr' }],
   )
+  const datedContinuationOcr = converter.parseExtractedText(
+    createDateConventionStatement({ format: 'DD/MM/YYYY' }).replace(
+      '14/04/2026\tSynthetic deposit',
+      '2026-08-12 scheduled memo 999.99 only\n14/04/2026\tSynthetic deposit',
+    ),
+    'synthetic-dated-continuation-ocr.pdf',
+    'application/pdf',
+    { size: 240, lastModified: 1 },
+    [{ page: 1, method: 'ocr' }],
+  )
+  assert.equal(datedContinuationOcr.scanAmountsUnreadable, false, 'a date-leading continuation memo is not an unresolved transaction start')
+  assert.equal(datedContinuationOcr.summary.amountStatus, 'readable', 'a readable OCR statement keeps its amount totals when it contains a dated continuation memo')
+  assert.ok(
+    !datedContinuationOcr.validation.issues.some((issue) => /amounts could not be read/i.test(issue.message)),
+    'a continuation memo does not add an OCR completeness warning',
+  )
+  assert.equal(
+    Array.from((await converter.createQboBlob(datedContinuationOcr).text()).matchAll(/<STMTTRN>/g)).length,
+    2,
+    'a continuation memo does not block QBO or create an extra transaction',
+  )
   assert.equal(scanResult.rows.filter((row) => row.date).length, 2, 'dated notice and unreadable row are excluded from transactions')
   assert.ok(!scanResult.rows.some((row) => /important notice|unreadable/i.test(row.description)), 'notice text is not exported as a transaction')
   assert.equal(scanResult.validation.openingBalance, 1000, 'scanned statement uses its stated opening balance')
@@ -556,6 +590,37 @@ try {
   assert.match(scanResult.scanQualityWarning, /clearer scan or a text-based PDF/i, 'warning gives users a practical next step')
   assert.equal(scanResult.validation.status, 'review', 'incomplete scan needs review')
   assert.ok(scanResult.confidence < 70, 'incomplete scan lowers confidence')
+  assert.equal(scanResult.summary.amountStatus, 'unreadable', 'OCR missing a dated transaction must mark amounts unreadable')
+  assert.equal(scanResult.summary.total, undefined, 'a closing balance is not presented as a detected transaction total')
+  assert.throws(
+    () => converter.createQboBlob(scanResult),
+    /amounts are not readable/i,
+    'QBO stays blocked when OCR may have missed transaction amounts',
+  )
+  const scanCsv = await converter.createCsvBlob(scanResult).text()
+  assert.match(scanCsv, /Amounts could not be read/i, 'CSV carries a visible scan warning after the UI acknowledgement gate')
+  const scanWorkbook = new (await import('exceljs')).default.Workbook()
+  await scanWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(scanResult)).arrayBuffer()))
+  const scanSummaryHeaders = scanWorkbook.getWorksheet('Summary').getRow(1).values.slice(1).map(String)
+  const scanSummaryRow = scanWorkbook.getWorksheet('Summary').getRow(2)
+  assert.equal(
+    scanSummaryRow.getCell(scanSummaryHeaders.indexOf('Total') + 1).value ?? undefined,
+    undefined,
+    'XLSX leaves detected total blank instead of substituting the closing balance',
+  )
+  assert.match(
+    String(scanSummaryRow.getCell(scanSummaryHeaders.indexOf('Statement Warnings') + 1).value),
+    /Amounts could not be read/i,
+    'XLSX summary carries a visible scan warning after the UI acknowledgement gate',
+  )
+  const restoredScan = await converter.importReviewJson(new File(
+    [converter.createReviewJsonBlob(scanResult)],
+    'synthetic-scanned-review.extractmint-review.json',
+    { type: 'application/json' },
+  ))
+  assert.equal(restoredScan.scanAmountsUnreadable, true, 'review JSON preserves the unresolved OCR amount state')
+  assert.match(restoredScan.scanQualityWarning, /Amounts could not be read/i, 'review JSON preserves the scan warning text')
+  assert.throws(() => converter.createQboBlob(restoredScan), /amounts are not readable/i, 'review import cannot bypass the unreadable-amount QBO gate')
   assert.equal(
     scanWarning.hasUnacknowledgedScanWarning([scanResult], new Set()),
     true,
@@ -567,13 +632,204 @@ try {
     'acknowledgement lets the user proceed with money exports',
   )
   const unreadableScan = converter.parseExtractedText(
-    'Page 1',
+    [
+      'Synthetic Testbank statement USD',
+      'Statement period: 03/04/2026 to 05/04/2026',
+      'OPENING BALANCE 5,000.00',
+      '03/04/2026 Synthetic grocery purchase',
+      '04/04/2026 Synthetic transit payment',
+      'CLOSING BALANCE 5,000.00',
+    ].join('\n'),
     'synthetic-unreadable-scan.pdf',
     'application/pdf',
-    { size: 20, lastModified: 1 },
+    { size: 200, lastModified: 1 },
     [{ page: 1, method: 'ocr' }],
   )
   assert.ok(unreadableScan.scanQualityWarning, 'completely unreadable OCR still shows an explicit warning')
+  assert.equal(unreadableScan.summary.amountStatus, 'unreadable', 'image-only statement with no OCR amounts stays explicitly unreadable')
+  assert.equal(unreadableScan.summary.total, undefined, 'balance-only OCR never becomes a detected transaction total')
+  assert.throws(() => converter.createQboBlob(unreadableScan), /amounts are not readable/i, 'balance-only scan cannot produce a QBO import')
+  const balanceOnlyScanText = [
+    'Synthetic Testbank statement USD',
+    'OPENING BALANCE 5,000.00',
+    'CLOSING BALANCE 5,000.00',
+  ].join('\n')
+  const balanceOnlyScan = converter.parseExtractedText(
+    balanceOnlyScanText,
+    'synthetic-balance-only-scan.pdf',
+    'application/pdf',
+    { size: balanceOnlyScanText.length, lastModified: 1 },
+    [{ page: 1, method: 'ocr' }],
+  )
+  assert.equal(
+    financialSummary.summarizeRowAmounts(balanceOnlyScan.rows, balanceOnlyScan.summary.documentKind).amountStatus,
+    'not-found',
+    'balance-only OCR has no readable transaction amount rows beneath the scan gate',
+  )
+  assert.equal(balanceOnlyScan.provenance?.unattachedLineNumbers.length ?? 0, 0, 'balance-only OCR has no unattached transaction evidence')
+  const editedBalanceOnlyScan = rowEditing.updateConversionRow(balanceOnlyScan, 0, 'description', 'Synthetic statement note', converter)
+  assert.equal(editedBalanceOnlyScan.scanAmountsUnreadable, true, 'an unrelated edit cannot clear the no-usable-amount OCR gate')
+  assert.equal(editedBalanceOnlyScan.summary.amountStatus, 'unreadable', 'balance-only OCR stays unreadable after an unrelated edit')
+  assert.throws(() => converter.createQboBlob(editedBalanceOnlyScan), /amounts are not readable/i, 'unrelated edits cannot enable QBO for balance-only OCR')
+
+  const missingScanBalanceText = createDateConventionStatement({ format: 'DD/MM/YYYY' })
+    .replace('13/04/2026\tSynthetic purchase\t\t10.00\t\t\t90.00', '13/04/2026\tSynthetic purchase\t\t10.00\t\t\t')
+  const missingScanBalance = converter.parseExtractedText(
+    missingScanBalanceText,
+    'synthetic-readable-amount-missing-scan-balance.pdf',
+    'application/pdf',
+    { size: missingScanBalanceText.length, lastModified: 1 },
+    [{ page: 1, method: 'ocr' }],
+  )
+  assert.equal(missingScanBalance.summary.amountStatus, 'readable', 'OCR transaction amounts stay readable when only a running balance is absent')
+  assert.equal(missingScanBalance.scanAmountsUnreadable, false, 'missing running balance does not become a transaction-amount warning')
+  assert.equal(missingScanBalance.scanBalancesUnreadable, true, 'OCR preserves a separate missing-running-balance state')
+  assert.match(missingScanBalance.scanQualityWarning, /running-balance values could not be read/i, 'OCR shows the missing-running-balance warning')
+  const restoredMissingScanBalance = await converter.importReviewJson(new File(
+    [converter.createReviewJsonBlob(missingScanBalance)],
+    'synthetic-missing-scan-balance.extractmint-review.json',
+    { type: 'application/json' },
+  ))
+  assert.equal(restoredMissingScanBalance.scanBalancesUnreadable, true, 'review JSON preserves the separate running-balance warning state')
+  const missingBalanceRowIndex = missingScanBalance.rows.findIndex((row) => row.date)
+  const editedMissingScanBalance = rowEditing.updateConversionRow(
+    missingScanBalance,
+    missingBalanceRowIndex,
+    'description',
+    'Synthetic purchase with clearer memo',
+    converter,
+  )
+  assert.equal(editedMissingScanBalance.scanBalancesUnreadable, true, 'an unrelated description edit preserves the missing-balance state')
+  assert.match(editedMissingScanBalance.scanQualityWarning, /running-balance values could not be read/i, 'an unrelated edit preserves the running-balance warning')
+  const resolvedMissingScanBalance = rowEditing.updateConversionRow(missingScanBalance, missingBalanceRowIndex, 'balance', '90.00', converter)
+  assert.equal(resolvedMissingScanBalance.scanBalancesUnreadable, false, 'filling the missing running balance clears only that warning state')
+  assert.equal(resolvedMissingScanBalance.scanQualityWarning, undefined, 'the running-balance warning clears after its last missing value is corrected')
+  assert.equal(resolvedMissingScanBalance.summary.amountStatus, 'readable', 'resolving a balance does not change the readable transaction amount state')
+  const acknowledgedBalanceWarning = new Set([scanWarning.scanWarningKey(editedMissingScanBalance)])
+  assert.equal(
+    scanWarning.hasUnacknowledgedScanWarning([editedMissingScanBalance], acknowledgedBalanceWarning),
+    false,
+    'the preserved running-balance warning remains acknowledged for this source file',
+  )
+  const missingBalanceCsv = await converter.createCsvBlob(editedMissingScanBalance).text()
+  assert.match(missingBalanceCsv, /running-balance values could not be read/i, 'acknowledged CSV keeps the visible running-balance warning')
+  const missingBalanceWorkbook = new (await import('exceljs')).default.Workbook()
+  await missingBalanceWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(editedMissingScanBalance)).arrayBuffer()))
+  const missingBalanceSummaryHeaders = missingBalanceWorkbook.getWorksheet('Summary').getRow(1).values.slice(1).map(String)
+  const missingBalanceSummaryRow = missingBalanceWorkbook.getWorksheet('Summary').getRow(2)
+  assert.match(
+    String(missingBalanceSummaryRow.getCell(missingBalanceSummaryHeaders.indexOf('Statement Warnings') + 1).value),
+    /running-balance values could not be read/i,
+    'acknowledged XLSX keeps the visible running-balance warning',
+  )
+
+  const correctableScanRows = [
+    { description: 'OPENING BALANCE', balance: 100, category: 'Balance', confidence: 90, source: 'OCR line 1' },
+    {
+      date: '2026-04-13',
+      description: 'Synthetic OCR withdrawal',
+      balance: 90,
+      category: 'Transaction',
+      confidence: 40,
+      source: 'OCR line 2',
+      sourceLineNumbers: [2],
+    },
+    { description: 'CLOSING BALANCE', balance: 90, category: 'Balance', confidence: 90, source: 'OCR line 3' },
+  ]
+  const correctableScan = {
+    ...scanResult,
+    fileName: 'synthetic-correctable-scan.pdf',
+    rows: correctableScanRows,
+    provenance: undefined,
+    validation: converter.revalidateRows(correctableScanRows, 'USD', { openingBalance: 100, closingBalance: 90 }),
+    scanAmountsUnreadable: true,
+    scanQualityWarning: 'Amounts could not be read from some scanned lines. Review the source before exporting.',
+    dateConvention: { format: 'MM/DD/YYYY', source: 'document' },
+    statementPeriod: undefined,
+    summary: { ...scanResult.summary, total: undefined, amountStatus: 'unreadable' },
+  }
+  assert.throws(() => converter.createQboBlob(correctableScan), /amounts are not readable/i, 'an unresolved OCR transaction blocks QBO before its amount is corrected')
+  const correctedOnlyScanAmount = rowEditing.updateConversionRow(correctableScan, 1, 'withdrawal', '10.00', converter)
+  assert.equal(correctedOnlyScanAmount.scanAmountsUnreadable, false, 'correcting the only missing row amount clears the derived OCR amount gate')
+  assert.equal(correctedOnlyScanAmount.summary.amountStatus, 'readable', 'correcting the only missing row amount restores readable totals')
+  assert.equal(correctedOnlyScanAmount.summary.total, 10, 'corrected OCR totals use the edited transaction row')
+  assert.equal(correctedOnlyScanAmount.scanQualityWarning, undefined, 'the resolved OCR warning clears when no independent source evidence remains')
+  assert.equal(correctedOnlyScanAmount.validation.status, 'valid', 'corrected OCR amount restores the matched balance state')
+  const correctedOnlyScanQbo = await converter.createQboBlob(correctedOnlyScanAmount).text()
+  assert.equal(Array.from(correctedOnlyScanQbo.matchAll(/<STMTTRN>/g)).length, 1, 'QBO resumes with exactly the corrected OCR row')
+  assert.match(correctedOnlyScanQbo, /<TRNAMT>-10\.00\n/, 'QBO exports the corrected withdrawal amount')
+
+  assert.ok(scanResult.provenance?.unattachedLineNumbers.length, 'synthetic unreadable OCR source evidence remains unattached to a parsed row')
+  const editedWithUnresolvedSource = rowEditing.updateConversionRow(scanResult, 1, 'deposit', '50.00', converter)
+  assert.equal(editedWithUnresolvedSource.scanAmountsUnreadable, true, 'an unrelated unresolved OCR source line keeps the amount gate active after row edits')
+  assert.match(editedWithUnresolvedSource.scanQualityWarning, /Amounts could not be read/i, 'independent unresolved OCR evidence keeps its warning visible after edits')
+  assert.equal(editedWithUnresolvedSource.summary.amountStatus, 'unreadable', 'unresolved OCR source evidence still suppresses totals after edits')
+  assert.throws(() => converter.createQboBlob(editedWithUnresolvedSource), /amounts are not readable/i, 'independent unresolved OCR source evidence continues to block QBO')
+
+  const receiptText = [
+    'Kedai Kopi Synthetic',
+    'Receipt',
+    'Date: 12/13/2025 9:42 PM',
+    'Total RM 329.90',
+  ].join('\n')
+  const receiptResult = converter.parseExtractedText(
+    receiptText,
+    'synthetic-receipt.txt',
+    'text/plain',
+    { size: receiptText.length, lastModified: 1 },
+  )
+  assert.equal(receiptResult.summary.documentKind, 'Receipt', 'synthetic receipt is identified as a receipt')
+  assert.equal(receiptResult.summary.total, 329.9, 'receipt total comes from its explicit total row')
+  assert.equal(receiptResult.summary.vendor, 'Kedai Kopi Synthetic', 'readable first-line merchant is captured from receipt text')
+  assert.equal(receiptResult.summary.receiptDate, '12/13/2025', 'readable printed receipt date is retained as printed')
+  const scannedReceipt = converter.parseExtractedText(
+    receiptText,
+    'synthetic-scanned-receipt.pdf',
+    'application/pdf',
+    { size: receiptText.length, lastModified: 1 },
+    [{ page: 1, method: 'ocr' }],
+  )
+  assert.equal(scannedReceipt.summary.amountStatus, 'readable', 'a printed receipt date does not count as a missing transaction amount')
+  assert.equal(scannedReceipt.scanAmountsUnreadable, false, 'readable OCR receipt total stays available despite the labeled date line')
+  const unlabeledReceiptText = [
+    'Kedai Kopi Synthetic',
+    'Date: 12/13/2025 9:42 PM',
+    'Subtotal RM 300.00',
+    'Tax RM 29.90',
+    'Total RM 329.90',
+    'E-Wallet RM 329.90',
+    'Thank You',
+  ].join('\n')
+  const unlabeledReceipt = converter.parseExtractedText(
+    unlabeledReceiptText,
+    'synthetic-pos-slip.txt',
+    'text/plain',
+    { size: unlabeledReceiptText.length, lastModified: 1 },
+  )
+  assert.equal(unlabeledReceipt.summary.documentKind, 'Receipt', 'POS receipt cues identify a receipt even without the word receipt')
+  assert.equal(unlabeledReceipt.summary.total, 329.9, 'receipt summary selects the final total instead of subtotal and tax lines')
+  const receiptAmounts = financialSummary.summarizeRowAmounts(receiptResult.rows, receiptResult.summary.documentKind)
+  assert.equal(receiptAmounts.totalDetected, 329.9, 'receipt amount summary uses its one explicit total row')
+  assert.equal(receiptAmounts.deposits, undefined, 'receipt summary does not invent zero bank deposits')
+  assert.equal(receiptAmounts.withdrawals, undefined, 'receipt summary does not invent zero bank withdrawals')
+  const receiptWithoutDetailsText = 'Receipt\nTotal RM 8.40'
+  const receiptWithoutDetails = converter.parseExtractedText(
+    receiptWithoutDetailsText,
+    'synthetic-receipt-no-details.txt',
+    'text/plain',
+    { size: receiptWithoutDetailsText.length, lastModified: 1 },
+  )
+  assert.equal(receiptWithoutDetails.summary.vendor, undefined, 'receipt merchant is not invented when it is absent')
+  assert.equal(receiptWithoutDetails.summary.receiptDate, undefined, 'receipt date is not invented when it is absent')
+  assert.deepEqual(
+    financialSummary.receiptDisplayDetails(receiptWithoutDetails.summary),
+    { merchant: 'Not found in text', date: 'Not found in text' },
+    'receipt card clearly labels unavailable merchant and date instead of inventing either',
+  )
+
+  assert.match(appSource, /Amounts not readable/, 'workspace visibly labels unreadable scan amounts')
+  assert.match(appSource, /receiptDisplayDetails\(activeResult\.summary\)/, 'receipt card renders the explicit readable/unavailable metadata')
+  assert.match(appSource, /activeResult && activeResult\.summary\.documentKind !== 'Receipt'/, 'statement deposit and withdrawal checks are hidden for receipts')
 
   const reviewRows = [
     { description: 'OPENING BALANCE', balance: 1000, category: 'Balance', confidence: 96, source: 'Synthetic' },
@@ -621,6 +877,9 @@ try {
   assert.equal(changedAmountResult.rows[1].withdrawal, 105, 'negative amount correction becomes a withdrawal')
   assert.equal(changedAmountResult.rows[1].category, 'Withdrawal', 'amount correction refreshes category')
   assert.equal(changedAmountResult.summary.total, 235, 'amount correction refreshes the displayed detected total')
+  const editedAmounts = financialSummary.summarizeRowAmounts(changedAmountResult.rows, changedAmountResult.summary.documentKind)
+  assert.equal(changedAmountResult.summary.total, editedAmounts.totalDetected, 'edited detected total and reconciliation use the same edited rows')
+  assert.equal(editedAmounts.transactionNet, editedAmounts.deposits - editedAmounts.withdrawals, 'edited net equals the signed debit/credit totals')
   assert.equal(changedAmountResult.validation.status, 'review', 'amount correction re-runs validation')
 
   const correctedDirection = rowEditing.updateConversionRow(reviewResult, 2, 'amount', '40.00', converter)

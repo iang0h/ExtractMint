@@ -27,6 +27,7 @@ import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './com
 import { PdfRedactionTool } from './components/PdfRedactionTool'
 import { trackExtractMintEvent } from './lib/analytics'
 import { getRowReview } from './lib/reviewStatus'
+import { receiptDisplayDetails, summarizeRowAmounts } from './lib/financialSummary'
 import { getStatementIntegrityWarning } from './lib/statementIntegrity'
 import { canonicalStatementDate, formatStatementDate, needsDateConventionChoice, statementPeriodLabel as formatStatementPeriodLabel, type StatementDateFormat } from './lib/statementDates'
 import { updateConversionRow } from './lib/rowEditing'
@@ -82,9 +83,9 @@ type ExportSanitySnapshot = {
   openingBalance?: number
   closingBalance?: number
   netChange?: number
-  deposits: number
-  withdrawals: number
-  transactionNet: number
+  deposits?: number
+  withdrawals?: number
+  transactionNet?: number
   discrepancy?: number
   hasBalanceTrail: boolean
 }
@@ -116,17 +117,19 @@ const statementDateRangeValue = (period?: ConversionResult['statementPeriod'], c
 }
 
 const exportSanitySnapshot = (result: ConversionResult): ExportSanitySnapshot => {
-  const deposits = result.rows.reduce((sum, row) => sum + (row.deposit ?? 0), 0)
-  const withdrawals = result.rows.reduce((sum, row) => sum + (row.withdrawal ?? 0), 0)
-  const amountSum = result.rows.reduce((sum, row) => sum + (row.amount ?? 0), 0)
-  const hasDebitCredit = result.rows.some((row) => row.deposit !== undefined || row.withdrawal !== undefined)
-  const transactionNet = hasDebitCredit ? deposits - withdrawals : amountSum
+  const amounts = summarizeRowAmounts(
+    result.rows,
+    result.summary.documentKind,
+    result.scanAmountsUnreadable === true || result.summary.amountStatus === 'unreadable',
+  )
 
   const openingBalance = result.validation.openingBalance
   const closingBalance = result.validation.closingBalance
   const hasBalanceTrail = openingBalance !== undefined && closingBalance !== undefined
   const netChange = hasBalanceTrail ? closingBalance - openingBalance : undefined
-  const discrepancy = netChange !== undefined ? netChange - transactionNet : undefined
+  const discrepancy = netChange !== undefined && amounts.transactionNet !== undefined
+    ? netChange - amounts.transactionNet
+    : undefined
 
   const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
@@ -134,9 +137,9 @@ const exportSanitySnapshot = (result: ConversionResult): ExportSanitySnapshot =>
     openingBalance,
     closingBalance,
     netChange: netChange !== undefined ? roundMoney(netChange) : undefined,
-    deposits: roundMoney(deposits),
-    withdrawals: roundMoney(withdrawals),
-    transactionNet: roundMoney(transactionNet),
+    deposits: amounts.deposits,
+    withdrawals: amounts.withdrawals,
+    transactionNet: amounts.transactionNet,
     discrepancy: discrepancy !== undefined ? roundMoney(discrepancy) : undefined,
     hasBalanceTrail,
   }
@@ -1396,6 +1399,10 @@ function App() {
   const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo') => {
     if (!activeResult) return
     setExportError(null)
+    if (format === 'qbo' && (activeResult.scanAmountsUnreadable || activeResult.summary.amountStatus === 'unreadable')) {
+      setExportError('Amounts are not readable from this scanned document. QBO is unavailable until transaction amounts are resolved.')
+      return
+    }
     if (format === 'qbo' && needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)) {
       window.alert('Choose DD/MM/YYYY or MM/DD/YYYY in the date format control before exporting QBO.')
       return
@@ -2146,8 +2153,12 @@ function App() {
               </button>
               <button
                 onClick={() => void downloadBlob('qbo')}
-                disabled={!activeResult || needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)}
-                title={activeResult && needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate) ? 'Choose a date format before exporting QBO' : undefined}
+                disabled={!activeResult || Boolean(activeResult.scanAmountsUnreadable || activeResult.summary.amountStatus === 'unreadable') || needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)}
+                title={activeResult && (activeResult.scanAmountsUnreadable || activeResult.summary.amountStatus === 'unreadable')
+                  ? 'Amounts are not readable; QBO is paused until they are resolved'
+                  : activeResult && needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)
+                    ? 'Choose a date format before exporting QBO'
+                    : undefined}
               >
                 <ReceiptText size={16} />
                 QuickBooks (QBO)
@@ -2163,13 +2174,15 @@ function App() {
               </section>
             ) : null}
 
-            {activeResult ? (
+            {activeResult && activeResult.summary.documentKind !== 'Receipt' ? (
               <div className="export-sanity" aria-label="Export sanity checks">
                 {(() => {
                   const snapshot = exportSanitySnapshot(activeResult)
                   const okThreshold = 0.02
-                  const status =
-                    getStatementIntegrityWarning(activeResult)
+                  const amountsUnreadable = activeResult.scanAmountsUnreadable === true || activeResult.summary.amountStatus === 'unreadable'
+                  const status = amountsUnreadable
+                    ? { label: 'Amounts not readable', className: 'is-review' }
+                    : getStatementIntegrityWarning(activeResult)
                       ? { label: 'Statement inconsistency — review', className: 'is-review' }
                       : snapshot.discrepancy === undefined
                       ? { label: 'Not enough balance data', className: 'is-missing' }
@@ -2182,7 +2195,7 @@ function App() {
                       <div className="export-sanity-header">
                         <div>
                           <strong>Export sanity checks</strong>
-                          <small>Compares opening/closing balances to extracted transaction totals.</small>
+                          <small>{amountsUnreadable ? 'Review the original scan before using transaction amounts.' : 'Compares opening/closing balances to extracted transaction totals.'}</small>
                         </div>
                         <span className="export-sanity-status">{status.label}</span>
                       </div>
@@ -2201,7 +2214,7 @@ function App() {
                         </div>
                         <div>
                           <span>Transaction net</span>
-                          <strong>{formatAmount(snapshot.transactionNet, activeResult.currencyCode)}</strong>
+                          <strong>{amountsUnreadable ? 'Amounts not readable' : formatAmount(snapshot.transactionNet, activeResult.currencyCode)}</strong>
                         </div>
                         <div>
                           <span>Total deposits</span>
@@ -2309,28 +2322,56 @@ function App() {
                   </div>
                 </div>
                 <div className="summary-cards">
-                  <div>
-                    <span>Total detected</span>
-                    <strong>
-                      {new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: activeResult?.currencyCode ?? 'USD',
-                      }).format(activeResult?.summary.total ?? totals.amount)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Likely source</span>
-                    <strong>{activeResult?.summary.documentKind ?? 'Statement'}</strong>
-                  </div>
-                  <div>
-                    <span>{activeResult?.statementPeriod?.source === 'explicit' ? 'Statement period' : 'Transaction date range'}</span>
-                    <strong>{statementDateRangeValue(activeResult?.statementPeriod, activeResult?.dateConvention)}</strong>
-                  </div>
-                  <div className="validation-card">
-                    <span>Balance check</span>
-                    <strong>{validationTitle(activeResult?.validation)}</strong>
-                    <small>{validationDescription(activeResult?.validation)}</small>
-                  </div>
+                  {activeResult?.summary.documentKind === 'Receipt' ? (
+                    <>
+                      <div>
+                        <span>Receipt total</span>
+                        <strong>
+                          {activeResult.summary.amountStatus === 'unreadable'
+                            ? 'Amounts not readable'
+                            : activeResult.summary.total !== undefined
+                              ? formatAmount(activeResult.summary.total, activeResult.currencyCode)
+                              : 'No total found in text'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Merchant</span>
+                        <strong>{receiptDisplayDetails(activeResult.summary).merchant}</strong>
+                      </div>
+                      <div>
+                        <span>Receipt date (as printed)</span>
+                        <strong>{receiptDisplayDetails(activeResult.summary).date}</strong>
+                      </div>
+                      <div>
+                        <span>Document type</span>
+                        <strong>Receipt</strong>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <span>{activeResult?.summary.amountStatus === 'unreadable' ? 'Amounts not readable' : 'Total detected'}</span>
+                        <strong>
+                          {activeResult?.summary.amountStatus === 'unreadable'
+                            ? 'Review original scan'
+                            : formatAmount(activeResult?.summary.total, activeResult?.currencyCode)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Likely source</span>
+                        <strong>{activeResult?.summary.documentKind ?? 'Statement'}</strong>
+                      </div>
+                      <div>
+                        <span>{activeResult?.statementPeriod?.source === 'explicit' ? 'Statement period' : 'Transaction date range'}</span>
+                        <strong>{statementDateRangeValue(activeResult?.statementPeriod, activeResult?.dateConvention)}</strong>
+                      </div>
+                      <div className="validation-card">
+                        <span>Balance check</span>
+                        <strong>{validationTitle(activeResult?.validation)}</strong>
+                        <small>{validationDescription(activeResult?.validation)}</small>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {activeResult && (activeResult.dateConvention?.format || needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)) ? (
@@ -2386,7 +2427,11 @@ function App() {
                       <strong>Scanned document needs review</strong>
                       <p>{activeResult.scanQualityWarning}</p>
                       {!activeScanWarningAcknowledged ? (
-                        <small>Excel, CSV, QBO, and other money exports are paused until you acknowledge this warning.</small>
+                        <small>
+                          {activeResult.scanAmountsUnreadable || activeResult.summary.amountStatus === 'unreadable'
+                            ? 'Excel and CSV can continue after acknowledgement and include this warning. QBO stays paused while amounts are unreadable.'
+                            : 'Money exports are paused until you acknowledge this warning.'}
+                        </small>
                       ) : null}
                     </div>
                     <label>

@@ -3,6 +3,8 @@ import { getPersistentOcrText, setPersistentOcrText } from './ocrCache'
 import { attachPdfPasswordPrompt } from './pdfPasswordPrompt.mjs'
 import { getRowReview, lowerRowConfidence } from './reviewStatus'
 import { getStatementIntegrityWarning } from './statementIntegrity'
+import { summarizeRowAmounts, type AmountReadability } from './financialSummary'
+import { scanQualityWarningFor } from './scanQuality'
 import {
   canonicalStatementDate,
   detectStatementDateConvention,
@@ -107,12 +109,16 @@ export type ConversionResult = {
   validation: ValidationSummary
   pdfColumnMethods?: Array<{ page: number; method: 'header' | 'clusters' | 'legacy' | 'ocr' }>
   scanQualityWarning?: string
+  scanAmountsUnreadable?: boolean
+  scanBalancesUnreadable?: boolean
   processedAt: string
   summary: {
     title: string
     documentKind: string
-    total: number
+    total?: number
+    amountStatus?: AmountReadability
     vendor?: string
+    receiptDate?: string
     notes: string[]
   }
 }
@@ -334,7 +340,7 @@ export async function createExcelBlob(result: ConversionResult) {
       ? new Date(result.fileMeta.lastModified).toISOString()
       : '',
     processed: result.processedAt,
-    statementWarnings: getStatementIntegrityWarning(result) ?? '',
+    statementWarnings: exportWarningText(result),
     sourceCoverage: sourceCoverageNote(result),
   })
   result.validation.issues.forEach((issue) => {
@@ -360,7 +366,7 @@ export async function createExcelBlob(result: ConversionResult) {
     { header: 'Notes', key: 'notes', width: 66 },
   ]
   reconciliationSheet.addRows([
-    { metric: 'Statement warnings', value: getStatementIntegrityWarning(result) ?? '', notes: 'Review against the source before importing into accounting software.' },
+    { metric: 'Statement warnings', value: exportWarningText(result), notes: 'Review against the source before importing into accounting software.' },
     { metric: 'Source coverage', value: sourceCoverageNote(result), notes: 'Line numbers refer to extracted text. Coverage and balance checks do not establish the source transaction count.' },
     {
       metric: 'Validation status',
@@ -625,7 +631,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       issues: result.validation.issueCount,
       sha256: result.fileMeta.sha256 ?? '',
       processed: result.processedAt,
-      statementWarnings: getStatementIntegrityWarning(result) ?? '',
+      statementWarnings: exportWarningText(result),
       sourceCoverage: sourceCoverageNote(result),
     })
 
@@ -647,7 +653,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       checkedRows: result.validation.checkedRows,
       issues: result.validation.issueCount,
       validation: validationLabel(result.validation.status),
-      statementWarnings: getStatementIntegrityWarning(result) ?? '',
+      statementWarnings: exportWarningText(result),
       sourceCoverage: sourceCoverageNote(result),
     })
 
@@ -756,7 +762,7 @@ export function createCsvBlob(result: ConversionResult) {
       `${row.confidence}%`,
       row.source,
       row.sourceLineNumbers?.join(', ') ?? '',
-      getStatementIntegrityWarning(result) ?? '',
+      exportWarningText(result),
       result.dateConvention?.format ?? (result.dateConvention?.source === 'ambiguous' || result.dateConvention?.source === 'conflict' ? 'Needs selection' : ''),
     ]),
   ]
@@ -820,6 +826,10 @@ function sourceCoverageNote(result: ConversionResult) {
   return `${provenance.consumedLineNumbers.length} consumed; ${provenance.attachedLineNumbers.length} attached; ${provenance.rowStartLineNumbers.length} row starts; ${provenance.unattachedLineNumbers.length} unattached${provenance.unattachedLineNumbers.length ? ` (lines ${provenance.unattachedLineNumbers.join(', ')})` : ''}; ${provenance.ambiguousLineNumbers.length} ambiguous`
 }
 
+function exportWarningText(result: ConversionResult) {
+  return [result.scanQualityWarning, getStatementIntegrityWarning(result)].filter(Boolean).join(' ')
+}
+
 function signedTransactionAmount(row: ExtractedRow) {
   if (typeof row.amount === 'number' && Number.isFinite(row.amount)) return row.amount
   if (row.deposit === undefined && row.withdrawal === undefined && row.tax === undefined) return undefined
@@ -863,16 +873,25 @@ function assertExportableTransactionRows(result: ConversionResult) {
 }
 
 function totalsForResult(result: ConversionResult) {
+  const amounts = summarizeRowAmounts(
+    result.rows,
+    result.summary.documentKind,
+    result.scanAmountsUnreadable === true || result.summary.amountStatus === 'unreadable',
+  )
   return {
-    amount: result.rows.reduce((sum, row) => sum + (row.amount ?? 0), 0),
-    withdrawal: result.rows.reduce((sum, row) => sum + (row.withdrawal ?? 0), 0),
-    deposit: result.rows.reduce((sum, row) => sum + (row.deposit ?? 0), 0),
+    amount: amounts.transactionNet,
+    withdrawal: amounts.withdrawals,
+    deposit: amounts.deposits,
     tax: result.rows.reduce((sum, row) => sum + (row.tax ?? 0), 0),
   }
 }
 
 function reconciliationForResult(result: ConversionResult) {
-  const totals = totalsForResult(result)
+  const totals = summarizeRowAmounts(
+    result.rows,
+    result.summary.documentKind,
+    result.scanAmountsUnreadable === true || result.summary.amountStatus === 'unreadable',
+  )
   const openingBalance = result.validation.openingBalance
   const closingBalance = result.validation.closingBalance
   const netChange =
@@ -880,22 +899,17 @@ function reconciliationForResult(result: ConversionResult) {
       ? roundMoney(closingBalance - openingBalance)
       : undefined
 
-  const hasDebitCredit = result.rows.some(
-    (row) => row.deposit !== undefined || row.withdrawal !== undefined,
-  )
-  const transactionNet = hasDebitCredit
-    ? roundMoney(totals.deposit - totals.withdrawal)
-    : roundMoney(totals.amount)
+  const transactionNet = totals.transactionNet
 
   const discrepancy =
-    netChange !== undefined ? roundMoney(netChange - transactionNet) : undefined
+    netChange !== undefined && transactionNet !== undefined ? roundMoney(netChange - transactionNet) : undefined
 
   return {
     openingBalance,
     closingBalance,
     netChange,
-    deposits: roundMoney(totals.deposit),
-    withdrawals: roundMoney(totals.withdrawal),
+    deposits: totals.deposits,
+    withdrawals: totals.withdrawals,
     transactionNet,
     discrepancy,
   }
@@ -927,6 +941,9 @@ function uniqueSheetName(fileName: string, usedNames: Set<string>) {
 }
 
 export function createQboBlob(result: ConversionResult) {
+  if (result.scanAmountsUnreadable) {
+    throw new Error('Export paused: Amounts are not readable from this scanned document. QBO is unavailable until transaction amounts are resolved.')
+  }
   if (needsDateConventionChoice(result.rows, result.statementPeriod, result.dateConvention, result.closingBalanceDateRaw ?? result.closingBalanceDate)) {
     throw new Error('Choose DD/MM/YYYY or MM/DD/YYYY before exporting QBO dates.')
   }
@@ -1131,6 +1148,9 @@ export function createReviewJsonBlob(result: ConversionResult) {
     rows: result.rows,
     rowCount: result.rows.length,
     provenance: result.provenance,
+    scanAmountsUnreadable: result.scanAmountsUnreadable,
+    scanBalancesUnreadable: result.scanBalancesUnreadable,
+    scanQualityWarning: result.scanQualityWarning,
     totals: {
       amount: result.rows.reduce((sum, row) => sum + (row.amount ?? 0), 0),
       withdrawal: result.rows.reduce((sum, row) => sum + (row.withdrawal ?? 0), 0),
@@ -1429,6 +1449,16 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
         end: canonicalStatementDate(importedPeriod.rawEnd ?? importedPeriod.end, dateConvention),
       }
     : refreshStatementPeriod(rows, undefined, dateConvention)
+  const scanAmountsUnreadable = payload.scanAmountsUnreadable === true
+  const scanQualityWarning = asString(payload.scanQualityWarning)
+  const scanBalancesUnreadable = payload.scanBalancesUnreadable === true ||
+    (payload.scanBalancesUnreadable === undefined && /running-balance values could not be read/i.test(scanQualityWarning ?? ''))
+  const importedAmounts = summarizeRowAmounts(rows, summary.documentKind, scanAmountsUnreadable)
+  const importedSummary = {
+    ...summary,
+    total: importedAmounts.totalDetected,
+    amountStatus: importedAmounts.amountStatus,
+  }
   return {
     fileName,
     fileType,
@@ -1441,10 +1471,13 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
     rawText: '',
     provenance,
     rows,
-    confidence: asFiniteNumber(payload.confidence) ?? Math.round(summary.total > 0 ? 84 : 0),
+    confidence: asFiniteNumber(payload.confidence) ?? Math.round((importedSummary.total ?? 0) > 0 ? 84 : 0),
     validation,
+    scanQualityWarning: scanQualityWarning ?? scanQualityWarningFor(scanAmountsUnreadable, scanBalancesUnreadable),
+    scanAmountsUnreadable,
+    scanBalancesUnreadable,
     processedAt,
-    summary,
+    summary: importedSummary,
   }
 }
 
@@ -2087,23 +2120,23 @@ export function parseExtractedText(
     validation.issueCount = validation.issues.length
     if (fallbackIssues.length > 0) validation.status = 'review'
   }
-  const datedTransactionLineCount = lines.filter((line) => datePattern.test(line) && !isStatementNoise(line)).length
   const parsedDatedRows = fallbackRows.filter((row) => Boolean(row.date))
-  const incompleteOcrRows = parsedDatedRows.filter((row) => row.amount === undefined || row.balance === undefined).length
   const ocrProducedNoUsableRows = fallbackRows.every((row) => !row.date && row.amount === undefined)
   const usedOcr = pdfColumnMethods?.some(({ method }) => method === 'ocr') === true
-  const scanQualityWarning =
-    usedOcr &&
-    (ocrProducedNoUsableRows || datedTransactionLineCount > parsedDatedRows.length || incompleteOcrRows > 0)
-      ? 'Amounts could not be read from some scanned lines. Try a clearer scan or a text-based PDF, then review the source before exporting.'
-      : undefined
+  const scanAmountsUnreadable = usedOcr && (
+    ocrProducedNoUsableRows ||
+    parsedDatedRows.some((row) => row.amount === undefined) ||
+    (parsed.provenance?.unattachedLineNumbers.length ?? 0) > 0
+  )
+  const scanBalancesUnreadable = usedOcr && parsedDatedRows.some((row) => row.balance === undefined)
+  const scanQualityWarning = scanQualityWarningFor(scanAmountsUnreadable, scanBalancesUnreadable)
   if (scanQualityWarning) {
     validation.issues.push({ severity: 'warning', message: scanQualityWarning })
     validation.issueCount = validation.issues.length
     validation.status = 'review'
   }
   const reviewedRows = lowerRowConfidence(fallbackRows, validation)
-  const summary = summarize(lines, reviewedRows, fileName, validation)
+  const summary = summarize(lines, reviewedRows, fileName, validation, scanAmountsUnreadable)
   const confidence = Math.min(
     scoreConfidence(fileType, reviewedRows, normalized, validation),
     pdfColumnMethods?.some(({ method }) => method !== 'header') ? 68 : 98,
@@ -2126,6 +2159,8 @@ export function parseExtractedText(
     validation,
     pdfColumnMethods,
     scanQualityWarning,
+    scanAmountsUnreadable,
+    scanBalancesUnreadable,
     processedAt: new Date().toISOString(),
     summary,
   }
@@ -2544,28 +2579,35 @@ function summarize(
   rows: ExtractedRow[],
   fileName: string,
   validation: ValidationSummary,
+  scanAmountsUnreadable = false,
 ) {
   const firstMeaningful = lines.find((line) => /[a-z]/i.test(line)) ?? fileName
   const totalLine =
-    lines.find((line) => /\b(total|ending balance|amount due|grand total|balance due)\b/i.test(line)) ??
+    lines.find((line) => /\b(total|amount due|grand total|balance due)\b/i.test(line)) ??
     ''
-  const total =
-    totalLine.match(amountPattern)?.map(parseAmount).filter(isFinite).at(-1) ??
-    rows.reduce((sum, row) => sum + Math.abs(row.amount ?? 0), 0)
   const lower = `${fileName} ${lines.slice(0, 15).join(' ')}`.toLowerCase()
-  const documentKind = lower.includes('receipt')
+  const receiptSignals = /\bsubtotal\b/.test(lower) && /\b(?:e[\s-]?wallet|cash|visa|mastercard|amex|card|thank you)\b/.test(lower)
+  const documentKind = /\breceipt\b/.test(lower) || receiptSignals
     ? 'Receipt'
     : lower.includes('invoice')
       ? 'Invoice'
       : lower.includes('statement') || rows.some((row) => row.balance !== undefined)
         ? 'Statement'
         : 'Document'
+  const amounts = summarizeRowAmounts(rows, documentKind, scanAmountsUnreadable)
+  const receipt = documentKind === 'Receipt'
+  const receiptDate = receipt
+    ? lines.map((line) => extractDatesFromLine(line)[0]).find(Boolean)
+    : undefined
+  const receiptMerchant = receipt ? extractReceiptMerchant(lines) : undefined
 
   return {
     title: firstMeaningful.slice(0, 72),
     documentKind,
-    total,
-    vendor: firstMeaningful,
+    total: amounts.totalDetected,
+    amountStatus: amounts.amountStatus,
+    vendor: receipt ? receiptMerchant : firstMeaningful,
+    receiptDate,
     notes: [
       `${rows.length} structured rows detected`,
       validation.status === 'valid'
@@ -2573,9 +2615,26 @@ function summarize(
         : validation.status === 'review'
           ? `${validation.issueCount} balance issue${validation.issueCount === 1 ? '' : 's'} need review`
           : 'Balance trail could not be fully validated',
-      totalLine ? `Total signal: ${totalLine.slice(0, 90)}` : 'No explicit total line found',
+      amounts.amountStatus === 'unreadable'
+        ? 'Amounts not readable from the source; transaction totals are withheld'
+        : totalLine ? `Total signal: ${totalLine.slice(0, 90)}` : 'No explicit total line found',
     ],
   }
+}
+
+function extractReceiptMerchant(lines: string[]) {
+  const labeled = lines
+    .map((line) => line.match(/^\s*(?:merchant|store|vendor|business|seller)\s*[:-]\s*(.+?)\s*$/i)?.[1])
+    .find(Boolean)
+  if (labeled) return labeled.slice(0, 120)
+
+  return lines.find((line) =>
+    /[a-z]/i.test(line) &&
+    !datePattern.test(line) &&
+    !(line.match(amountPattern)?.length) &&
+    !/\b(receipt|invoice|date|time|total|subtotal|tax|paid|thank you)\b/i.test(line) &&
+    !isStatementNoise(line),
+  )?.trim().slice(0, 120)
 }
 
 function scoreConfidence(
