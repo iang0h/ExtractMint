@@ -26,6 +26,7 @@ import './App.css'
 import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './components/PdfCanvasViewer'
 import { PdfRedactionTool } from './components/PdfRedactionTool'
 import { trackExtractMintEvent } from './lib/analytics'
+import { getRowReview } from './lib/reviewStatus'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
@@ -2969,13 +2970,7 @@ function validationClass(status?: ValidationSummary['status']) {
 }
 
 function rowReview(validation: ValidationSummary | undefined, rowIndex: number) {
-  if (!validation) return { status: 'Unvalidated', note: '' }
-  const issues = validation.issues.filter((issue) => issue.rowIndex === rowIndex)
-  const note = issues.map((issue) => issue.message).join(' ')
-  if (issues.some((issue) => issue.severity === 'error')) return { status: 'Review', note }
-  if (issues.length > 0) return { status: 'Check', note }
-  if (validation.checkedRows > 0) return { status: 'Verified', note: '' }
-  return { status: 'Unvalidated', note: '' }
+  return getRowReview(validation, rowIndex)
 }
 
 export default App

@@ -1,6 +1,7 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { getPersistentOcrText, setPersistentOcrText } from './ocrCache'
 import { attachPdfPasswordPrompt } from './pdfPasswordPrompt.mjs'
+import { getRowReview, lowerRowConfidence } from './reviewStatus'
 
 export type ProgressStage =
   | 'ready'
@@ -47,6 +48,7 @@ export type ValidationSummary = {
   issueCount: number
   openingBalance?: number
   closingBalance?: number
+  validatedRowIndexes?: number[]
   issues: ValidationIssue[]
 }
 
@@ -1813,9 +1815,10 @@ function parseRawText(
     validation.issueCount = validation.issues.length
     if (fallbackIssues.length > 0) validation.status = 'review'
   }
-  const summary = summarize(lines, fallbackRows, fileName, validation)
+  const reviewedRows = lowerRowConfidence(fallbackRows, validation)
+  const summary = summarize(lines, reviewedRows, fileName, validation)
   const confidence = Math.min(
-    scoreConfidence(fileType, fallbackRows, normalized, validation),
+    scoreConfidence(fileType, reviewedRows, normalized, validation),
     pdfColumnMethods?.some(({ method }) => method !== 'header') ? 68 : 98,
   )
 
@@ -1826,7 +1829,7 @@ function parseRawText(
     statementPeriod,
     fileMeta,
     rawText: normalized,
-    rows: fallbackRows,
+    rows: reviewedRows,
     confidence,
     validation,
     pdfColumnMethods,
@@ -2186,6 +2189,7 @@ function validateBalances(rows: ExtractedRow[], currencyCode: string): Validatio
   const openingRow = rows.find((row) => /^OPENING BALANCE$/i.test(row.description))
   const closingRow = [...rows].reverse().find((row) => /^CLOSING BALANCE/i.test(row.description))
   let checkedRows = 0
+  const validatedRowIndexes: number[] = []
 
   for (let position = 1; position < rowsWithBalances.length; position += 1) {
     const previous = rowsWithBalances[position - 1]
@@ -2204,6 +2208,7 @@ function validateBalances(rows: ExtractedRow[], currencyCode: string): Validatio
     }
 
     checkedRows += 1
+    validatedRowIndexes.push(current.index)
     const expectedBalance = roundMoney(previous.row.balance + amount)
     const actualBalance = roundMoney(current.row.balance)
     const delta = roundMoney(actualBalance - expectedBalance)
@@ -2237,6 +2242,7 @@ function validateBalances(rows: ExtractedRow[], currencyCode: string): Validatio
     issueCount: issues.length,
     openingBalance: openingRow?.balance ?? rowsWithBalances.at(0)?.row.balance,
     closingBalance: closingRow?.balance ?? rowsWithBalances.at(-1)?.row.balance,
+    validatedRowIndexes,
     issues,
   }
 }
@@ -2257,22 +2263,12 @@ function validationLabel(status: ValidationSummary['status']) {
   return 'Not enough balance data'
 }
 
-function rowReviewIssues(validation: ValidationSummary, rowIndex: number) {
-  return validation.issues.filter((issue) => issue.rowIndex === rowIndex)
-}
-
 function rowReviewStatus(validation: ValidationSummary, rowIndex: number) {
-  const issues = rowReviewIssues(validation, rowIndex)
-  if (issues.some((issue) => issue.severity === 'error')) return 'Review'
-  if (issues.length > 0) return 'Check'
-  if (validation.checkedRows > 0) return 'Verified'
-  return 'Unvalidated'
+  return getRowReview(validation, rowIndex).status
 }
 
 function rowReviewNotes(validation: ValidationSummary, rowIndex: number) {
-  return rowReviewIssues(validation, rowIndex)
-    .map((issue) => issue.message)
-    .join(' ')
+  return getRowReview(validation, rowIndex).note
 }
 
 function cleanDescription(line: string, date?: string, amountMatches: string[] = []) {
