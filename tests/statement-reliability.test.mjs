@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createServer } from 'vite'
+import { createMultilineStatement } from './fixtures/multiline-statement.mjs'
 import { createColumnStatement, createImageOnlyStatementPdf, reliabilityMagnitudes } from './fixtures/statement-reliability.mjs'
 
 if (!globalThis.DOMMatrix) {
@@ -47,6 +48,262 @@ const server = await createServer({
 try {
   const converter = await server.ssrLoadModule('/src/lib/converter.ts')
   const review = await server.ssrLoadModule('/src/lib/reviewStatus.ts')
+  for (const pageBreak of [false, true]) {
+    const fixture = createMultilineStatement({ pageBreak })
+    const result = converter.parseExtractedText(fixture.text, 'invented-multiline-statement.txt', 'text/plain', { size: fixture.text.length, lastModified: 1 })
+    const transactions = result.rows.filter((row) => row.date && row.amount !== undefined)
+    const deposits = Math.round(transactions.reduce((sum, row) => sum + (row.deposit ?? 0), 0) * 100) / 100
+    const withdrawals = Math.round(transactions.reduce((sum, row) => sum + (row.withdrawal ?? 0), 0) * 100) / 100
+    console.log(`Multiline fixture (pageBreak=${pageBreak}): ${transactions.length} transactions; deposits=${deposits.toFixed(2)}; withdrawals=${withdrawals.toFixed(2)}; dated rows=${result.rows.filter((row) => row.date).length}`)
+    assert.equal(transactions.length, fixture.transactionCount, 'multiline fixture: exact gold transaction count')
+    assert.equal(result.rows.filter((row) => row.date).length, fixture.transactionCount, 'dated memo must not create a bogus row')
+    assert.equal(deposits, fixture.deposits, 'multiline fixture: exact gold deposit total')
+    assert.equal(withdrawals, fixture.withdrawals, 'multiline fixture: exact gold withdrawal total')
+    let balance = fixture.openingBalance
+    transactions.forEach((row, index) => {
+      balance = Math.round((balance + row.amount) * 100) / 100
+      assert.equal(row.balance, balance, `multiline fixture: balance step ${index + 1}`)
+      assert.equal(row.description, fixture.descriptions[index], `multiline fixture: full description ${index + 1}, including across page break`)
+      assert.deepEqual(row.sourceLineNumbers, fixture.transactionSourceLines[index], 'every transaction source line stays attached')
+    })
+    assert.equal(balance, fixture.closingBalance)
+    assert.equal(result.validation.status, 'valid')
+    assert.deepEqual(result.provenance.unattachedLineNumbers, [], 'no consumed source line is silently lost')
+    assert.equal(result.provenance.rowStartLineNumbers.length, result.rows.length)
+    assert.deepEqual([...result.provenance.attachedLineNumbers].sort((a, b) => a - b), result.provenance.consumedLineNumbers)
+  }
+
+  const multiline = createMultilineStatement()
+  const splitCells = multiline.text.split('\n')
+  const firstTransactionLine = splitCells.findIndex((line) => line.startsWith('01/06/2026\t'))
+  const firstCells = splitCells[firstTransactionLine].split('\t')
+  splitCells[firstTransactionLine] = firstCells.slice(0, 6).join('\t')
+  splitCells.splice(firstTransactionLine + 1, 0, `\t\t\t\t\t\t${firstCells[6]}`)
+  const splitResult = converter.parseExtractedText(splitCells.join('\n'), 'invented-split-cells.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.equal(splitResult.rows[1].balance, 399999.99, 'amount and balance on different physical lines attach to the same transaction')
+  assert.deepEqual(splitResult.provenance.unattachedLineNumbers, [], 'split financial cells leave no unattached line')
+  const repeatedDetail = 'Fictional remittance detail with a long invented project name and a synthetic scheduling note.'
+  const longDescriptionText = multiline.text.replace('\tFictional detail 1.1', Array.from({ length: 5 }, () => `\t${repeatedDetail}`).join('\n'))
+  const longDescription = converter.parseExtractedText(longDescriptionText, 'invented-long-description.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.equal(longDescription.rows[1].description, `Invented transfer 1 ${Array(5).fill(repeatedDetail).join(' ')}`, 'all five description continuations are retained, including repeated and long text')
+  const plainText = [
+    'Cloudberry Test Bank synthetic statement USD',
+    'OPENING BALANCE 1,000.00',
+    '01/06/2026 Fictional debit -5.00 995.00',
+    'Memo for 12/07/2026 project estimate 999.99',
+    '12/07/2026 scheduled memo 777.77 only',
+    '02/06/2026 Fictional credit +5.00 1,000.00',
+    'CLOSING BALANCE 1,000.00',
+  ].join('\n')
+  const plainResult = converter.parseExtractedText(plainText, 'invented-plain-statement.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.equal(plainResult.rows.filter((row) => row.date).length, 2, 'unstructured date-like memos do not create transactions')
+  assert.match(plainResult.rows[1].description, /Memo for 12\/07\/2026 project estimate 999\.99 12\/07\/2026 scheduled memo 777\.77 only/)
+  assert.deepEqual(plainResult.rows[1].sourceLineNumbers, [3, 4, 5], 'plain fallback records attached source lines')
+  assert.deepEqual(plainResult.provenance.unattachedLineNumbers, [])
+
+  const trailingMemoText = plainText.replace('12/07/2026 scheduled memo 777.77 only', '12/07/2026 scheduled memo 777.77')
+  const trailingMemoResult = converter.parseExtractedText(trailingMemoText, 'invented-trailing-memo-statement.txt', 'text/plain', { size: 100, lastModified: 1 })
+  const trailingMemoTransactions = trailingMemoResult.rows.filter((row) => row.date)
+  console.log(`Trailing-money memo review regression: ${trailingMemoTransactions.length} transactions; amounts=${trailingMemoTransactions.map((row) => row.amount).join(',')}; validation=${trailingMemoResult.validation.status}`)
+  assert.equal(trailingMemoTransactions.length, 2, 'dated memo ending in an unsigned amount must not create a third transaction')
+  assert.deepEqual(trailingMemoTransactions.map((row) => [row.date, row.amount, row.balance]), [
+    ['01/06/2026', -5, 995],
+    ['02/06/2026', 5, 1000],
+  ], 'actual statement dates, amounts, and balances remain unchanged')
+  assert.equal(trailingMemoTransactions[0].description, 'Fictional debit Memo for 12/07/2026 project estimate 999.99 12/07/2026 scheduled memo 777.77', 'full trailing-money memo remains attached to its source transaction')
+  assert.deepEqual(trailingMemoTransactions[0].sourceLineNumbers, [3, 4, 5], 'trailing-money memo source line stays attached')
+  assert.deepEqual(trailingMemoResult.provenance.unattachedLineNumbers, [], 'review fix preserves all consumed source data')
+  assert.equal(trailingMemoResult.validation.status, 'review', 'ambiguous dated-money text is flagged even when actual running-balance steps reconcile')
+  assert.deepEqual(trailingMemoResult.provenance.ambiguousLineNumbers, [5])
+  assert.equal((await converter.createQboBlob(trailingMemoResult).text()).match(/<STMTTRN>/g)?.length, 2, 'QBO contains only the two actual transactions')
+
+  for (const memoAmount of ['-999.99', '(999.99)']) {
+    const signedMemoText = plainText.replace('12/07/2026 scheduled memo 777.77 only', `12/07/2026 scheduled memo ${memoAmount}`)
+    const signedMemo = converter.parseExtractedText(signedMemoText, 'invented-signed-memo.txt', 'text/plain', { size: 100, lastModified: 1 })
+    const signedMemoTransactions = signedMemo.rows.filter((row) => row.date)
+    assert.equal(signedMemoTransactions.length, 2, 'a sign or parentheses alone cannot turn a dated memo into a transaction')
+    assert.deepEqual(signedMemoTransactions.map((row) => [row.amount, row.balance]), [[-5, 995], [5, 1000]], 'signed memo keeps actual transaction values unchanged')
+    assert.ok(signedMemoTransactions[0].description.endsWith(`12/07/2026 scheduled memo ${memoAmount}`), 'signed memo text remains full description evidence')
+    assert.deepEqual(signedMemoTransactions[0].sourceLineNumbers, [3, 4, 5])
+    assert.equal(signedMemo.validation.status, 'review', 'unsupported dated-money line stays visible for source review')
+    assert.deepEqual(signedMemo.provenance.ambiguousLineNumbers, [5], 'source coverage identifies ambiguous transaction starts')
+  }
+  for (const twoMoneyMemo of [
+    '12/07/2026 scheduled memo estimate 123.45 revised -999.99',
+    '12/07/2026 scheduled memo estimate 123.45 revised 999.99',
+    '12/07/2026 scheduled memo estimate 123.45 revised (999.99)',
+    '12/07/2026 scheduled memo 123.45 -999.99',
+    '12/07/2026 scheduled memo -123.45 -999.99',
+    '12/07/2026 scheduled memo (123.45) -999.99',
+  ]) {
+    const twoMoneyText = plainText.replace('12/07/2026 scheduled memo 777.77 only', twoMoneyMemo)
+    const twoMoneyResult = converter.parseExtractedText(twoMoneyText, 'invented-two-money-memo.txt', 'text/plain', { size: 100, lastModified: 1 })
+    const actualTransactions = twoMoneyResult.rows.filter((row) => row.date)
+    console.log(`Two-money memo (${twoMoneyMemo}): ${actualTransactions.length} transactions; amounts=${actualTransactions.map((row) => row.amount).join(',')}`)
+    assert.equal(actualTransactions.length, 2, 'a date and two money tokens without supporting context do not prove a transaction start')
+    assert.deepEqual(actualTransactions.map((row) => [row.date, row.amount, row.balance]), [['01/06/2026', -5, 995], ['02/06/2026', 5, 1000]])
+    assert.ok(actualTransactions[0].description.endsWith(twoMoneyMemo), 'both numeric tokens and intervening prose remain in the source description')
+    assert.deepEqual(actualTransactions[0].sourceLineNumbers, [3, 4, 5])
+    assert.deepEqual(twoMoneyResult.provenance.ambiguousLineNumbers, [5])
+    assert.equal(twoMoneyResult.validation.status, 'review')
+    assert.equal((await converter.createQboBlob(twoMoneyResult).text()).match(/<STMTTRN>/g)?.length, 2, 'two-money memo cannot add an OFX transaction')
+  }
+
+  const unsignedMemoLine = '12/07/2026 scheduled memo 123.45 999.99'
+  const unsignedHeaderless = converter.parseExtractedText([
+    'Cloudberry Test Bank synthetic statement USD',
+    'OPENING BALANCE 1,000.00',
+    '01/06/2026 Fictional credit 5.00 1,005.00',
+    unsignedMemoLine,
+    '02/06/2026 Fictional credit 5.00 1,010.00',
+  ].join('\n'), 'invented-unsigned-headerless-memo.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.deepEqual(unsignedHeaderless.rows.filter((row) => row.date).map((row) => [row.amount, row.balance]), [[5, 1005], [5, 1010]], 'repeated unsigned presentation is not independent evidence for a memo transaction')
+  assert.ok(unsignedHeaderless.rows[1].description.endsWith(unsignedMemoLine))
+  assert.deepEqual(unsignedHeaderless.provenance.ambiguousLineNumbers, [4])
+  assert.equal(unsignedHeaderless.validation.status, 'review')
+
+  const unsupportedOnly = converter.parseExtractedText([
+    'Cloudberry Test Bank synthetic statement USD',
+    '12/07/2026 scheduled memo -999.99',
+    '13/07/2026 allocated memo (999.99)',
+  ].join('\n'), 'invented-no-layout-no-balances.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.equal(unsupportedOnly.rows.filter((row) => row.amount !== undefined).length, 0, 'unsupported dated-money lines never become fallback money rows')
+  assert.equal(unsupportedOnly.validation.status, 'review')
+  assert.deepEqual(unsupportedOnly.provenance.ambiguousLineNumbers, [2, 3])
+  assert.match(unsupportedOnly.rows.map((row) => row.description).join(' '), /scheduled memo -999\.99.*allocated memo \(999\.99\)/, 'unsupported source text remains available for review')
+
+  const wrongPairBalance = converter.parseExtractedText([
+    'Cloudberry Test Bank synthetic statement USD',
+    'Date Description Amount Balance',
+    'OPENING BALANCE 1,000.00',
+    '01/06/2026 Fictional debit -5.00 994.00',
+    '02/06/2026 Fictional credit +5.00 1,000.00',
+  ].join('\n'), 'invented-wrong-pair-balance.txt', 'text/plain', { size: 100, lastModified: 1 })
+  const wrongPairTransactions = wrongPairBalance.rows.filter((row) => row.date)
+  console.log(`Wrong-pair-balance regression: ${wrongPairTransactions.length} transactions; amounts=${wrongPairTransactions.map((row) => row.amount).join(',')}; validation=${wrongPairBalance.validation.status}`)
+  assert.deepEqual(wrongPairTransactions.map((row) => [row.amount, row.balance]), [[-5, 994], [5, 1000]], 'established paired layout preserves source rows even when balances do not reconcile')
+  assert.equal(wrongPairBalance.validation.status, 'review')
+  assert.deepEqual(wrongPairBalance.validation.issues.filter((issue) => issue.code === 'balance-step-inconsistency').map((issue) => issue.delta), [-1, 1], 'validator flags both wrong source balance steps instead of deleting a row')
+  assert.deepEqual(wrongPairBalance.provenance.ambiguousLineNumbers, [], 'explicit source header preserves transaction layout despite a balance mismatch')
+  const wrongPairCsv = (await converter.createCsvBlob(wrongPairBalance).text()).split(/\r?\n/).map(parseCsvLine)
+  const wrongPairHeaders = wrongPairCsv[0]
+  assert.deepEqual(wrongPairCsv.slice(1).filter((row) => row[wrongPairHeaders.indexOf('Date')]).map((row) => [Number(row[wrongPairHeaders.indexOf('Amount')]), Number(row[wrongPairHeaders.indexOf('Balance')])]), [[-5, 994], [5, 1000]], 'CSV preserves the inconsistent source balance and both actual amounts')
+
+  const wrongPairQbo = await converter.createQboBlob(wrongPairBalance).text()
+  assert.deepEqual([...wrongPairQbo.matchAll(/<TRNAMT>([^\r\n]+)/g)].map((match) => Number(match[1])), [-5, 5], 'QBO retains both source movements while the UI carries the balance warning')
+
+  const pairedWithoutOpening = converter.parseExtractedText([
+    'Cloudberry Test Bank synthetic statement USD',
+    'Date Description Amount Balance',
+    '01/06/2026 Fictional debit -5.00 995.00',
+    '02/06/2026 Fictional credit +5.00 1,000.00',
+  ].join('\n'), 'invented-no-opening-pairs.txt', 'text/plain', { size: 100, lastModified: 1 })
+  const noOpeningTransactions = pairedWithoutOpening.rows.filter((row) => row.date)
+  console.log(`No-opening pair regression: ${noOpeningTransactions.length} transactions; amounts=${noOpeningTransactions.map((row) => row.amount).join(',')}`)
+  assert.deepEqual(noOpeningTransactions.map((row) => [row.date, row.amount, row.balance]), [['01/06/2026', -5, 995], ['02/06/2026', 5, 1000]], 'explicit source header preserves actual paired transactions without an opening balance')
+  assert.deepEqual(noOpeningTransactions.map((row) => row.sourceLineNumbers), [[3], [4]])
+  assert.deepEqual(pairedWithoutOpening.provenance.ambiguousLineNumbers, [])
+  const noOpeningCsv = (await converter.createCsvBlob(pairedWithoutOpening).text()).split(/\r?\n/).map(parseCsvLine)
+  const noOpeningAmountColumn = noOpeningCsv[0].indexOf('Amount')
+  assert.deepEqual(noOpeningCsv.slice(1).map((row) => Number(row[noOpeningAmountColumn])), [-5, 5], 'CSV preserves both no-opening source amounts')
+  assert.deepEqual([...((await converter.createQboBlob(pairedWithoutOpening).text()).matchAll(/<TRNAMT>([^\r\n]+)/g))].map((match) => Number(match[1])), [-5, 5], 'QBO preserves both no-opening source amounts')
+
+  const sparsePlain = converter.parseExtractedText([
+    'Cloudberry Test Bank synthetic statement USD',
+    'OPENING BALANCE 1,000.00',
+    '01/06/2026 Fictional debit -5.00 995.00',
+    '02/06/2026 Fictional debit -2.00',
+    '03/06/2026 Fictional credit +7.00 1,000.00',
+  ].join('\n'), 'invented-sparse-plain.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.equal(sparsePlain.rows.filter((row) => row.date).length, 3, 'plain fallback retains a dated transaction with a trailing amount even when balance is absent')
+  assert.equal(sparsePlain.rows[2].amount, -2, 'sparse plain source amount is preserved')
+  console.log(`Sparse balance review regression: amounts=${sparsePlain.rows.filter((row) => row.date).map((row) => row.amount).join(',')}; validation=${sparsePlain.validation.status}; issues=${sparsePlain.validation.issueCount}`)
+  assert.equal(sparsePlain.validation.status, 'valid', 'the balance step includes the intervening parsed -2.00 transaction')
+  assert.equal(sparsePlain.validation.issueCount, 0)
+  assert.equal(sparsePlain.validation.checkedRows, 2, 'both observed balance intervals are checked')
+  assert.equal(sparsePlain.rows[2].balance, undefined, 'validation never supplies an invented intermediate balance')
+  assert.equal(sparsePlain.rows[1].balance + sparsePlain.rows[2].amount + sparsePlain.rows[3].amount, sparsePlain.rows[3].balance, '995 - 2 + 7 equals the source closing balance 1000 exactly')
+  const sparseOneCentError = sparsePlain.rows.map((row, index) => index === 3 ? { ...row, balance: 1000.01 } : row)
+  const sparseOneCentValidation = converter.revalidateRows(sparseOneCentError, 'USD')
+  assert.equal(sparseOneCentValidation.status, 'review', 'including intervening amounts does not relax the cent-level guard')
+  assert.equal(sparseOneCentValidation.issues[0].delta, 0.01)
+
+  const supportedUnsigned = converter.parseExtractedText([
+    'Cloudberry Test Bank synthetic statement USD',
+    'OPENING BALANCE 1,000.00',
+    '01/06/2026 Fictional debit -5.00 995.00',
+    '02/06/2026 Fictional credit 2.00',
+    '03/06/2026 Fictional credit +3.00 1,000.00',
+  ].join('\n'), 'invented-supported-unsigned.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.deepEqual(supportedUnsigned.rows.filter((row) => row.date).map((row) => row.amount), [-5, 2, 3], 'surrounding balance evidence retains a genuine unsigned sparse transaction unchanged')
+  assert.equal(supportedUnsigned.validation.status, 'valid', 'supported unsigned sparse interval also reconciles')
+  assert.equal(supportedUnsigned.validation.issueCount, 0)
+
+  const inconsistent = converter.parseExtractedText(
+    multiline.text.replace('399,999.99', '399,998.99'),
+    'invented-inconsistent-statement.txt', 'text/plain', { size: 100, lastModified: 1 },
+  )
+  assert.equal(inconsistent.rows.filter((row) => row.amount !== undefined).length, multiline.transactionCount, 'inconsistency guard never invents or deletes rows')
+  assert.equal(inconsistent.rows[1].amount, -0.01, 'guard preserves the stated tiny withdrawal')
+  assert.equal(inconsistent.rows[1].balance, 399998.99, 'guard preserves the inconsistent source balance')
+  assert.equal(inconsistent.validation.issues.filter((issue) => issue.code === 'balance-step-inconsistency').length, 2, 'a misread middle balance flags each unexplained step')
+  const integrity = await server.ssrLoadModule('/src/lib/statementIntegrity.ts')
+  const ambiguousWarning = integrity.getStatementIntegrityWarning(trailingMemoResult)
+  assert.match(ambiguousWarning, /Ambiguous transaction starts on source lines: 5/)
+  assert.match(await converter.createCsvBlob(trailingMemoResult).text(), /Ambiguous transaction starts on source lines: 5/, 'ambiguous source warning carries into CSV')
+  const restoredMemo = await converter.importReviewJson(new File([converter.createReviewJsonBlob(trailingMemoResult)], 'invented-memo.extractmint-review.json', { type: 'application/json' }))
+  assert.deepEqual(restoredMemo.provenance.ambiguousLineNumbers, [5], 'review round trip preserves ambiguous source locations')
+  assert.equal(restoredMemo.validation.status, 'review', 'review import restores the ambiguity warning')
+  assert.equal(integrity.getStatementIntegrityWarning(restoredMemo), ambiguousWarning)
+  const warning = integrity.getStatementIntegrityWarning(inconsistent)
+  assert.match(warning, /balance.step inconsistency/i)
+  assert.match(warning, /not proof.*missing/i, 'warning does not diagnose a missing row from a balance mismatch')
+  assert.match(warning, /net.zero/i, 'warning explains the limit of balance-only completeness checks')
+  const warningCsv = await converter.createCsvBlob(inconsistent).text()
+  const warningCsvLines = warningCsv.split(/\r?\n/).map(parseCsvLine)
+  const warningColumn = warningCsvLines[0].indexOf('Statement Warnings')
+  assert.ok(warningColumn >= 0, 'CSV carries an explicit statement warning column')
+  assert.equal(warningCsvLines[1][warningColumn], warning, 'warning persists even on rows with no row-level issue')
+  const WarningExcelJS = (await import('exceljs')).default
+  const warningWorkbook = new WarningExcelJS.Workbook()
+  await warningWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(inconsistent)).arrayBuffer()))
+  for (const sheetName of ['Summary', 'Reconciliation']) {
+    assert.ok(JSON.stringify(warningWorkbook.getWorksheet(sheetName).getSheetValues()).includes(warning), `XLSX ${sheetName} carries the balance inconsistency warning`)
+  }
+  const warningCombined = new WarningExcelJS.Workbook()
+  await warningCombined.xlsx.load(Buffer.from(await (await converter.createCombinedExcelBlob([inconsistent])).arrayBuffer()))
+  for (const sheetName of ['Summary', 'Reconciliation']) {
+    assert.ok(JSON.stringify(warningCombined.getWorksheet(sheetName).getSheetValues()).includes(warning), `Combined XLSX ${sheetName} carries the warning`)
+  }
+  const inconsistentQbo = await converter.createQboBlob(inconsistent).text()
+  assert.equal((inconsistentQbo.match(/<STMTTRN>/g) ?? []).length, multiline.transactionCount, 'QBO has exact source transactions')
+  assert.doesNotMatch(inconsistentQbo, /WARNING|INCONSISTENCY|FAKE|MISSINGROW/i, 'QBO adds no unsupported warning tags or fake transactions')
+  const oneCentError = converter.parseExtractedText(
+    multiline.text.replace('399,999.99', '399,999.98'),
+    'invented-one-cent-inconsistency.txt', 'text/plain', { size: 100, lastModified: 1 },
+  )
+  assert.equal(oneCentError.validation.issues.filter((issue) => issue.code === 'balance-step-inconsistency').length, 2, 'a one-cent balance mismatch is still an inconsistency')
+  const closingError = converter.parseExtractedText(
+    multiline.text.replace('\tCLOSING BALANCE\t\t\t\t\t400,000.00', '\tCLOSING BALANCE\t\t\t\t\t399,999.99'),
+    'invented-closing-inconsistency.txt', 'text/plain', { size: 100, lastModified: 1 },
+  )
+  assert.equal(closingError.validation.status, 'review', 'unexplained closing balance step requires review')
+  const cleanMultiline = converter.parseExtractedText(multiline.text, 'invented-clean.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.equal(integrity.getStatementIntegrityWarning(cleanMultiline), undefined, 'clean source has no inconsistency warning')
+  const orphanText = multiline.text.split('\n')
+  orphanText.splice(5, 0, '\t\tORPHAN-FICTION-REF')
+  const orphan = converter.parseExtractedText(orphanText.join('\n'), 'invented-orphan.txt', 'text/plain', { size: 100, lastModified: 1 })
+  assert.deepEqual(orphan.provenance.unattachedLineNumbers, [6], 'consumed but unattached source line is explicitly recorded')
+  assert.equal(orphan.validation.status, 'review', 'unattached source data requires review even when balances match')
+  assert.match(integrity.getStatementIntegrityWarning(orphan), /unattached.*6/i, 'unattached source line warning identifies its location')
+  const orphanJson = converter.createReviewJsonBlob(orphan)
+  const restoredOrphan = await converter.importReviewJson(new File([orphanJson], 'invented-orphan.extractmint-review.json', { type: 'application/json' }))
+  assert.deepEqual(restoredOrphan.provenance, orphan.provenance, 'review JSON round trip preserves source coverage')
+  assert.deepEqual(restoredOrphan.rows.map((row) => row.sourceLineNumbers), orphan.rows.map((row) => row.sourceLineNumbers), 'review JSON preserves row provenance')
+  assert.equal(integrity.getStatementIntegrityWarning(restoredOrphan), integrity.getStatementIntegrityWarning(orphan), 'unattached source warning survives review import')
+  const appSource = readFileSync(resolve(projectRoot, 'src/App.tsx'), 'utf8')
+  assert.match(appSource, /role="alert"[\s\S]*?getStatementIntegrityWarning\(activeResult\)/, 'on-screen alert renders the same warning')
+  assert.match(appSource, /format === 'qbo'[\s\S]*?window\.confirm/, 'QBO warns on screen before download')
   const rowEditing = await server.ssrLoadModule('/src/lib/rowEditing.ts')
   const scanWarning = await server.ssrLoadModule('/src/lib/scanWarning.ts')
   for (const fixture of [

@@ -27,6 +27,7 @@ import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './com
 import { PdfRedactionTool } from './components/PdfRedactionTool'
 import { trackExtractMintEvent } from './lib/analytics'
 import { getRowReview } from './lib/reviewStatus'
+import { getStatementIntegrityWarning } from './lib/statementIntegrity'
 import { updateConversionRow } from './lib/rowEditing'
 import { hasUnacknowledgedScanWarning, scanWarningKey } from './lib/scanWarning'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
@@ -1359,6 +1360,10 @@ function App() {
   const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo') => {
     if (!activeResult) return
     if (!requireScanWarningAcknowledgement([activeResult])) return
+    if (format === 'qbo') {
+      const warning = getStatementIntegrityWarning(activeResult)
+      if (warning && !window.confirm(`${warning}\n\nQBO cannot carry these review warnings. Continue with the parsed transactions?`)) return
+    }
 
     const converter = await loadConverter()
     const creators = {
@@ -2102,7 +2107,9 @@ function App() {
                   const snapshot = exportSanitySnapshot(activeResult)
                   const okThreshold = 0.02
                   const status =
-                    snapshot.discrepancy === undefined
+                    getStatementIntegrityWarning(activeResult)
+                      ? { label: 'Statement inconsistency — review', className: 'is-review' }
+                      : snapshot.discrepancy === undefined
                       ? { label: 'Not enough balance data', className: 'is-missing' }
                       : Math.abs(snapshot.discrepancy) <= okThreshold
                         ? { label: 'Matches balance trail', className: 'is-valid' }
@@ -2263,6 +2270,16 @@ function App() {
                     <small>{validationDescription(activeResult?.validation)}</small>
                   </div>
                 </div>
+
+                {activeResult && getStatementIntegrityWarning(activeResult) ? (
+                  <section className="scan-quality-warning" role="alert" aria-live="polite">
+                    <div>
+                      <strong>Statement consistency needs review</strong>
+                      <p>{getStatementIntegrityWarning(activeResult)}</p>
+                      <small>CSV and Excel carry this warning. QBO asks you to review it before downloading.</small>
+                    </div>
+                  </section>
+                ) : null}
 
                 {activeResult?.scanQualityWarning ? (
                   <section className="scan-quality-warning" role="alert" aria-live="assertive">

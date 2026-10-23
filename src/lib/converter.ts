@@ -2,6 +2,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { getPersistentOcrText, setPersistentOcrText } from './ocrCache'
 import { attachPdfPasswordPrompt } from './pdfPasswordPrompt.mjs'
 import { getRowReview, lowerRowConfidence } from './reviewStatus'
+import { getStatementIntegrityWarning } from './statementIntegrity'
 
 export type ProgressStage =
   | 'ready'
@@ -31,10 +32,12 @@ export type ExtractedRow = {
   category: string
   confidence: number
   source: string
+  sourceLineNumbers?: number[]
 }
 
 export type ValidationIssue = {
   severity: 'info' | 'warning' | 'error'
+  code?: 'balance-step-inconsistency' | 'source-line-unattached' | 'ambiguous-transaction-start'
   message: string
   rowIndex?: number
   expectedBalance?: number
@@ -50,6 +53,16 @@ export type ValidationSummary = {
   closingBalance?: number
   validatedRowIndexes?: number[]
   issues: ValidationIssue[]
+}
+
+export type SourceProvenance = {
+  sourceLineCount: number
+  consumedLineNumbers: number[]
+  rowStartLineNumbers: number[]
+  attachedLineNumbers: number[]
+  unattachedLineNumbers: number[]
+  ambiguousLineNumbers: number[]
+  ignoredLineNumbers: number[]
 }
 
 export type ConversionResult = {
@@ -68,6 +81,7 @@ export type ConversionResult = {
     sha256?: string
   }
   rawText: string
+  provenance?: SourceProvenance
   rows: ExtractedRow[]
   confidence: number
   validation: ValidationSummary
@@ -242,6 +256,8 @@ export async function createExcelBlob(result: ConversionResult) {
     { header: 'File size', key: 'size', width: 14 },
     { header: 'Last modified', key: 'lastModified', width: 22 },
     { header: 'Processed', key: 'processed', width: 26 },
+    { header: 'Statement Warnings', key: 'statementWarnings', width: 90 },
+    { header: 'Source Coverage', key: 'sourceCoverage', width: 60 },
   ]
   summary.addRow({
     file: result.fileName,
@@ -259,6 +275,8 @@ export async function createExcelBlob(result: ConversionResult) {
       ? new Date(result.fileMeta.lastModified).toISOString()
       : '',
     processed: result.processedAt,
+    statementWarnings: getStatementIntegrityWarning(result) ?? '',
+    sourceCoverage: sourceCoverageNote(result),
   })
   result.validation.issues.forEach((issue) => {
     summary.addRow({
@@ -283,6 +301,8 @@ export async function createExcelBlob(result: ConversionResult) {
     { header: 'Notes', key: 'notes', width: 66 },
   ]
   reconciliationSheet.addRows([
+    { metric: 'Statement warnings', value: getStatementIntegrityWarning(result) ?? '', notes: 'Review against the source before importing into accounting software.' },
+    { metric: 'Source coverage', value: sourceCoverageNote(result), notes: 'Line numbers refer to extracted text. Coverage and balance checks do not establish the source transaction count.' },
     {
       metric: 'Validation status',
       value: validationLabel(result.validation.status),
@@ -390,6 +410,7 @@ export async function createExcelBlob(result: ConversionResult) {
     { header: 'Category', key: 'category', width: 18 },
     { header: 'Confidence', key: 'confidence', width: 16 },
     { header: 'Source', key: 'source', width: 18 },
+    { header: 'Source Lines', key: 'sourceLines', width: 30 },
   ]
   ;['withdrawal', 'deposit', 'tax', 'amount', 'balance'].forEach((key) => {
     const column = rows.getColumn(key)
@@ -411,6 +432,7 @@ export async function createExcelBlob(result: ConversionResult) {
       category: row.category,
       confidence: `${row.confidence}%`,
       source: row.source,
+      sourceLines: row.sourceLineNumbers?.join(', ') ?? '',
     })
   })
   ;[summary, rows].forEach((sheet) => {
@@ -454,6 +476,8 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     { header: 'Issues', key: 'issues', width: 10 },
     { header: 'SHA-256', key: 'sha256', width: 66 },
     { header: 'Processed', key: 'processed', width: 26 },
+    { header: 'Statement Warnings', key: 'statementWarnings', width: 90 },
+    { header: 'Source Coverage', key: 'sourceCoverage', width: 60 },
   ]
 
   const issuesSheet = workbook.addWorksheet('Issues')
@@ -484,6 +508,8 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     { header: 'Checked Rows', key: 'checkedRows', width: 14 },
     { header: 'Issues', key: 'issues', width: 10 },
     { header: 'Validation', key: 'validation', width: 18 },
+    { header: 'Statement Warnings', key: 'statementWarnings', width: 90 },
+    { header: 'Source Coverage', key: 'sourceCoverage', width: 60 },
   ]
 
   ;[
@@ -534,6 +560,8 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       issues: result.validation.issueCount,
       sha256: result.fileMeta.sha256 ?? '',
       processed: result.processedAt,
+      statementWarnings: getStatementIntegrityWarning(result) ?? '',
+      sourceCoverage: sourceCoverageNote(result),
     })
 
     const reconciliation = reconciliationForResult(result)
@@ -553,6 +581,8 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       checkedRows: result.validation.checkedRows,
       issues: result.validation.issueCount,
       validation: validationLabel(result.validation.status),
+      statementWarnings: getStatementIntegrityWarning(result) ?? '',
+      sourceCoverage: sourceCoverageNote(result),
     })
 
     result.validation.issues.forEach((issue) => {
@@ -582,6 +612,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       { header: 'Category', key: 'category', width: 18 },
       { header: 'Confidence', key: 'confidence', width: 16 },
       { header: 'Source', key: 'source', width: 18 },
+      { header: 'Source Lines', key: 'sourceLines', width: 30 },
     ]
     ;['withdrawal', 'deposit', 'tax', 'amount', 'balance'].forEach((key) => {
       const column = rowsSheet.getColumn(key)
@@ -603,6 +634,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
         category: row.category,
         confidence: `${row.confidence}%`,
         source: row.source,
+        sourceLines: row.sourceLineNumbers?.join(', ') ?? '',
       })
     })
     rowsSheet.getRow(1).font = { bold: true }
@@ -638,6 +670,8 @@ export function createCsvBlob(result: ConversionResult) {
       'Category',
       'Confidence',
       'Source',
+      'Source Lines',
+      'Statement Warnings',
     ],
     ...result.rows.map((row, index) => [
       row.date ?? '',
@@ -653,6 +687,8 @@ export function createCsvBlob(result: ConversionResult) {
       row.category,
       `${row.confidence}%`,
       row.source,
+      row.sourceLineNumbers?.join(', ') ?? '',
+      getStatementIntegrityWarning(result) ?? '',
     ]),
   ]
   const csv = rows
@@ -664,6 +700,55 @@ export function createCsvBlob(result: ConversionResult) {
     .join('\n')
 
   return new Blob([csv], { type: 'text/csv;charset=utf-8' })
+}
+
+function addSourceCoverageIssue(validation: ValidationSummary, provenance?: SourceProvenance) {
+  if (!provenance) return
+  if (provenance.unattachedLineNumbers.length > 0) {
+    validation.issues.push({
+      severity: 'warning',
+      code: 'source-line-unattached',
+      message: `Consumed source lines ${provenance.unattachedLineNumbers.join(', ')} were not attached to a row. Review the source for completeness.`,
+    })
+  }
+  if (provenance.ambiguousLineNumbers.length > 0) {
+    validation.issues.push({
+      severity: 'warning',
+      code: 'ambiguous-transaction-start',
+      message: `Source lines ${provenance.ambiguousLineNumbers.join(', ')} contain ambiguous transaction starts. They remain description/review evidence rather than money rows; verify against the source.`,
+    })
+  }
+  validation.issueCount = validation.issues.length
+  if (provenance.unattachedLineNumbers.length > 0 || provenance.ambiguousLineNumbers.length > 0) validation.status = 'review'
+}
+
+function readSourceLineNumbers(value: unknown): number[] | undefined {
+  return Array.isArray(value) && value.every((line) => Number.isSafeInteger(line) && line > 0)
+    ? [...value]
+    : undefined
+}
+
+function readSourceProvenance(value: unknown): SourceProvenance | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  const sourceLineCount = asFiniteNumber(record.sourceLineCount)
+  const consumedLineNumbers = readSourceLineNumbers(record.consumedLineNumbers)
+  const rowStartLineNumbers = readSourceLineNumbers(record.rowStartLineNumbers)
+  const attachedLineNumbers = readSourceLineNumbers(record.attachedLineNumbers)
+  const unattachedLineNumbers = readSourceLineNumbers(record.unattachedLineNumbers)
+  const ignoredLineNumbers = readSourceLineNumbers(record.ignoredLineNumbers)
+  const ambiguousLineNumbers = readSourceLineNumbers(record.ambiguousLineNumbers ?? [])
+  if (sourceLineCount === undefined || !Number.isSafeInteger(sourceLineCount) || sourceLineCount < 0 ||
+    !consumedLineNumbers || !rowStartLineNumbers || !attachedLineNumbers || !unattachedLineNumbers || !ignoredLineNumbers || !ambiguousLineNumbers) return undefined
+  if ([...consumedLineNumbers, ...rowStartLineNumbers, ...attachedLineNumbers, ...unattachedLineNumbers, ...ignoredLineNumbers, ...ambiguousLineNumbers]
+    .some((line) => line > sourceLineCount)) return undefined
+  return { sourceLineCount, consumedLineNumbers, rowStartLineNumbers, attachedLineNumbers, unattachedLineNumbers, ambiguousLineNumbers, ignoredLineNumbers }
+}
+
+function sourceCoverageNote(result: ConversionResult) {
+  const provenance = result.provenance
+  if (!provenance) return 'Source coverage unavailable'
+  return `${provenance.consumedLineNumbers.length} consumed; ${provenance.attachedLineNumbers.length} attached; ${provenance.rowStartLineNumbers.length} row starts; ${provenance.unattachedLineNumbers.length} unattached${provenance.unattachedLineNumbers.length ? ` (lines ${provenance.unattachedLineNumbers.join(', ')})` : ''}; ${provenance.ambiguousLineNumbers.length} ambiguous`
 }
 
 function totalsForResult(result: ConversionResult) {
@@ -925,6 +1010,7 @@ export function createReviewJsonBlob(result: ConversionResult) {
     summary: result.summary,
     rows: result.rows,
     rowCount: result.rows.length,
+    provenance: result.provenance,
     totals: {
       amount: result.rows.reduce((sum, row) => sum + (row.amount ?? 0), 0),
       withdrawal: result.rows.reduce((sum, row) => sum + (row.withdrawal ?? 0), 0),
@@ -1159,10 +1245,13 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
       category,
       confidence,
       source,
+      sourceLineNumbers: readSourceLineNumbers(record.sourceLineNumbers),
     }
   })
 
+  const provenance = readSourceProvenance(payload.provenance)
   const validation = revalidateRows(rows, currencyCode)
+  addSourceCoverageIssue(validation, provenance)
   const statementPeriod =
     typeof payload.statementPeriod === 'object' && payload.statementPeriod
       ? refreshStatementPeriod(rows, payload.statementPeriod as ConversionResult['statementPeriod'])
@@ -1175,6 +1264,7 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
     statementPeriod,
     fileMeta,
     rawText: '',
+    provenance,
     rows,
     confidence: asFiniteNumber(payload.confidence) ?? Math.round(summary.total > 0 ? 84 : 0),
     validation,
@@ -1803,17 +1893,15 @@ export function parseExtractedText(
   const lines = normalized
     .split(/\r?\n/)
     .map((line) => line.replace(/^ +| +$/g, ''))
-    .filter((line) => line.replace(/\t/g, '').trim())
 
-  const structuredRows = parseStatementTable(lines)
-  const rows =
-    structuredRows.length > 0
-      ? structuredRows
-      : lines.flatMap((line, index) => isStatementNoise(line) ? [] : parseLine(line, index + 1))
+  const structured = parseStatementTable(lines)
+  const parsed = structured.rows.length > 0 ? structured : parseUnstructuredStatement(lines)
+  const rows = parsed.rows
   const fallbackRows = rows.length > 0 ? rows : buildFallbackRows(lines)
   const statementPeriod = detectStatementPeriod(lines, fallbackRows)
   const currencyCode = detectCurrencyCode(normalized, fileName)
   const validation = validateBalances(fallbackRows, currencyCode)
+  addSourceCoverageIssue(validation, parsed.provenance)
   if (pdfColumnMethods?.some(({ method }) => method !== 'header')) {
     const fallbackIssues = fallbackRows.flatMap((row, rowIndex) => row.date ? [{
       severity: 'warning' as const,
@@ -1854,6 +1942,7 @@ export function parseExtractedText(
     statementPeriod,
     fileMeta,
     rawText: normalized,
+    provenance: rows.length > 0 ? parsed.provenance : undefined,
     rows: reviewedRows,
     confidence,
     validation,
@@ -1874,7 +1963,8 @@ async function sha256Hex(file: File) {
 
 function parseLine(line: string, lineNumber: number): ExtractedRow[] {
   const flatLine = line.replace(/\t/g, ' ')
-  const date = flatLine.match(datePattern)?.[0]
+  const dateMatch = flatLine.match(datePattern)
+  const date = dateMatch?.index === 0 ? dateMatch[0] : undefined
   const amountMatches = flatLine.match(amountPattern) ?? []
   const parsedAmounts = amountMatches.map(parseAmount).filter(isFinite)
 
@@ -1887,6 +1977,7 @@ function parseLine(line: string, lineNumber: number): ExtractedRow[] {
       category: 'Balance',
       confidence: 96,
       source: `Line ${lineNumber}`,
+      sourceLineNumbers: [lineNumber],
     }]
   }
 
@@ -1906,91 +1997,228 @@ function parseLine(line: string, lineNumber: number): ExtractedRow[] {
       category: classifyLine(flatLine),
       confidence: date ? 92 : 78,
       source: `Line ${lineNumber}`,
+      sourceLineNumbers: [lineNumber],
     },
   ]
 }
 
-function parseStatementTable(lines: string[]): ExtractedRow[] {
+function parseStatementTable(lines: string[]) {
   const hasStatementColumns = lines.some(
-    (line) =>
-      line.includes('\t') &&
-      /Withdrawal|Pengeluaran|Deposits|Deposit|Balance|Baki/i.test(line),
+    (line) => line.includes('\t') && /Withdrawal|Pengeluaran|Deposits|Deposit|Balance|Baki/i.test(line),
   )
-  if (!hasStatementColumns) return []
-
   const rows: ExtractedRow[] = []
+  const consumed = new Set<number>()
+  let inTable = false
   let current: (ExtractedRow & { descriptionParts: string[] }) | undefined
-  let sourceLine = 0
 
   const finishCurrent = () => {
     if (!current) return
     const { descriptionParts, ...row } = current
     row.description = compactDescription(descriptionParts)
+    row.category = classifyStructuredRow(row.description, row.amount)
+    row.confidence = row.balance !== undefined && row.amount !== undefined ? 98 : 84
     rows.push(row)
     current = undefined
   }
+  const financialCells = (columns: string[]) => {
+    const withdrawal = parseMoneyCell(columns[3])
+    const deposit = parseMoneyCell(columns[4])
+    return {
+      withdrawal,
+      deposit,
+      tax: parseMoneyCell(columns[5]),
+      balance: parseMoneyCell(columns[6]),
+      amount: deposit ?? (withdrawal !== undefined ? -withdrawal : undefined),
+    }
+  }
+  // A date alone is insufficient: multiline statements can put money on a later
+  // description line. Look within this group for amount/balance column evidence.
+  const hasDeferredFinancials = (start: number) => {
+    for (let index = start + 1; index < lines.length; index += 1) {
+      const line = lines[index]
+      if (isStatementNoise(line)) continue
+      const columns = splitStatementColumns(line)
+      if (columns[0].match(datePattern)?.index === 0 && line.includes('\t')) return false
+      if (/^(OPENING|CLOSING) BALANCE/i.test(columns[1])) return false
+      const cells = financialCells(columns)
+      if (cells.amount !== undefined || cells.balance !== undefined) return true
+    }
+    return false
+  }
 
-  for (const line of lines) {
-    sourceLine += 1
+  if (hasStatementColumns) lines.forEach((line, index) => {
+    const sourceLine = index + 1
     const columns = splitStatementColumns(line)
-    const [dateColumn, descriptionColumn, referenceColumn, withdrawalColumn, depositColumn, taxColumn, balanceColumn] =
-      columns
-    const candidateDate = dateColumn.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)?.[0]
-
-    if (isStatementNoise(line)) continue
+    const [dateColumn, descriptionColumn, referenceColumn] = columns
+    if (isStatementNoise(line)) return
+    const cells = financialCells(columns)
+    const dateMatch = dateColumn.match(datePattern)
+    const candidateDate = dateMatch?.index === 0 ? dateMatch[0] : undefined
+    const hasFinancials = cells.amount !== undefined || cells.balance !== undefined
+    const startsTransaction = Boolean(candidateDate && line.includes('\t') &&
+      (hasFinancials || (dateColumn === candidateDate && hasDeferredFinancials(index))))
 
     if (/^OPENING BALANCE$/i.test(descriptionColumn) || /^CLOSING BALANCE/i.test(descriptionColumn)) {
       finishCurrent()
-      const balance = parseMoneyCell(balanceColumn)
+      inTable = true
+      consumed.add(sourceLine)
       rows.push({
         description: descriptionColumn,
-        balance,
+        balance: cells.balance,
         category: 'Balance',
         confidence: 96,
         source: `Line ${sourceLine}`,
+        sourceLineNumbers: [sourceLine],
       })
-      continue
+      return
     }
-
-    if (candidateDate) {
+    if (startsTransaction && candidateDate) {
       finishCurrent()
-      const withdrawal = parseMoneyCell(withdrawalColumn)
-      const deposit = parseMoneyCell(depositColumn)
-      const tax = parseMoneyCell(taxColumn)
-      const balance = parseMoneyCell(balanceColumn)
-      const amount = deposit ?? (withdrawal !== undefined ? -withdrawal : undefined)
+      inTable = true
+      consumed.add(sourceLine)
       const initialDescription = dateColumn.replace(candidateDate, '').trim()
       current = {
         date: candidateDate,
         description: initialDescription,
         descriptionParts: [initialDescription, descriptionColumn],
         reference: referenceColumn || undefined,
-        withdrawal,
-        deposit,
-        tax,
-        amount,
-        balance,
-        category: classifyStructuredRow(initialDescription, amount),
-        confidence: balance !== undefined && (amount !== undefined || tax !== undefined) ? 98 : 84,
+        ...cells,
+        category: 'Transaction',
+        confidence: 84,
         source: `Line ${sourceLine}`,
+        sourceLineNumbers: [sourceLine],
       }
-      continue
+      return
     }
-
-    if (current) {
-      if (descriptionColumn && !isStatementNoise(descriptionColumn)) {
-        current.descriptionParts.push(descriptionColumn)
-      }
-      if (referenceColumn && !isStatementNoise(referenceColumn)) {
-        current.reference = current.reference
-          ? `${current.reference} ${referenceColumn}`.trim()
-          : referenceColumn
-      }
+    if (!inTable) return
+    consumed.add(sourceLine)
+    if (!current) return
+    // A dated table row with no financial evidence remains unattached for review.
+    // A standalone dated memo or date-like description cell is a continuation.
+    if (candidateDate && line.includes('\t') && dateColumn === candidateDate) return
+    if (hasFinancials) {
+      const fields = ['withdrawal', 'deposit', 'tax', 'balance', 'amount'] as const
+      // Attach complementary cells only. Conflicting values remain unattached
+      // for review; grouping must never overwrite source money to reconcile it.
+      if (fields.some((field) => cells[field] !== undefined && current?.[field] !== undefined && cells[field] !== current[field])) return
+      fields.forEach((field) => {
+        if (current && cells[field] !== undefined) current[field] = cells[field]
+      })
     }
-  }
-
+    const description = line.includes('\t')
+      ? [dateColumn, descriptionColumn].filter(Boolean).join(' ')
+      : line
+    if (description) current.descriptionParts.push(description)
+    if (referenceColumn) current.reference = [current.reference, referenceColumn].filter(Boolean).join(' ')
+    if (description || referenceColumn || hasFinancials) current.sourceLineNumbers?.push(sourceLine)
+  })
   finishCurrent()
-  return rows
+  return { rows, provenance: sourceProvenance(lines, rows, consumed) }
+}
+
+function parseUnstructuredStatement(lines: string[]) {
+  const rows: ExtractedRow[] = []
+  const consumed = new Set<number>()
+  const ambiguous = new Set<number>()
+  let current: ExtractedRow | undefined
+  let inStatement = false
+  const hasTrailingFinancialPair = (line: string) => {
+    const tokens = [...line.matchAll(amountPattern)]
+    const amount = tokens.at(-2)
+    const balance = tokens.at(-1)
+    if (!amount || !balance) return false
+    // Adjacent terminal money fields provide an amount/balance layout pattern.
+    // Numbers separated by narrative words are still description evidence.
+    return /^\s+$/.test(line.slice(amount.index + amount[0].length, balance.index)) &&
+      balance.index + balance[0].length === line.trimEnd().length
+  }
+  let explicitPairColumns = false
+  const isExplicitPairHeader = (line: string) =>
+    /^(?:Date|Transaction Date|Posting Date|Value Date) (?:Description|Details|Narrative|Particulars) (?:Amount|Signed Amount) (?:Balance|Running Balance)$/i.test(line.replace(/\s+/g, ' ').trim())
+  const supportedByBalanceContext = (candidate: ExtractedRow, sourceIndex: number) => {
+    const previousBalanceIndex = rows.findLastIndex((row) => row.balance !== undefined)
+    const previousBalance = rows[previousBalanceIndex]?.balance
+    if (previousBalance === undefined || candidate.amount === undefined) return false
+    const intervening = rows.slice(previousBalanceIndex + 1)
+    if (intervening.some((row) => row.amount === undefined)) return false
+    const expected = previousBalance + intervening.reduce((sum, row) => sum + (row.amount ?? 0), 0) + candidate.amount
+    if (candidate.balance !== undefined) return roundMoney(expected) === roundMoney(candidate.balance)
+    for (let index = sourceIndex + 1; index < lines.length; index += 1) {
+      if (isStatementNoise(lines[index])) continue
+      const next = parseLine(lines[index], index + 1)[0]
+      if (!next) continue
+      if (next.balance !== undefined && (next.category === 'Balance' || hasTrailingFinancialPair(lines[index]))) {
+        const movement = next.category === 'Balance' ? 0 : next.amount
+        return movement !== undefined && roundMoney(expected + movement) === roundMoney(next.balance)
+      }
+      // Another potential transaction prevents independent support for this one.
+      if (next.date) return false
+    }
+    return false
+  }
+  lines.forEach((line, index) => {
+    if (isExplicitPairHeader(line)) {
+      explicitPairColumns = true
+      return
+    }
+    if (isStatementNoise(line)) return
+    const sourceLine = index + 1
+    const candidate = parseLine(line, sourceLine)[0]
+    const dateMatch = line.match(datePattern)
+    const startsWithDate = dateMatch?.index === 0
+    // A trailing number alone does not distinguish a dated memo from a row.
+    // Only a recognized source header establishes plain-text amount/balance
+    // columns independently of reconciliation. Repeated numeric styling alone
+    // does not prove layout; headerless candidates need balance context.
+    const lastMoneyToken = line.match(amountPattern)?.at(-1)
+    const trailingMoney = lastMoneyToken !== undefined && line.trim().endsWith(lastMoneyToken)
+    const sparseRowEvidence = candidate?.balance === undefined && trailingMoney && candidate && supportedByBalanceContext(candidate, index)
+    const balanceRowEvidence = candidate?.balance !== undefined && hasTrailingFinancialPair(line) &&
+      (explicitPairColumns || supportedByBalanceContext(candidate, index))
+    const datedMemo = candidate?.date && !balanceRowEvidence && !sparseRowEvidence
+    if (candidate && !datedMemo) {
+      rows.push(candidate)
+      consumed.add(sourceLine)
+      inStatement = true
+      current = candidate.date ? candidate : undefined
+      if (/^CLOSING BALANCE/i.test(candidate.description)) explicitPairColumns = false
+      return
+    }
+    if (datedMemo) {
+      consumed.add(sourceLine)
+      ambiguous.add(sourceLine)
+      if (current) {
+        current.description = compactDescription([current.description, line])
+        current.sourceLineNumbers?.push(sourceLine)
+      } else {
+        rows.push({ description: line, category: 'Review', confidence: 20, source: `Line ${sourceLine}`, sourceLineNumbers: [sourceLine] })
+      }
+      inStatement = true
+      return
+    }
+    if (!inStatement) return
+    consumed.add(sourceLine)
+    // Retain unreadable dated lines as unattached evidence, not invented rows.
+    if (startsWithDate && !candidate && !(line.match(amountPattern)?.length)) return
+    if (current) {
+      current.description = compactDescription([current.description, line])
+      current.sourceLineNumbers?.push(sourceLine)
+    }
+  })
+  return { rows, provenance: sourceProvenance(lines, rows, consumed, ambiguous) }
+}
+
+function sourceProvenance(lines: string[], rows: ExtractedRow[], consumed: Set<number>, ambiguous = new Set<number>()): SourceProvenance {
+  const attached = new Set(rows.flatMap((row) => row.sourceLineNumbers ?? []))
+  return {
+    sourceLineCount: lines.length,
+    consumedLineNumbers: [...consumed],
+    rowStartLineNumbers: rows.flatMap((row) => row.sourceLineNumbers?.slice(0, 1) ?? []),
+    attachedLineNumbers: [...attached].sort((a, b) => a - b),
+    unattachedLineNumbers: [...consumed].filter((line) => !attached.has(line)),
+    ambiguousLineNumbers: [...ambiguous],
+    ignoredLineNumbers: lines.flatMap((_, index) => consumed.has(index + 1) ? [] : [index + 1]),
+  }
 }
 
 function splitStatementColumns(line: string) {
@@ -2025,19 +2253,10 @@ function isStatementNoise(line: string) {
 }
 
 function compactDescription(parts: string[]) {
-  const seen = new Set<string>()
   return parts
     .map((part) => part.replace(/\s+/g, ' ').trim())
     .filter(Boolean)
-    .filter((part) => {
-      const key = part.toLowerCase()
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
     .join(' ')
-    .replace(/\s+([/#*-])/g, '$1')
-    .slice(0, 260)
 }
 
 function parseMoneyCell(value: string) {
@@ -2237,14 +2456,22 @@ function validateBalances(
   for (let position = 1; position < rowsWithBalances.length; position += 1) {
     const previous = rowsWithBalances[position - 1]
     const current = rowsWithBalances[position]
-    const amount = amountForBalanceCheck(current.row)
+    const currentAmount = /^CLOSING BALANCE/i.test(current.row.description)
+      ? 0
+      : amountForBalanceCheck(current.row)
+    const interveningTransactions = rows.slice(previous.index + 1, current.index).filter((row) => row.date)
+    const interveningAmounts = interveningTransactions.map(amountForBalanceCheck)
+    const amount = currentAmount !== undefined && interveningAmounts.every((value) => value !== undefined)
+      ? roundMoney(currentAmount + interveningAmounts.reduce<number>((sum, value) => sum + (value ?? 0), 0))
+      : undefined
 
     if (amount === undefined || previous.row.balance === undefined || current.row.balance === undefined) {
-      if (current.row.date) {
+      if (current.row.date || interveningTransactions.length > 0) {
         issues.push({
           severity: 'warning',
           rowIndex: current.index,
-          message: 'Balance present but no debit/deposit amount was detected for this row.',
+          code: 'balance-step-inconsistency',
+          message: 'Balance-step inconsistency: at least one parsed transaction in this balance interval has no debit/deposit amount to explain the step. Review the source; this does not establish that a row is missing.',
         })
       }
       continue
@@ -2256,14 +2483,15 @@ function validateBalances(
     const actualBalance = roundMoney(current.row.balance)
     const delta = roundMoney(actualBalance - expectedBalance)
 
-    if (Math.abs(delta) > 0.01) {
+    if (delta !== 0) {
       issues.push({
         severity: Math.abs(delta) > 1 ? 'error' : 'warning',
+        code: 'balance-step-inconsistency',
         rowIndex: current.index,
         expectedBalance,
         actualBalance,
         delta,
-        message: `Expected balance ${money(expectedBalance, currencyCode)} after ${money(amount, currencyCode)}, but found ${money(actualBalance, currencyCode)}.`,
+        message: `Balance-step inconsistency: expected balance ${money(expectedBalance, currencyCode)} after net movement ${money(amount, currencyCode)} across the parsed balance interval, but found ${money(actualBalance, currencyCode)}. Review the parsed amount and both balances against the source; this is not proof of a missing row.`,
       })
     }
   }
