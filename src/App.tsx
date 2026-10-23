@@ -27,6 +27,7 @@ import { PdfCanvasViewer, type PdfDocumentProxy, type PdfMatchInfo } from './com
 import { PdfRedactionTool } from './components/PdfRedactionTool'
 import { trackExtractMintEvent } from './lib/analytics'
 import { getRowReview } from './lib/reviewStatus'
+import { updateConversionRow } from './lib/rowEditing'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
@@ -957,15 +958,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistPdfTextIndex])
 
-  const parseMoneyInput = (value: string) => {
-    const text = value.trim()
-    if (!text) return undefined
-    const isNegative = text.includes('(') || text.startsWith('-')
-    const numeric = Number(text.replace(/[^\d.]/g, ''))
-    if (!Number.isFinite(numeric)) return undefined
-    return isNegative ? -numeric : numeric
-  }
-
   const updateRow = (
     resultIndex: number,
     rowIndex: number,
@@ -982,57 +974,10 @@ function App() {
     setResults((previous) => {
       const target = previous[resultIndex]
       if (!target) return previous
-      const originalRow = target.rows[rowIndex]
-      if (!originalRow) return previous
-
-      const nextRows = [...target.rows]
-      const nextRow = { ...originalRow }
-
-      if (field === 'date') {
-        nextRow.date = rawValue.trim() ? rawValue.trim() : undefined
-      } else if (field === 'description') {
-        nextRow.description = rawValue.trim() || nextRow.description
-      } else if (field === 'reference') {
-        nextRow.reference = rawValue.trim() ? rawValue.trim() : undefined
-      } else if (field === 'withdrawal') {
-        const parsed = parseMoneyInput(rawValue)
-        nextRow.withdrawal = parsed === undefined ? undefined : Math.abs(parsed)
-        if (nextRow.withdrawal !== undefined) {
-          nextRow.deposit = undefined
-          nextRow.amount = -Math.abs(nextRow.withdrawal)
-        }
-      } else if (field === 'deposit') {
-        const parsed = parseMoneyInput(rawValue)
-        nextRow.deposit = parsed === undefined ? undefined : Math.abs(parsed)
-        if (nextRow.deposit !== undefined) {
-          nextRow.withdrawal = undefined
-          nextRow.amount = Math.abs(nextRow.deposit)
-        }
-      } else if (field === 'amount') {
-        const parsed = parseMoneyInput(rawValue)
-        nextRow.amount = parsed
-        if (parsed !== undefined) {
-          nextRow.withdrawal = undefined
-          nextRow.deposit = undefined
-        }
-      } else if (field === 'balance') {
-        nextRow.balance = parseMoneyInput(rawValue)
-      }
-
-      nextRows[rowIndex] = nextRow
-
       const converter = getConverterIfLoaded()
-      const nextValidation = converter
-        ? converter.revalidateRows(nextRows, target.currencyCode || 'USD')
-        : target.validation
       const nextResults = [...previous]
       nextResults[resultIndex] = {
-        ...target,
-        rows: nextRows,
-        validation: nextValidation,
-        statementPeriod: converter
-          ? converter.refreshStatementPeriod(nextRows, target.statementPeriod)
-          : target.statementPeriod,
+        ...updateConversionRow(target, rowIndex, field, rawValue, converter ?? undefined),
       }
       return nextResults
     })

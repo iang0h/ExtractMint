@@ -46,6 +46,7 @@ const server = await createServer({
 try {
   const converter = await server.ssrLoadModule('/src/lib/converter.ts')
   const review = await server.ssrLoadModule('/src/lib/reviewStatus.ts')
+  const rowEditing = await server.ssrLoadModule('/src/lib/rowEditing.ts')
   for (const fixture of [
     { id: 'synthetic-header-columns', offset: 0 },
     { id: 'synthetic-shifted-columns', offset: 70 },
@@ -137,6 +138,39 @@ try {
   }
   await assertReviewExports(converter, reviewResult)
 
+  const changedAmountResult = rowEditing.updateConversionRow(reviewResult, 1, 'amount', '-105.00', converter)
+  assert.equal(changedAmountResult.rows[1].amount, -105, 'amount correction updates signed amount')
+  assert.equal(changedAmountResult.rows[1].withdrawal, 105, 'negative amount correction becomes a withdrawal')
+  assert.equal(changedAmountResult.rows[1].category, 'Withdrawal', 'amount correction refreshes category')
+  assert.equal(changedAmountResult.summary.total, 235, 'amount correction refreshes the displayed detected total')
+  assert.equal(changedAmountResult.validation.status, 'review', 'amount correction re-runs validation')
+
+  const correctedDirection = rowEditing.updateConversionRow(reviewResult, 2, 'amount', '40.00', converter)
+  const correctedRows = rowEditing.updateConversionRow(correctedDirection, 4, 'amount', '-15.00', converter)
+  assert.equal(correctedRows.rows[2].category, 'Deposit', 'changing a debit to a credit refreshes the row category')
+  assert.equal(correctedRows.rows[4].category, 'Withdrawal', 'changing a credit to a debit refreshes the row category')
+  assert.equal(correctedRows.validation.status, 'review', 'document-level notice remains visible after row corrections')
+  assert.deepEqual(
+    correctedRows.validation.issues.filter(({ rowIndex }) => rowIndex !== undefined),
+    [],
+    'corrected directions clear their row-level reconciliation issues',
+  )
+  assert.deepEqual(
+    correctedRows.rows.map((_, index) => review.getRowReview(correctedRows.validation, index).status),
+    ['Unvalidated', 'Verified', 'Verified', 'Verified', 'Verified'],
+    'resolved rows earn Verified while the file-level warning remains in the summary',
+  )
+  await assertReviewExports(converter, correctedRows)
+  const correctedWorkbook = new (await import('exceljs')).default.Workbook()
+  await correctedWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(correctedRows)).arrayBuffer()))
+  const reconciliation = new Map()
+  correctedWorkbook.getWorksheet('Reconciliation').eachRow((row, rowNumber) => {
+    if (rowNumber > 1) reconciliation.set(String(row.getCell(1).value), row.getCell(2).value)
+  })
+  assert.equal(reconciliation.get('Deposits (sum)'), '$115.00', 'XLSX deposit total updates after direction correction')
+  assert.equal(reconciliation.get('Withdrawals (sum)'), '$115.00', 'XLSX withdrawal total updates after direction correction')
+  assert.equal(reconciliation.get('Transaction net (deposits - withdrawals)'), '$0.00', 'XLSX transaction net updates after direction correction')
+
   console.log('Statement reliability geometry regressions passed.')
 } finally {
   await server.close()
@@ -166,6 +200,24 @@ async function assertReviewExports(converter, result) {
   })
   assert.deepEqual(xlsxRows.map((row) => row['Review Status']), expectedStatuses, 'XLSX review statuses match row-level review')
   assert.equal(xlsxRows[0]['Review Notes'], '', 'file-level notice is not copied into the opening balance row')
+
+  result.rows.forEach((source, index) => {
+    for (const [label, field] of [
+      ['Date', 'date'],
+      ['Description', 'description'],
+      ['Withdrawal', 'withdrawal'],
+      ['Deposit', 'deposit'],
+      ['Amount', 'amount'],
+      ['Balance', 'balance'],
+      ['Category', 'category'],
+    ]) {
+      const expected = source[field] ?? ''
+      const csvValue = csvRows[index][label] ?? ''
+      const xlsxValue = xlsxRows[index][label] ?? ''
+      assert.equal(typeof expected === 'number' ? Number(csvValue) : csvValue, expected, `CSV row ${index + 1} ${label} matches on-screen row`)
+      assert.equal(typeof expected === 'number' ? Number(xlsxValue) : xlsxValue, expected, `XLSX row ${index + 1} ${label} matches on-screen row`)
+    }
+  })
 
   const qbo = await converter.createQboBlob(result).text()
   const qboTransactions = Array.from(qbo.matchAll(/<STMTTRN>([\s\S]*?)<\/STMTTRN>/g), ([, block]) => ({

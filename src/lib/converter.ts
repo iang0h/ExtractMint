@@ -114,8 +114,12 @@ const datePattern =
 const amountPattern =
   /[-+]?(?:[$€£]\s*)?\(?\d{1,3}(?:,\d{3})+(?:\.\d{2})?\)?|[-+]?(?:[$€£]\s*)?\(?\d+\.\d{2}\)?|[-+]?[$€£]\s*\(?\d+\)?/g
 
-export function revalidateRows(rows: ExtractedRow[], currencyCode: string) {
-  return validateBalances(rows, currencyCode)
+export function revalidateRows(
+  rows: ExtractedRow[],
+  currencyCode: string,
+  seeds?: { openingBalance?: number; closingBalance?: number },
+) {
+  return validateBalances(rows, currencyCode, seeds)
 }
 
 export function refreshStatementPeriod(
@@ -925,7 +929,10 @@ export function createReviewJsonBlob(result: ConversionResult) {
       deposit: result.rows.reduce((sum, row) => sum + (row.deposit ?? 0), 0),
       balanceCount: result.rows.reduce((sum, row) => sum + (row.balance !== undefined ? 1 : 0), 0),
     },
-    validation: result.validation,
+    validation: {
+      ...result.validation,
+      validatedRowIndexes: undefined,
+    },
   }
 
   return new Blob([JSON.stringify(payload, null, 2)], {
@@ -2181,7 +2188,11 @@ function scoreConfidence(
   return Math.max(20, Math.min(98, score))
 }
 
-function validateBalances(rows: ExtractedRow[], currencyCode: string): ValidationSummary {
+function validateBalances(
+  rows: ExtractedRow[],
+  currencyCode: string,
+  seeds?: { openingBalance?: number; closingBalance?: number },
+): ValidationSummary {
   const issues: ValidationIssue[] = []
   const rowsWithBalances = rows
     .map((row, index) => ({ row, index }))
@@ -2240,8 +2251,8 @@ function validateBalances(rows: ExtractedRow[], currencyCode: string): Validatio
     status,
     checkedRows,
     issueCount: issues.length,
-    openingBalance: openingRow?.balance ?? rowsWithBalances.at(0)?.row.balance,
-    closingBalance: closingRow?.balance ?? rowsWithBalances.at(-1)?.row.balance,
+    openingBalance: openingRow?.balance ?? seeds?.openingBalance ?? rowsWithBalances.at(0)?.row.balance,
+    closingBalance: closingRow?.balance ?? seeds?.closingBalance ?? rowsWithBalances.at(-1)?.row.balance,
     validatedRowIndexes,
     issues,
   }
