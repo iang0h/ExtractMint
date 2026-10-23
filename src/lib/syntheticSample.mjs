@@ -1,6 +1,12 @@
 export const SYNTHETIC_SAMPLE_URL = '/samples/synthetic-bank-statement.pdf'
 export const SYNTHETIC_SAMPLE_FILENAME = 'synthetic-bank-statement.pdf'
 
+export function shouldConfirmSampleReplacement(results) {
+  return results.some(
+    (result) => result.workspaceOrigin !== 'sample-preview' && result.workspaceOrigin !== 'synthetic-sample',
+  )
+}
+
 export async function fetchSyntheticSample(fetcher = fetch) {
   const response = await fetcher(SYNTHETIC_SAMPLE_URL)
   if (!response.ok) {

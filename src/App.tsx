@@ -28,6 +28,7 @@ import { PdfRedactionTool } from './components/PdfRedactionTool'
 import { trackExtractMintEvent } from './lib/analytics'
 import { getRowReview } from './lib/reviewStatus'
 import { updateConversionRow } from './lib/rowEditing'
+import { hasUnacknowledgedScanWarning, scanWarningKey } from './lib/scanWarning'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
 import { clearPersistentOcrCache, getPersistentOcrCacheStats } from './lib/ocrCache'
 import {
@@ -37,7 +38,7 @@ import {
   setPersistentPdfPageText,
 } from './lib/pdfTextIndexCache'
 import { getConverterIfLoaded, loadConverter } from './lib/converterLoader'
-import { createSampleRunGuard, fetchSyntheticSample, SYNTHETIC_SAMPLE_FILENAME, SYNTHETIC_SAMPLE_URL, type SampleRun } from './lib/syntheticSample.mjs'
+import { createSampleRunGuard, fetchSyntheticSample, shouldConfirmSampleReplacement, SYNTHETIC_SAMPLE_FILENAME, SYNTHETIC_SAMPLE_URL, type SampleRun } from './lib/syntheticSample.mjs'
 
 type CachedPdfDocumentProxy = PdfDocumentProxy & {
   destroy?: () => Promise<void>
@@ -212,6 +213,7 @@ const faqItems = [
 ]
 
 const createSampleResultLite = (): ConversionResult => ({
+  workspaceOrigin: 'sample-preview',
   fileName: 'sample-bank-statement.pdf',
   fileType: 'application/pdf',
   currencyCode: 'USD',
@@ -456,6 +458,7 @@ function App() {
   const supportEmail = (import.meta.env.VITE_SUPPORT_EMAIL ?? '').trim()
   const [results, setResults] = useState<ConversionResult[]>([createSampleResultLite()])
   const [activeIndex, setActiveIndex] = useState(0)
+  const [acknowledgedScanWarnings, setAcknowledgedScanWarnings] = useState<Set<string>>(() => new Set())
   const [showAllRows, setShowAllRows] = useState(false)
   const [onlyIssues, setOnlyIssues] = useState(false)
   const [onlyLowConfidence, setOnlyLowConfidence] = useState(
@@ -556,6 +559,10 @@ function App() {
   }
 
   const activeResult = results[activeIndex] ?? results[0]
+  const activeScanWarningKey = activeResult?.scanQualityWarning ? scanWarningKey(activeResult) : undefined
+  const activeScanWarningAcknowledged = activeScanWarningKey
+    ? acknowledgedScanWarnings.has(activeScanWarningKey)
+    : false
   const activeSha = activeResult?.fileMeta?.sha256
   const activePdfUrl = activeSha ? pdfUrlsBySha[activeSha] : undefined
   const activePdfSignature = activeResult
@@ -1223,7 +1230,13 @@ function App() {
         })
       }
 
-      const combined = [...imported, ...converted]
+      const combined = [
+        ...imported.map((result) => ({ ...result, workspaceOrigin: 'upload' as const })),
+        ...converted.map((result) => ({
+          ...result,
+          workspaceOrigin: source === 'sample' ? 'synthetic-sample' as const : 'upload' as const,
+        })),
+      ]
       if (source === 'sample' && combined.length === 0) throw new Error('The synthetic sample produced no results.')
       if (combined.length === 0) return
       if (source === 'upload' && converted.length > 0) {
@@ -1303,6 +1316,10 @@ function App() {
 
   const loadSyntheticSample = async (): Promise<void> => {
     if (sampleLoadingRef.current || isProcessing) return
+    if (
+      shouldConfirmSampleReplacement(results) &&
+      !window.confirm('Load the synthetic sample? This will replace the converted files in your workspace. Choose Cancel to keep them.')
+    ) return
     sampleLoadingRef.current = true
     setIsSampleLoading(true)
     const sampleRun = sampleRunGuardRef.current.startSample()
@@ -1341,6 +1358,7 @@ function App() {
 
   const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo') => {
     if (!activeResult) return
+    if (!requireScanWarningAcknowledgement([activeResult])) return
 
     const converter = await loadConverter()
     const creators = {
@@ -1363,6 +1381,7 @@ function App() {
 
   const downloadReviewJson = () => {
     if (!activeResult) return
+    if (!requireScanWarningAcknowledgement([activeResult])) return
     void (async () => {
       const converter = await loadConverter()
       const blob = converter.createReviewJsonBlob(activeResult)
@@ -1379,6 +1398,7 @@ function App() {
 
   const downloadReviewPack = async () => {
     if (results.length === 0) return
+    if (!requireScanWarningAcknowledgement(results)) return
     setIsProcessing(true)
     setProgress({
       fileName: results.length === 1 ? results[0].fileName : `${results.length} files`,
@@ -1523,6 +1543,7 @@ function App() {
 
   const downloadCombinedWorkbook = async () => {
     if (results.length < 2) return
+    if (!requireScanWarningAcknowledgement(results)) return
     setIsProcessing(true)
     setProgress({
       fileName: `${results.length} files`,
@@ -1598,20 +1619,30 @@ function App() {
           warning: payload.warning,
         },
       ])
-    } catch (error) {
+    } catch {
       setAgentMessages((previous) => [
         ...previous,
         {
           role: 'assistant',
           content:
-            'The agent API is not reachable in this environment. On Vercel, it will answer with the local fallback immediately, and it can use FreeLLMAPI once the gateway environment variables are set.',
-          provider: 'offline',
-          warning: error instanceof Error ? error.message : 'Agent request failed',
+            'AI answers temporarily unavailable — showing built-in guidance. Review the flagged rows and compare opening and closing balances with the source statement before exporting.',
+          provider: 'built-in guidance',
         },
       ])
     } finally {
       setIsAgentThinking(false)
     }
+  }
+
+  const requireScanWarningAcknowledgement = (exportResults: ConversionResult[]) => {
+    if (!hasUnacknowledgedScanWarning(exportResults, acknowledgedScanWarnings)) return true
+    setProgress({
+      fileName: exportResults.length === 1 ? exportResults[0].fileName : `${exportResults.length} files`,
+      stage: 'ready',
+      percent: 100,
+      detail: 'Review the scanned statement warning and acknowledge it before exporting money data.',
+    })
+    return false
   }
 
   const attachPdfToActiveResult = (file: File | null) => {
@@ -2180,7 +2211,7 @@ function App() {
                 <FileText size={18} />
                 <span>
                   <strong>{result.fileName}</strong>
-                  <small>{result.rows.length} extracted rows</small>
+                  <small>{result.scanQualityWarning ? 'Scan needs review' : `${result.rows.length} extracted rows`}</small>
                 </span>
               </button>
             ))}
@@ -2232,6 +2263,34 @@ function App() {
                     <small>{validationDescription(activeResult?.validation)}</small>
                   </div>
                 </div>
+
+                {activeResult?.scanQualityWarning ? (
+                  <section className="scan-quality-warning" role="alert" aria-live="assertive">
+                    <div>
+                      <strong>Scanned document needs review</strong>
+                      <p>{activeResult.scanQualityWarning}</p>
+                      {!activeScanWarningAcknowledged ? (
+                        <small>Excel, CSV, QBO, and other money exports are paused until you acknowledge this warning.</small>
+                      ) : null}
+                    </div>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={activeScanWarningAcknowledged}
+                        onChange={(event) => {
+                          if (!activeScanWarningKey) return
+                          setAcknowledgedScanWarnings((previous) => {
+                            const next = new Set(previous)
+                            if (event.target.checked) next.add(activeScanWarningKey)
+                            else next.delete(activeScanWarningKey)
+                            return next
+                          })
+                        }}
+                      />
+                      I reviewed the scan and want to continue
+                    </label>
+                  </section>
+                ) : null}
 
                 <div
                   className={

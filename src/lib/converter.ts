@@ -53,6 +53,7 @@ export type ValidationSummary = {
 }
 
 export type ConversionResult = {
+  workspaceOrigin?: 'sample-preview' | 'synthetic-sample' | 'upload'
   fileName: string
   fileType: string
   currencyCode: string
@@ -71,6 +72,7 @@ export type ConversionResult = {
   confidence: number
   validation: ValidationSummary
   pdfColumnMethods?: Array<{ page: number; method: 'header' | 'clusters' | 'legacy' | 'ocr' }>
+  scanQualityWarning?: string
   processedAt: string
   summary: {
     title: string
@@ -181,7 +183,7 @@ export async function convertFiles(
     const rawText = typeof extractedText === 'string' ? extractedText : extractedText.text
     const pdfColumnMethods = typeof extractedText === 'string' ? undefined : extractedText.pdfColumnMethods
     results.push(
-      parseRawText(rawText, file.name, file.type || extensionOf(file.name), {
+      parseExtractedText(rawText, file.name, file.type || extensionOf(file.name), {
         size: file.size,
         lastModified: file.lastModified,
         sha256,
@@ -206,7 +208,7 @@ Statement period Apr 01 2026 - Apr 30 2026
 Ending balance 38,268.10
 `
 
-  return parseRawText(sample, 'sample-bank-statement.pdf', 'application/pdf', {
+  return parseExtractedText(sample, 'sample-bank-statement.pdf', 'application/pdf', {
     size: sample.length,
     lastModified: Date.now(),
     sha256: 'sample',
@@ -1259,8 +1261,8 @@ export async function createReviewPackZipBlob(results: ConversionResult[], sourc
     const baseName = result.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
     const xlsx = await createExcelBlob(result)
     const json = createReviewJsonBlob(result)
-    root.file(`${baseName}.xlsx`, xlsx)
-    root.file(`${baseName}.extractmint-review.json`, json)
+    root.file(`${baseName}.xlsx`, await xlsx.arrayBuffer())
+    root.file(`${baseName}.extractmint-review.json`, await json.arrayBuffer())
   }
 
   const manifest: Array<{ sha256: string; fileName: string; mimeType: string; size: number; path: string }> = []
@@ -1269,7 +1271,7 @@ export async function createReviewPackZipBlob(results: ConversionResult[], sourc
     if (!sha256 || !source?.blob) continue
     const safeName = sanitizeZipName(source.fileName || `${sha256}`)
     const path = `sources/${sha256}-${safeName}`
-    sourcesFolder.file(`${sha256}-${safeName}`, source.blob)
+    sourcesFolder.file(`${sha256}-${safeName}`, await source.blob.arrayBuffer())
     manifest.push({
       sha256,
       fileName: source.fileName,
@@ -1785,7 +1787,7 @@ function trimTrailingEmptyColumns(columns: string[]) {
   return next
 }
 
-function parseRawText(
+export function parseExtractedText(
   rawText: string,
   fileName: string,
   fileType: string,
@@ -1807,7 +1809,7 @@ function parseRawText(
   const rows =
     structuredRows.length > 0
       ? structuredRows
-      : lines.flatMap((line, index) => parseLine(line, index + 1))
+      : lines.flatMap((line, index) => isStatementNoise(line) ? [] : parseLine(line, index + 1))
   const fallbackRows = rows.length > 0 ? rows : buildFallbackRows(lines)
   const statementPeriod = detectStatementPeriod(lines, fallbackRows)
   const currencyCode = detectCurrencyCode(normalized, fileName)
@@ -1822,11 +1824,27 @@ function parseRawText(
     validation.issueCount = validation.issues.length
     if (fallbackIssues.length > 0) validation.status = 'review'
   }
+  const datedTransactionLineCount = lines.filter((line) => datePattern.test(line) && !isStatementNoise(line)).length
+  const parsedDatedRows = fallbackRows.filter((row) => Boolean(row.date))
+  const incompleteOcrRows = parsedDatedRows.filter((row) => row.amount === undefined || row.balance === undefined).length
+  const ocrProducedNoUsableRows = fallbackRows.every((row) => !row.date && row.amount === undefined)
+  const usedOcr = pdfColumnMethods?.some(({ method }) => method === 'ocr') === true
+  const scanQualityWarning =
+    usedOcr &&
+    (ocrProducedNoUsableRows || datedTransactionLineCount > parsedDatedRows.length || incompleteOcrRows > 0)
+      ? 'Amounts could not be read from some scanned lines. Try a clearer scan or a text-based PDF, then review the source before exporting.'
+      : undefined
+  if (scanQualityWarning) {
+    validation.issues.push({ severity: 'warning', message: scanQualityWarning })
+    validation.issueCount = validation.issues.length
+    validation.status = 'review'
+  }
   const reviewedRows = lowerRowConfidence(fallbackRows, validation)
   const summary = summarize(lines, reviewedRows, fileName, validation)
   const confidence = Math.min(
     scoreConfidence(fileType, reviewedRows, normalized, validation),
     pdfColumnMethods?.some(({ method }) => method !== 'header') ? 68 : 98,
+    scanQualityWarning ? 55 : 98,
   )
 
   return {
@@ -1840,6 +1858,7 @@ function parseRawText(
     confidence,
     validation,
     pdfColumnMethods,
+    scanQualityWarning,
     processedAt: new Date().toISOString(),
     summary,
   }
@@ -1858,6 +1877,18 @@ function parseLine(line: string, lineNumber: number): ExtractedRow[] {
   const date = flatLine.match(datePattern)?.[0]
   const amountMatches = flatLine.match(amountPattern) ?? []
   const parsedAmounts = amountMatches.map(parseAmount).filter(isFinite)
+
+  const balanceLabel = flatLine.match(/\b(OPENING BALANCE|CLOSING BALANCE|BALANCE BROUGHT FORWARD|BALANCE CARRIED FORWARD)\b/i)?.[0]
+  if (balanceLabel && parsedAmounts.length > 0) {
+    const opening = /OPENING|BROUGHT FORWARD/i.test(balanceLabel)
+    return [{
+      description: opening ? 'OPENING BALANCE' : 'CLOSING BALANCE',
+      balance: parsedAmounts.at(-1),
+      category: 'Balance',
+      confidence: 96,
+      source: `Line ${lineNumber}`,
+    }]
+  }
 
   if (!date && !looksLikeReceiptTotal(flatLine)) return []
   if (parsedAmounts.length === 0) return []
@@ -1972,8 +2003,9 @@ function isStatementNoise(line: string) {
   const text = line.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim()
   if (!text) return true
   return (
-    /^Page \/|^Halaman$|^Page \d+ of \d+$/i.test(text) ||
+    /^Page \/|^Halaman$|^Page \d+(?: of \d+)?$/i.test(text) ||
     /^Statement Date \/|^Tarikh Penyata$|^Should you have|^or call our CIMB/i.test(text) ||
+    /\b(statement period|important notice|please note|effective from|effective on|terms and conditions|fee schedule|contact us|page \d+ of \d+)\b/i.test(text) ||
     /^PREF\/S\b|^CIMB Bank Berhad|^Statement of Account$/i.test(text) ||
     /^Date Tarikh Description|^Date Tarikh$|^Date Description/i.test(text) ||
     /^Tarikh Diskripsi|^Description Diskripsi|^Ref No|^No\. Rujukan$/i.test(text) ||

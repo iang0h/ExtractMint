@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createSampleRunGuard, fetchSyntheticSample, SYNTHETIC_SAMPLE_URL } from '../src/lib/syntheticSample.mjs'
+import { createSampleRunGuard, fetchSyntheticSample, shouldConfirmSampleReplacement, SYNTHETIC_SAMPLE_URL } from '../src/lib/syntheticSample.mjs'
 
 test('fetchSyntheticSample returns the PDF blob from the fixed sample URL', async () => {
   const pdf = new Blob(['%PDF-1.7'], { type: 'application/pdf' })
@@ -44,4 +44,12 @@ test('an active sample finishes exactly once', () => {
   assert.equal(guard.finish(sample, 'sample_conversion_completed'), true)
   assert.equal(guard.finish(sample, 'sample_conversion_failed'), false)
   assert.deepEqual(events, ['sample_conversion_started', 'sample_conversion_completed'])
+})
+
+test('the sample replacement prompt is limited to real converted work', () => {
+  assert.equal(shouldConfirmSampleReplacement([{ workspaceOrigin: 'sample-preview' }]), false)
+  assert.equal(shouldConfirmSampleReplacement([{ workspaceOrigin: 'synthetic-sample' }]), false)
+  assert.equal(shouldConfirmSampleReplacement([{ workspaceOrigin: 'sample-preview' }, { workspaceOrigin: 'synthetic-sample' }]), false)
+  assert.equal(shouldConfirmSampleReplacement([{ workspaceOrigin: 'upload' }]), true)
+  assert.equal(shouldConfirmSampleReplacement([{ fileName: 'imported-review.json' }]), true)
 })

@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf'
+import { createCanvas } from '@napi-rs/canvas'
 
 const magnitudes = [41, 999.95, 10000, 25000, 100000]
 
@@ -72,3 +73,29 @@ export function createColumnStatement({ offset = 0, includeHeaders = true, multi
 }
 
 export const reliabilityMagnitudes = magnitudes
+
+export function createImageOnlyStatementPdf() {
+  const canvas = createCanvas(1400, 1800)
+  const context = canvas.getContext('2d')
+  context.fillStyle = '#fff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.fillStyle = '#111'
+  context.font = 'bold 44px Arial'
+  const lines = [
+    'Testbank Synthetic Statement',
+    'Account: 0000000427 | Account holder: Avery Example',
+    'Statement period: 03/04/2026 to 05/04/2026',
+    'OPENING BALANCE 1,000.00',
+    '03/04/2026 Synthetic debit (40.00) 960.00',
+    '04/04/2026 Important notice: statement information changes on 05/04/2026',
+    '04/04/2026 Synthetic row unreadable',
+    '05/04/2026 Synthetic credit +50.00 1,010.00',
+    'CLOSING BALANCE 1,010.00',
+    'Page 1 of 1',
+  ]
+  lines.forEach((line, index) => context.fillText(line, 100, 120 + index * 160))
+
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' })
+  pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 612, 792)
+  return new Uint8Array(pdf.output('arraybuffer'))
+}

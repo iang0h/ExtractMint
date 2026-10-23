@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createServer } from 'vite'
-import { createColumnStatement, reliabilityMagnitudes } from './fixtures/statement-reliability.mjs'
+import { createColumnStatement, createImageOnlyStatementPdf, reliabilityMagnitudes } from './fixtures/statement-reliability.mjs'
 
 if (!globalThis.DOMMatrix) {
   const canvas = await import('@napi-rs/canvas')
@@ -47,6 +48,7 @@ try {
   const converter = await server.ssrLoadModule('/src/lib/converter.ts')
   const review = await server.ssrLoadModule('/src/lib/reviewStatus.ts')
   const rowEditing = await server.ssrLoadModule('/src/lib/rowEditing.ts')
+  const scanWarning = await server.ssrLoadModule('/src/lib/scanWarning.ts')
   for (const fixture of [
     { id: 'synthetic-header-columns', offset: 0 },
     { id: 'synthetic-shifted-columns', offset: 70 },
@@ -78,6 +80,7 @@ try {
     assert.equal(result.validation.openingBalance, 250000, `${fixture.id}: stated opening balance`)
     assert.equal(result.validation.closingBalance, result.rows.at(-1)?.balance, `${fixture.id}: closing balance`)
     assert.equal(result.validation.status, 'valid', `${fixture.id}: running balances reconcile`)
+    assert.equal(result.validation.issueCount, 0, `${fixture.id}: no validation issues remain`)
     assert.equal(
       transactions.reduce((sum, row) => sum + (row.deposit ?? 0) - (row.withdrawal ?? 0), 0),
       0,
@@ -88,6 +91,27 @@ try {
     }
   }
 
+  const builtInSampleFile = new File(
+    [readFileSync(resolve(projectRoot, 'public/samples/synthetic-bank-statement.pdf'))],
+    'synthetic-bank-statement.pdf',
+    { type: 'application/pdf', lastModified: 1 },
+  )
+  const [builtInSample] = await converter.convertFiles([builtInSampleFile], () => {}, { persistOcrCache: false })
+  const sampleTransactions = builtInSample.rows.filter((row) => row.date && row.amount !== undefined)
+  assert.equal(builtInSample.validation.openingBalance, 1000, 'built-in synthetic sample uses its stated opening balance')
+  assert.deepEqual(sampleTransactions.map((row) => row.withdrawal ?? row.deposit), [125.5, 300, 62], 'built-in synthetic sample assigns transaction columns')
+  assert.equal(builtInSample.validation.closingBalance, 1112.5, 'built-in synthetic sample uses its stated closing balance')
+  assert.equal(
+    builtInSample.validation.openingBalance +
+      sampleTransactions.reduce((sum, row) => sum + (row.deposit ?? 0) - (row.withdrawal ?? 0), 0) -
+      builtInSample.validation.closingBalance,
+    0,
+    'built-in synthetic sample has a $0.00 reconciliation discrepancy',
+  )
+  assert.deepEqual(builtInSample.pdfColumnMethods, [{ page: 1, method: 'clusters' }], 'sample uses a fallback because it has no amount headers')
+  assert.equal(builtInSample.validation.status, 'review', 'fallback assignment remains visible as needs review')
+  assert.ok(builtInSample.confidence < 98, 'fallback assignment does not receive full confidence')
+
   const headerlessFile = new File([createColumnStatement({ includeHeaders: false })], 'synthetic-headerless.pdf', {
     type: 'application/pdf',
     lastModified: 1,
@@ -96,6 +120,64 @@ try {
   assert.ok(headerless.rows.length > 0, 'headerless synthetic statement still returns rows')
   assert.ok(headerless.confidence < 80, 'headerless column fallback lowers confidence')
   assert.equal(headerless.validation.status, 'review', 'headerless column fallback requires review')
+  assert.ok(
+    headerless.rows.every((row, index) => !row.date || review.getRowReview(headerless.validation, index).status !== 'Verified'),
+    'fallback-assigned transaction rows never receive a Verified badge',
+  )
+
+  const imageOnlyBytes = createImageOnlyStatementPdf()
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const imageOnlyDocument = await pdfjs.getDocument({ data: imageOnlyBytes }).promise
+  const imageOnlyPage = await imageOnlyDocument.getPage(1)
+  const imageOnlyContent = await imageOnlyPage.getTextContent()
+  assert.equal(imageOnlyContent.items.filter((item) => item.str?.trim()).length, 0, 'scan fixture contains no selectable text')
+  await imageOnlyDocument.destroy()
+
+  const imageOnlyOcrText = [
+    'Testbank Synthetic Statement',
+    'Account: 0000000427 | Account holder: Avery Example',
+    'Statement period: 03/04/2026 to 05/04/2026',
+    'OPENING BALANCE 1,000.00',
+    '03/04/2026 Synthetic debit (40.00) 960.00',
+    '04/04/2026 Important notice: statement information changes on 05/04/2026',
+    '04/04/2026 Synthetic row unreadable',
+    '05/04/2026 Synthetic credit +50.00 1,010.00',
+    'CLOSING BALANCE 1,010.00',
+    'Page 1 of 1',
+  ].join('\n')
+  const scanResult = converter.parseExtractedText(
+    imageOnlyOcrText,
+    'synthetic-image-only-statement.pdf',
+    'application/pdf',
+    { size: imageOnlyBytes.length, lastModified: 1 },
+    [{ page: 1, method: 'ocr' }],
+  )
+  assert.equal(scanResult.rows.filter((row) => row.date).length, 2, 'dated notice and unreadable row are excluded from transactions')
+  assert.ok(!scanResult.rows.some((row) => /important notice|unreadable/i.test(row.description)), 'notice text is not exported as a transaction')
+  assert.equal(scanResult.validation.openingBalance, 1000, 'scanned statement uses its stated opening balance')
+  assert.equal(scanResult.validation.closingBalance, 1010, 'scanned statement uses its stated closing balance')
+  assert.match(scanResult.scanQualityWarning, /amounts could not be read/i, 'missing OCR amount creates a clear warning')
+  assert.match(scanResult.scanQualityWarning, /clearer scan or a text-based PDF/i, 'warning gives users a practical next step')
+  assert.equal(scanResult.validation.status, 'review', 'incomplete scan needs review')
+  assert.ok(scanResult.confidence < 70, 'incomplete scan lowers confidence')
+  assert.equal(
+    scanWarning.hasUnacknowledgedScanWarning([scanResult], new Set()),
+    true,
+    'money export is blocked before acknowledging the scan warning',
+  )
+  assert.equal(
+    scanWarning.hasUnacknowledgedScanWarning([scanResult], new Set([scanWarning.scanWarningKey(scanResult)])),
+    false,
+    'acknowledgement lets the user proceed with money exports',
+  )
+  const unreadableScan = converter.parseExtractedText(
+    'Page 1',
+    'synthetic-unreadable-scan.pdf',
+    'application/pdf',
+    { size: 20, lastModified: 1 },
+    [{ page: 1, method: 'ocr' }],
+  )
+  assert.ok(unreadableScan.scanQualityWarning, 'completely unreadable OCR still shows an explicit warning')
 
   const reviewRows = [
     { description: 'OPENING BALANCE', balance: 1000, category: 'Balance', confidence: 96, source: 'Synthetic' },
@@ -161,7 +243,53 @@ try {
     'resolved rows earn Verified while the file-level warning remains in the summary',
   )
   await assertReviewExports(converter, correctedRows)
-  const correctedWorkbook = new (await import('exceljs')).default.Workbook()
+
+  const correctedDocx = await converter.createDocxBlob(correctedRows)
+  const mammoth = await import('mammoth')
+  const docxText = (await mammoth.extractRawText({ buffer: Buffer.from(await correctedDocx.arrayBuffer()) })).value
+  assert.match(docxText, /Synthetic wrong debit direction/, 'DOCX includes the corrected row')
+  assert.match(docxText, /40\.00/, 'DOCX includes the corrected amount')
+  assert.match(docxText, /Deposit/, 'DOCX includes the updated category')
+
+  const correctedPdf = await converter.createPdfBlob(correctedRows)
+  const correctedPdfDocument = await pdfjs.getDocument({ data: await correctedPdf.arrayBuffer() }).promise
+  const correctedPdfText = (await correctedPdfDocument.getPage(1)).getTextContent()
+  const correctedPdfItems = (await correctedPdfText).items.map((item) => item.str).join(' ')
+  assert.match(correctedPdfItems, /Synthetic wrong debit direction/, 'PDF includes the corrected row')
+  assert.match(correctedPdfItems, /40\.00/, 'PDF includes the corrected amount')
+  await correctedPdfDocument.destroy()
+
+  const correctedReviewJson = JSON.parse(await converter.createReviewJsonBlob(correctedRows).text())
+  assert.equal(correctedReviewJson.rows[2].category, 'Deposit', 'Review JSON includes the corrected category')
+  assert.equal(correctedReviewJson.rows[2].deposit, 40, 'Review JSON includes the corrected direction')
+  assert.equal(correctedReviewJson.rows[4].withdrawal, 15, 'Review JSON includes the corrected withdrawal')
+
+  const correctedPack = await converter.createReviewPackZipBlob([correctedRows])
+  const JSZip = (await import('jszip')).default
+  const ExcelJS = (await import('exceljs')).default
+  const pack = await JSZip.loadAsync(Buffer.from(await correctedPack.arrayBuffer()))
+  const packedJsonFile = pack.file('extractmint-review-pack/synthetic-row-review.extractmint-review.json')
+  assert.ok(packedJsonFile, 'Review pack includes the corrected review JSON')
+  const packedJson = JSON.parse(await packedJsonFile.async('string'))
+  assert.equal(packedJson.rows[2].category, 'Deposit', 'Review pack JSON includes the corrected category')
+  const packedWorkbookFile = pack.file('extractmint-review-pack/synthetic-row-review.xlsx')
+  assert.ok(packedWorkbookFile, 'Review pack includes a corrected workbook')
+  const packedWorkbook = new ExcelJS.Workbook()
+  await packedWorkbook.xlsx.load(await packedWorkbookFile.async('nodebuffer'))
+  assert.equal(packedWorkbook.getWorksheet('Rows').getRow(4).getCell(11).value, 'Deposit', 'Review pack workbook includes the corrected category')
+
+  const combinedWorkbook = new ExcelJS.Workbook()
+  await combinedWorkbook.xlsx.load(Buffer.from(await (await converter.createCombinedExcelBlob([correctedRows, reviewResult])).arrayBuffer()))
+  const combinedRows = combinedWorkbook.getWorksheet('synthetic-row-review')
+  assert.ok(combinedRows, 'Combined XLSX includes each source file worksheet')
+  assert.equal(combinedRows.getRow(4).getCell(11).value, 'Deposit', 'Combined XLSX includes the corrected category')
+
+  const diagnostic = JSON.parse(await converter.createPrivacySafeDiagnosticBlob(correctedRows).text())
+  assert.equal(diagnostic.parsing.hasAmount, true, 'Diagnostic reports extraction metadata')
+  assert.equal(Object.hasOwn(diagnostic, 'rows'), false, 'Diagnostic does not include transaction rows')
+  assert.equal(JSON.stringify(diagnostic).includes('Synthetic wrong debit direction'), false, 'Diagnostic does not disclose transaction descriptions')
+
+  const correctedWorkbook = new ExcelJS.Workbook()
   await correctedWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(correctedRows)).arrayBuffer()))
   const reconciliation = new Map()
   correctedWorkbook.getWorksheet('Reconciliation').eachRow((row, rowNumber) => {
@@ -171,7 +299,7 @@ try {
   assert.equal(reconciliation.get('Withdrawals (sum)'), '$115.00', 'XLSX withdrawal total updates after direction correction')
   assert.equal(reconciliation.get('Transaction net (deposits - withdrawals)'), '$0.00', 'XLSX transaction net updates after direction correction')
 
-  console.log('Statement reliability geometry regressions passed.')
+  console.log('Statement reliability and export regressions passed.')
 } finally {
   await server.close()
 }

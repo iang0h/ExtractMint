@@ -1057,6 +1057,51 @@ footer {
   color: var(--mint-dark);
 }
 
+.scan-quality-warning {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px 24px;
+  margin: 16px 0;
+  padding: 16px 18px;
+  border: 1px solid #dfb45a;
+  border-radius: 14px;
+  background: #fff7e4;
+  color: #60440f;
+}
+
+.scan-quality-warning strong {
+  font-size: 15px;
+}
+
+.scan-quality-warning p {
+  margin: 5px 0;
+  color: #654f28;
+  line-height: 1.45;
+}
+
+.scan-quality-warning small {
+  color: #735820;
+  line-height: 1.4;
+}
+
+.scan-quality-warning label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-width: 270px;
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.4;
+}
+
+.scan-quality-warning input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: #785300;
+}
+
 .preview-panel:has(.confidence-pill.is-review) .validation-card {
   border-color: #f0d492;
   background: #fff8e6;
@@ -2248,6 +2293,10 @@ footer strong {
   }
 
   .export-sanity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scan-quality-warning {
     grid-template-columns: 1fr;
   }
 

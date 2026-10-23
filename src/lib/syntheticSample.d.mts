@@ -1,5 +1,8 @@
 export declare const SYNTHETIC_SAMPLE_URL: string
 export declare const SYNTHETIC_SAMPLE_FILENAME: string
+export declare function shouldConfirmSampleReplacement(
+  results: Array<{ workspaceOrigin?: 'sample-preview' | 'synthetic-sample' | 'upload' }>,
+): boolean
 export declare function fetchSyntheticSample(fetcher?: typeof fetch): Promise<Blob>
 export type SampleRun = { superseded: boolean; settled: boolean }
 export declare function createSampleRunGuard(
