@@ -68,6 +68,7 @@ export type ConversionResult = {
   rows: ExtractedRow[]
   confidence: number
   validation: ValidationSummary
+  pdfColumnMethods?: Array<{ page: number; method: 'header' | 'clusters' | 'legacy' | 'ocr' }>
   processedAt: string
   summary: {
     title: string
@@ -145,7 +146,7 @@ export async function convertFiles(
       detail: 'Reading file contents',
     })
 
-    const rawText = await extractText(file, (event) => {
+    const extractedText = await extractText(file, (event) => {
       onProgress({
         ...event,
         percent: Math.min(
@@ -171,12 +172,14 @@ export async function convertFiles(
       detail: 'Finding rows, totals, and document signals',
     })
 
+    const rawText = typeof extractedText === 'string' ? extractedText : extractedText.text
+    const pdfColumnMethods = typeof extractedText === 'string' ? undefined : extractedText.pdfColumnMethods
     results.push(
       parseRawText(rawText, file.name, file.type || extensionOf(file.name), {
         size: file.size,
         lastModified: file.lastModified,
         sha256,
-      }),
+      }, pdfColumnMethods),
     )
   }
 
@@ -1408,14 +1411,17 @@ async function extractPdfText(file: File, onProgress: ProgressCallback, options:
   }
   options.onPdfDocumentLoaded?.(file, pdf)
   const chunks: string[] = []
+  const pdfColumnMethods: NonNullable<ConversionResult['pdfColumnMethods']> = []
   const signature = fileSignature(file)
   const ocrLanguage = normalizeOcrLanguage(options.ocrLanguage)
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber)
     const content = await page.getTextContent()
-    const text = formatPdfTextItems(content.items)
-    chunks.push(`Page ${pageNumber}\n${text}`)
+    const pageText = formatPdfTextItems(content.items)
+    chunks.push(`Page ${pageNumber}\n${pageText.text}`)
+    pdfColumnMethods.push({ page: pageNumber, method: pageText.method })
+    console.debug('[ExtractMint] PDF column assignment', { page: pageNumber, method: pageText.method })
     onProgress({
       fileName: file.name,
       stage: 'reading',
@@ -1427,7 +1433,7 @@ async function extractPdfText(file: File, onProgress: ProgressCallback, options:
   const extracted = chunks.join('\n')
   const extractedDensity = extracted.replace(/\s+/g, '').length / Math.max(pdf.numPages, 1)
 
-  if (!options.forceOcr && extractedDensity >= 220) return extracted
+  if (!options.forceOcr && extractedDensity >= 220) return { text: extracted, pdfColumnMethods }
 
   onProgress({
     fileName: file.name,
@@ -1450,7 +1456,10 @@ async function extractPdfText(file: File, onProgress: ProgressCallback, options:
     ocrChunks.push(`Page ${pageNumber}\n${text}`)
   }
 
-  return ocrChunks.join('\n')
+  const ocrText = ocrChunks.join('\n')
+  const ocrMethods = Array.from({ length: pdf.numPages }, (_, index) => ({ page: index + 1, method: 'ocr' as const }))
+  console.debug('[ExtractMint] PDF column assignment', { page: 'all', method: 'ocr' })
+  return { text: ocrText, pdfColumnMethods: ocrMethods }
 }
 
 type PdfDocumentLike = { getPage: (pageNumber: number) => Promise<unknown>; numPages: number }
@@ -1594,6 +1603,9 @@ type PositionedText = {
   width: number
 }
 
+type PdfColumnAnchor = { index: number; right: number }
+type PdfColumnMethod = 'header' | 'clusters' | 'legacy'
+
 function formatPdfTextItems(items: unknown[]) {
   const positioned = items
     .map(toPositionedText)
@@ -1610,11 +1622,19 @@ function formatPdfTextItems(items: unknown[]) {
     }
   })
 
-  return lines
-    .sort((a, b) => b[0].y - a[0].y)
-    .map((line) => formatPdfLine(line.sort((a, b) => a.x - b.x)))
+  const orderedLines = lines.sort((a, b) => b[0].y - a[0].y).map((line) => line.sort((a, b) => a.x - b.x))
+  const headerAnchors = findPdfHeaderAnchors(orderedLines)
+  const moneyAnchors = headerAnchors ? [] : findPdfMoneyAnchors(orderedLines)
+  const method: PdfColumnMethod = headerAnchors ? 'header' : moneyAnchors.length >= 2 ? 'clusters' : 'legacy'
+  const text = orderedLines
+    .map((line) => {
+      if (headerAnchors) return formatPdfLine(line, headerAnchors)
+      if (method === 'clusters') return formatPdfLineFromClusters(line, moneyAnchors)
+      return formatPdfLine(line)
+    })
     .filter(Boolean)
     .join('\n')
+  return { text, method }
 }
 
 function toPositionedText(item: unknown): PositionedText | undefined {
@@ -1633,11 +1653,12 @@ function toPositionedText(item: unknown): PositionedText | undefined {
   return { str: source.str.trim(), x, y, width: Number.isFinite(width) ? width : 0 }
 }
 
-function formatPdfLine(line: PositionedText[]) {
+function formatPdfLine(line: PositionedText[], anchors?: PdfColumnAnchor[]) {
   const columns = ['', '', '', '', '', '', '']
 
   line.forEach((item) => {
-    const columnIndex = columnForX(item.x)
+    const columnIndex = anchors ? columnForHeaderAnchors(item, anchors) : columnForX(item.x)
+    if (columnIndex < 0) return
     columns[columnIndex] = [columns[columnIndex], item.str].filter(Boolean).join(' ')
   })
 
@@ -1651,6 +1672,92 @@ function formatPdfLine(line: PositionedText[]) {
   }
 
   return line.map((item) => item.str).join(' ')
+}
+
+function findPdfHeaderAnchors(lines: PositionedText[][]) {
+  for (const line of lines) {
+    const anchors: PdfColumnAnchor[] = []
+    line.forEach((item) => {
+      const index = headerColumnIndex(item.str)
+      if (index !== undefined) anchors.push({ index, right: item.x + item.width })
+    })
+    const indexed = new Set(anchors.map(({ index }) => index))
+    if (indexed.has(0) && indexed.has(1) && indexed.has(3) && indexed.has(4) && indexed.has(6)) {
+      return anchors
+    }
+  }
+  return undefined
+}
+
+function headerColumnIndex(value: string) {
+  const text = value.replace(/\s+/g, ' ').trim().toLowerCase()
+  if (/^(date|transaction date|posting date|value date)(\b|\s)/i.test(text)) return 0
+  if (/^(description|details|narrative|transaction description|particulars)(\b|\s)/i.test(text)) return 1
+  if (/^(reference|ref(\s*no)?|transaction id)(\b|\s)/i.test(text)) return 2
+  if (/^(debit|debits|withdrawal|withdrawals|money out|paid out|outgoing)(\b|\s)/i.test(text)) return 3
+  if (/^(credit|credits|deposit|deposits|money in|paid in|incoming)(\b|\s)/i.test(text)) return 4
+  if (/^(tax|fee)(\b|\s)/i.test(text)) return 5
+  if (/^(balance|running balance|available balance)(\b|\s)/i.test(text)) return 6
+  return undefined
+}
+
+function columnForHeaderAnchors(item: PositionedText, anchors: PdfColumnAnchor[]) {
+  const direct = headerColumnIndex(item.str)
+  if (direct !== undefined) return direct
+  const edge = item.x + item.width
+  return anchors.reduce((best, anchor) => {
+    const distance = Math.abs(anchor.right - edge)
+    return distance < best.distance ? { index: anchor.index, distance } : best
+  }, { index: anchors[0]?.index ?? 1, distance: Number.POSITIVE_INFINITY }).index
+}
+
+function findPdfMoneyAnchors(lines: PositionedText[][]) {
+  const edges = lines
+    .flat()
+    .filter((item) => looksLikePositionedMoney(item.str))
+    .map((item) => item.x + item.width)
+    .sort((a, b) => a - b)
+  const clusters: number[][] = []
+  edges.forEach((edge) => {
+    const latest = clusters.at(-1)
+    if (latest && Math.abs(latest.reduce((sum, value) => sum + value, 0) / latest.length - edge) <= 14) {
+      latest.push(edge)
+    } else {
+      clusters.push([edge])
+    }
+  })
+  return clusters.map((cluster) => cluster.reduce((sum, value) => sum + value, 0) / cluster.length)
+}
+
+function looksLikePositionedMoney(value: string) {
+  const text = value.trim()
+  if (!text || datePattern.test(text)) return false
+  return /(?:[$€£]|[+-]|\(|\)|,|\.\d{2}\b)/.test(text) && /^[-+]?[$€£]?\s*\(?[\d,]+(?:\.\d{1,2})?\)?$/.test(text)
+}
+
+function formatPdfLineFromClusters(line: PositionedText[], anchors: number[]) {
+  const columns = ['', '', '', '', '', '', '']
+  const amountColumns = anchors.length >= 3
+    ? anchors.map((_, index) => index === 0 ? 3 : index === anchors.length - 1 ? 6 : index === 1 ? 4 : 5)
+    : [3, 6]
+
+  line.forEach((item) => {
+    let columnIndex: number
+    if (looksLikePositionedMoney(item.str)) {
+      const edge = item.x + item.width
+      const clusterIndex = anchors.reduce((best, value, index) =>
+        Math.abs(value - edge) < Math.abs(anchors[best] - edge) ? index : best, 0)
+      columnIndex = amountColumns[clusterIndex] ?? 6
+    } else if (datePattern.test(item.str)) {
+      columnIndex = 0
+    } else {
+      const left = anchors[0] ?? Number.POSITIVE_INFINITY
+      columnIndex = item.x < left - 90 ? 1 : item.x < left - 20 ? 2 : 1
+    }
+    columns[columnIndex] = [columns[columnIndex], item.str].filter(Boolean).join(' ')
+  })
+
+  return trimTrailingEmptyColumns(columns).join('\t')
 }
 
 function columnForX(x: number) {
@@ -1674,6 +1781,7 @@ function parseRawText(
   fileName: string,
   fileType: string,
   fileMeta: ConversionResult['fileMeta'],
+  pdfColumnMethods?: ConversionResult['pdfColumnMethods'],
 ): ConversionResult {
   const normalized = rawText
     .replace(/\u00a0/g, ' ')
@@ -1695,8 +1803,21 @@ function parseRawText(
   const statementPeriod = detectStatementPeriod(lines, fallbackRows)
   const currencyCode = detectCurrencyCode(normalized, fileName)
   const validation = validateBalances(fallbackRows, currencyCode)
+  if (pdfColumnMethods?.some(({ method }) => method !== 'header')) {
+    const fallbackIssues = fallbackRows.flatMap((row, rowIndex) => row.date ? [{
+      severity: 'warning' as const,
+      rowIndex,
+      message: 'PDF columns were assigned using a layout fallback. Verify this row against the statement.',
+    }] : [])
+    validation.issues.push(...fallbackIssues)
+    validation.issueCount = validation.issues.length
+    if (fallbackIssues.length > 0) validation.status = 'review'
+  }
   const summary = summarize(lines, fallbackRows, fileName, validation)
-  const confidence = scoreConfidence(fileType, fallbackRows, normalized, validation)
+  const confidence = Math.min(
+    scoreConfidence(fileType, fallbackRows, normalized, validation),
+    pdfColumnMethods?.some(({ method }) => method !== 'header') ? 68 : 98,
+  )
 
   return {
     fileName,
@@ -1708,6 +1829,7 @@ function parseRawText(
     rows: fallbackRows,
     confidence,
     validation,
+    pdfColumnMethods,
     processedAt: new Date().toISOString(),
     summary,
   }

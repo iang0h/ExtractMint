@@ -11,6 +11,7 @@
     "sample:statement": "node scripts/generate-synthetic-sample.mjs",
     "test:agent": "node tests/agent-core.test.mjs",
     "test:seo": "node tests/seo-artifacts.test.mjs",
+    "test:statement-reliability": "node tests/statement-reliability.test.mjs",
     "preview": "vite preview",
     "deploy:static": "npm run build",
     "deploy:vercel": "npx --yes vercel --prod --yes",
