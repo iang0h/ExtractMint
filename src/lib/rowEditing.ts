@@ -18,7 +18,7 @@ type RowEditorConverter = {
 }
 
 export function applyRowEdit(row: ExtractedRow, field: EditableRowField, rawValue: string): ExtractedRow {
-  const next = { ...row }
+  const next = { ...row, edited: true }
   if (field === 'date') {
     next.date = rawValue.trim() || undefined
     next.confidence = next.date ? 100 : 45
@@ -33,7 +33,22 @@ export function applyRowEdit(row: ExtractedRow, field: EditableRowField, rawValu
     return next
   }
 
+  if (field === 'withdrawal' && rawValue.trim() === '' && row.withdrawal === undefined) {
+    clearInvalidEdit(next, field)
+    return next
+  }
+  if (field === 'deposit' && rawValue.trim() === '' && row.deposit === undefined) {
+    clearInvalidEdit(next, field)
+    return next
+  }
+
   const parsed = parseMoneyInput(rawValue)
+  if (parsed === undefined && rawValue.trim() !== '') {
+    next.invalidEdits = { ...row.invalidEdits, [field]: rawValue }
+    next.confidence = 45
+    return next
+  }
+  clearInvalidEdit(next, field)
   next.confidence = parsed === undefined ? 45 : 100
   if (field === 'withdrawal') {
     next.withdrawal = parsed === undefined ? undefined : Math.abs(parsed)
@@ -92,6 +107,24 @@ export function updateConversionRow(
     }
   }
 
+  const invalidEditIssues = rows.flatMap((row, index) =>
+    Object.keys(row.invalidEdits ?? {}).map((field) => ({
+      severity: 'error' as const,
+      code: 'invalid-row-edit' as const,
+      rowIndex: index,
+      message: `The ${field} value could not be read. Enter a valid amount before exporting.`,
+    })),
+  )
+  validation = {
+    ...validation,
+    issues: [
+      ...validation.issues.filter((issue) => issue.code !== 'invalid-row-edit'),
+      ...invalidEditIssues,
+    ],
+  }
+  validation.issueCount = validation.issues.length
+  if (invalidEditIssues.length > 0) validation.status = 'review'
+
   const reviewedRows = lowerRowConfidence(rows, validation)
   const total = roundMoney(reviewedRows.reduce((sum, row) => sum + Math.abs(row.amount ?? row.deposit ?? row.withdrawal ?? 0), 0))
   const averageConfidence = reviewedRows.length === 0
@@ -120,10 +153,30 @@ export function updateConversionRow(
 function parseMoneyInput(value: string) {
   const text = value.trim()
   if (!text) return undefined
-  const isNegative = text.includes('(') || text.startsWith('-')
-  const numeric = Number(text.replace(/[^\d.]/g, ''))
+  const isParenthesized = text.startsWith('(') && text.endsWith(')')
+  if ((text.includes('(') || text.includes(')')) && !isParenthesized) return undefined
+
+  let numericText = isParenthesized ? text.slice(1, -1).trim() : text
+  const sign = numericText.match(/^([+-])/)
+  if (isParenthesized && sign) return undefined
+  const isNegative = isParenthesized || sign?.[1] === '-'
+  if (sign) numericText = numericText.slice(1).trim()
+  numericText = numericText
+    .replace(/^(?:[$€£¥]|[A-Z]{3}\s*|RM\s*)/i, '')
+    .replace(/\s*(?:[A-Z]{3}|RM)$/i, '')
+    .trim()
+  const validNumber = /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?$|^\.\d+$/
+  if (!validNumber.test(numericText)) return undefined
+  const numeric = Number(numericText.replace(/,/g, ''))
   if (!Number.isFinite(numeric)) return undefined
   return isNegative ? -numeric : numeric
+}
+
+function clearInvalidEdit(row: ExtractedRow, field: EditableRowField) {
+  if (!row.invalidEdits || !(field in row.invalidEdits)) return
+  const invalidEdits = { ...row.invalidEdits }
+  delete invalidEdits[field as keyof typeof invalidEdits]
+  row.invalidEdits = invalidEdits
 }
 
 function issueKey(issue: ValidationSummary['issues'][number]) {

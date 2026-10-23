@@ -640,6 +640,118 @@ try {
   )
   await assertReviewExports(converter, correctedRows)
 
+  const editedFlaggedWithdrawal = rowEditing.updateConversionRow(reviewResult, 2, 'withdrawal', '45.00', converter)
+  const flaggedWithdrawalRow = editedFlaggedWithdrawal.rows[2]
+  const flaggedWithdrawalReview = review.getRowReview(editedFlaggedWithdrawal.validation, 2)
+  assert.equal(flaggedWithdrawalReview.status, 'Review', 'the deliberately unreconciled edited withdrawal remains flagged on screen')
+  assert.equal(flaggedWithdrawalRow.category, 'Withdrawal', 'the edited amount keeps its withdrawal category')
+  assert.equal(flaggedWithdrawalRow.withdrawal, 45)
+  assert.equal(flaggedWithdrawalRow.amount, -45)
+  const afterTabbingThroughEmptyDeposit = rowEditing.updateConversionRow(editedFlaggedWithdrawal, 2, 'deposit', '', converter)
+  assert.equal(afterTabbingThroughEmptyDeposit.rows[2].withdrawal, 45, 'blurring an empty opposite-direction cell does not erase the edited withdrawal')
+  assert.equal(afterTabbingThroughEmptyDeposit.rows[2].amount, -45)
+
+  const malformedMoneyEdit = rowEditing.updateConversionRow(reviewResult, 2, 'withdrawal', 'abc', converter)
+  assert.equal(malformedMoneyEdit.rows[2].invalidEdits?.withdrawal, 'abc', 'malformed numeric text remains attached to the edited row')
+  assert.equal(malformedMoneyEdit.rows[2].amount, reviewResult.rows[2].amount, 'malformed text never changes the canonical numeric amount to zero')
+  assert.ok(malformedMoneyEdit.rows[2].confidence <= 54, 'malformed text lowers the row confidence')
+  assert.equal(review.getRowReview(malformedMoneyEdit.validation, 2).status, 'Review', 'a malformed money edit cannot remain Verified')
+  assert.throws(() => converter.createCsvBlob(malformedMoneyEdit), /invalid withdrawal edit/i, 'CSV blocks malformed numeric text')
+  await assert.rejects(converter.createExcelBlob(malformedMoneyEdit), /invalid withdrawal edit/i, 'XLSX blocks malformed numeric text')
+  assert.throws(() => converter.createQboBlob(malformedMoneyEdit), /invalid withdrawal edit/i, 'QBO blocks malformed numeric text')
+  const malformedTwoFields = rowEditing.updateConversionRow(
+    rowEditing.updateConversionRow(reviewResult, 2, 'withdrawal', 'abc', converter),
+    2,
+    'balance',
+    'xyz',
+    converter,
+  )
+  assert.deepEqual(malformedTwoFields.rows[2].invalidEdits, { withdrawal: 'abc', balance: 'xyz' }, 'each malformed field retains its own raw text')
+  const afterBlankDepositBlur = rowEditing.updateConversionRow(malformedTwoFields, 2, 'deposit', '', converter)
+  assert.deepEqual(afterBlankDepositBlur.rows[2].invalidEdits, { withdrawal: 'abc', balance: 'xyz' }, 'blurring an unrelated empty direction field preserves all invalid edits')
+  const balanceCorrectedOnly = rowEditing.updateConversionRow(afterBlankDepositBlur, 2, 'balance', '940', converter)
+  assert.deepEqual(balanceCorrectedOnly.rows[2].invalidEdits, { withdrawal: 'abc' }, 'correcting one malformed field leaves the other visible and invalid')
+  assert.throws(() => converter.createCsvBlob(balanceCorrectedOnly), /invalid withdrawal edit/i, 'CSV stays blocked while any malformed field remains')
+  await assert.rejects(converter.createExcelBlob(balanceCorrectedOnly), /invalid withdrawal edit/i, 'XLSX stays blocked while any malformed field remains')
+  assert.throws(() => converter.createQboBlob(balanceCorrectedOnly), /invalid withdrawal edit/i, 'QBO stays blocked while any malformed field remains')
+  const bothFieldsCorrected = rowEditing.updateConversionRow(balanceCorrectedOnly, 2, 'withdrawal', '40.00', converter)
+  assert.deepEqual(bothFieldsCorrected.rows[2].invalidEdits, {}, 'correcting both fields clears all invalid edit markers')
+  assert.ok(await converter.createExcelBlob(bothFieldsCorrected), 'XLSX exports after every invalid field is corrected')
+  assert.ok(await converter.createQboBlob(bothFieldsCorrected), 'QBO exports after every invalid field is corrected')
+  assert.ok(converter.createCsvBlob(bothFieldsCorrected), 'CSV exports after every invalid field is corrected')
+  const malformedBalanceEdit = {
+    ...reviewResult,
+    rows: [
+      { ...reviewResult.rows[0], edited: true, invalidEdits: { balance: 'abc' } },
+      ...reviewResult.rows.slice(1),
+    ],
+  }
+  assert.throws(() => converter.createCsvBlob(malformedBalanceEdit), /Row 1.*invalid balance edit/i, 'malformed balance text blocks exports even on a non-transaction balance row')
+  const restoredMalformedEdit = await converter.importReviewJson(new File([converter.createReviewJsonBlob(malformedMoneyEdit)], 'synthetic-malformed-edit.extractmint-review.json', { type: 'application/json' }))
+  assert.equal(restoredMalformedEdit.rows[2].invalidEdits?.withdrawal, 'abc', 'review JSON preserves the visible malformed edit')
+  assert.equal(review.getRowReview(restoredMalformedEdit.validation, 2).status, 'Review', 'malformed edit stays flagged after review JSON import')
+  assert.throws(() => converter.createQboBlob(restoredMalformedEdit), /invalid withdrawal edit/i, 'imported malformed text stays blocked from QBO')
+
+  const editedCsvRows = (await converter.createCsvBlob(editedFlaggedWithdrawal).text())
+    .split(/\r?\n/)
+    .map(parseCsvLine)
+  const editedCsvHeaders = editedCsvRows[0]
+  const editedCsvRow = editedCsvRows.find((row) => row[editedCsvHeaders.indexOf('Description')] === 'Synthetic wrong debit direction')
+  assert.ok(editedCsvRow, 'edited flagged withdrawal remains present in CSV')
+  assert.equal(Number(editedCsvRow[editedCsvHeaders.indexOf('Withdrawal')]), flaggedWithdrawalRow.withdrawal)
+  assert.equal(Number(editedCsvRow[editedCsvHeaders.indexOf('Amount')]), flaggedWithdrawalRow.amount)
+  assert.equal(editedCsvRow[editedCsvHeaders.indexOf('Category')], flaggedWithdrawalRow.category)
+  assert.equal(editedCsvRow[editedCsvHeaders.indexOf('Review Status')], flaggedWithdrawalReview.status)
+
+  const editedWorkbook = new (await import('exceljs')).default.Workbook()
+  await editedWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(editedFlaggedWithdrawal)).arrayBuffer()))
+  const editedRowsSheet = editedWorkbook.getWorksheet('Rows')
+  const editedXlsxHeaders = editedRowsSheet.getRow(1).values.slice(1).map(String)
+  const editedXlsxRow = []
+  editedRowsSheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 1 && row.getCell(editedXlsxHeaders.indexOf('Description') + 1).value === 'Synthetic wrong debit direction') {
+      editedXlsxRow.push(Object.fromEntries(editedXlsxHeaders.map((header, index) => [header, row.getCell(index + 1).value ?? ''])))
+    }
+  })
+  assert.equal(editedXlsxRow.length, 1, 'edited flagged withdrawal remains present in XLSX')
+  assert.equal(editedXlsxRow[0].Withdrawal, flaggedWithdrawalRow.withdrawal)
+  assert.equal(editedXlsxRow[0].Amount, flaggedWithdrawalRow.amount)
+  assert.equal(editedXlsxRow[0].Category, flaggedWithdrawalRow.category)
+  assert.equal(editedXlsxRow[0]['Review Status'], flaggedWithdrawalReview.status)
+
+  const editedQbo = await converter.createQboBlob(editedFlaggedWithdrawal).text()
+  const editedQboTransactions = Array.from(editedQbo.matchAll(/<STMTTRN>([\s\S]*?)<\/STMTTRN>/g), ([, block]) => ({
+    amount: Number(block.match(/<TRNAMT>(-?\d+\.\d{2})/)?.[1]),
+    type: block.match(/<TRNTYPE>([A-Z]+)/)?.[1],
+    memo: block.match(/<MEMO>([^\r\n]+)/)?.[1],
+  }))
+  assert.equal(editedQboTransactions.length, editedFlaggedWithdrawal.rows.filter((row) => row.date && row.amount !== undefined).length, 'QBO transaction count matches the visible financial rows')
+  assert.equal(editedQboTransactions.reduce((sum, transaction) => sum + transaction.amount, 0), editedFlaggedWithdrawal.rows.reduce((sum, row) => sum + (row.date ? row.amount ?? 0 : 0), 0), 'QBO transaction sum matches the visible signed amounts')
+  const qboEditedWithdrawal = editedQboTransactions.find((transaction) => transaction.amount === flaggedWithdrawalRow.amount)
+  assert.ok(qboEditedWithdrawal, 'QBO includes the edited withdrawal amount')
+  assert.equal(qboEditedWithdrawal.type, 'DEBIT', 'QBO transaction type preserves the Withdrawal direction')
+  assert.match(qboEditedWithdrawal.memo, /\[ExtractMint category: Withdrawal\]/, 'QBO memo carries the screen category in a standard memo field')
+  assert.match(qboEditedWithdrawal.memo, /\[ExtractMint review: Review\]/, 'QBO memo carries the same visible row review status without adding nonstandard OFX fields')
+
+  const invalidEditedWithdrawal = rowEditing.updateConversionRow(reviewResult, 2, 'withdrawal', '', converter)
+  assert.throws(() => converter.createCsvBlob(invalidEditedWithdrawal), /Row 3.*resolved amount/, 'CSV blocks rather than exporting an edited row without an amount')
+  await assert.rejects(converter.createExcelBlob(invalidEditedWithdrawal), /Row 3.*resolved amount/, 'XLSX blocks rather than exporting an edited row without an amount')
+  assert.throws(() => converter.createQboBlob(invalidEditedWithdrawal), /Row 3.*resolved amount/, 'QBO blocks rather than silently omitting an edited row without an amount')
+  await assert.rejects(converter.createDocxBlob(invalidEditedWithdrawal), /Row 3.*resolved amount/, 'DOCX also blocks incomplete transaction rows')
+  assert.throws(() => converter.createPdfBlob(invalidEditedWithdrawal), /Row 3.*resolved amount/, 'PDF also blocks incomplete transaction rows')
+  const invalidClearedTransaction = rowEditing.updateConversionRow(
+    rowEditing.updateConversionRow(reviewResult, 2, 'withdrawal', '', converter),
+    2,
+    'date',
+    '',
+    converter,
+  )
+  assert.throws(() => converter.createCsvBlob(invalidClearedTransaction), /Row 3.*resolved date/, 'clearing both date and amount cannot make an edited row disappear from CSV')
+  assert.equal(invalidClearedTransaction.rows[2].edited, true, 'edited-row provenance remains after clearing date and amount')
+  const restoredInvalidEdit = await converter.importReviewJson(new File([converter.createReviewJsonBlob(invalidClearedTransaction)], 'synthetic-invalid-edit.extractmint-review.json', { type: 'application/json' }))
+  assert.equal(restoredInvalidEdit.rows[2].edited, true, 'review JSON preserves edited-row provenance')
+  assert.throws(() => converter.createQboBlob(restoredInvalidEdit), /Row 3.*resolved date/, 'an imported invalid edit stays blocked instead of disappearing from QBO')
+
   const correctedDocx = await converter.createDocxBlob(correctedRows)
   const mammoth = await import('mammoth')
   const docxText = (await mammoth.extractRawText({ buffer: Buffer.from(await correctedDocx.arrayBuffer()) })).value

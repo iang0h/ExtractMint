@@ -713,6 +713,10 @@ footer span {
   background: #f0f0ec;
 }
 
+.export-row-error {
+  margin: 0 20px 18px;
+}
+
 .export-options {
   padding: 0 20px 20px;
   display: flex;
@@ -1761,6 +1765,11 @@ footer {
   outline: none;
   border-color: rgba(41, 176, 128, 0.72);
   box-shadow: 0 0 0 3px rgba(41, 176, 128, 0.14);
+}
+
+.table-wrap td input[aria-invalid='true'] {
+  border-color: rgba(194, 69, 69, 0.8);
+  background: rgba(194, 69, 69, 0.06);
 }
 
 table {

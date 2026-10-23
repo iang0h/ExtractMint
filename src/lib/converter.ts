@@ -43,12 +43,14 @@ export type ExtractedRow = {
   category: string
   confidence: number
   source: string
+  edited?: boolean
+  invalidEdits?: Partial<Record<'withdrawal' | 'deposit' | 'amount' | 'balance', string>>
   sourceLineNumbers?: number[]
 }
 
 export type ValidationIssue = {
   severity: 'info' | 'warning' | 'error'
-  code?: 'balance-step-inconsistency' | 'source-line-unattached' | 'ambiguous-transaction-start'
+  code?: 'balance-step-inconsistency' | 'source-line-unattached' | 'ambiguous-transaction-start' | 'invalid-row-edit'
   message: string
   rowIndex?: number
   expectedBalance?: number
@@ -282,6 +284,7 @@ Ending balance 38,268.10
 }
 
 export async function createExcelBlob(result: ConversionResult) {
+  assertExportableTransactionRows(result)
   const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'ExtractMint'
@@ -481,7 +484,7 @@ export async function createExcelBlob(result: ConversionResult) {
       withdrawal: numberOrNull(row.withdrawal),
       deposit: numberOrNull(row.deposit),
       tax: numberOrNull(row.tax),
-      amount: numberOrNull(row.amount),
+      amount: numberOrNull(signedTransactionAmount(row)),
       balance: numberOrNull(row.balance),
       reviewStatus: rowReviewStatus(result.validation, index),
       reviewNotes: rowReviewNotes(result.validation, index),
@@ -505,6 +508,7 @@ export async function createExcelBlob(result: ConversionResult) {
 }
 
 export async function createCombinedExcelBlob(results: ConversionResult[]) {
+  results.forEach(assertExportableTransactionRows)
   const ExcelJS = await import('exceljs')
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'ExtractMint'
@@ -689,7 +693,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
         withdrawal: numberOrNull(row.withdrawal),
         deposit: numberOrNull(row.deposit),
         tax: numberOrNull(row.tax),
-        amount: numberOrNull(row.amount),
+        amount: numberOrNull(signedTransactionAmount(row)),
         balance: numberOrNull(row.balance),
         reviewStatus: rowReviewStatus(result.validation, index),
         reviewNotes: rowReviewNotes(result.validation, index),
@@ -717,6 +721,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
 }
 
 export function createCsvBlob(result: ConversionResult) {
+  assertExportableTransactionRows(result)
   const rows = [
     [
       'Date',
@@ -743,7 +748,7 @@ export function createCsvBlob(result: ConversionResult) {
       String(row.withdrawal ?? ''),
       String(row.deposit ?? ''),
       String(row.tax ?? ''),
-      String(row.amount ?? ''),
+      String(signedTransactionAmount(row) ?? ''),
       String(row.balance ?? ''),
       rowReviewStatus(result.validation, index),
       rowReviewNotes(result.validation, index),
@@ -815,6 +820,48 @@ function sourceCoverageNote(result: ConversionResult) {
   return `${provenance.consumedLineNumbers.length} consumed; ${provenance.attachedLineNumbers.length} attached; ${provenance.rowStartLineNumbers.length} row starts; ${provenance.unattachedLineNumbers.length} unattached${provenance.unattachedLineNumbers.length ? ` (lines ${provenance.unattachedLineNumbers.join(', ')})` : ''}; ${provenance.ambiguousLineNumbers.length} ambiguous`
 }
 
+function signedTransactionAmount(row: ExtractedRow) {
+  if (typeof row.amount === 'number' && Number.isFinite(row.amount)) return row.amount
+  if (row.deposit === undefined && row.withdrawal === undefined && row.tax === undefined) return undefined
+  return (row.deposit ?? 0) - (row.withdrawal ?? 0) - (row.tax ?? 0)
+}
+
+function isTransactionRow(row: ExtractedRow) {
+  const hasFinancialValue = row.amount !== undefined || row.withdrawal !== undefined || row.deposit !== undefined || row.tax !== undefined
+  if (!row.date && !hasFinancialValue && row.category === 'Balance') return false
+  return row.edited === true || row.date !== undefined || hasFinancialValue
+}
+
+function assertExportableTransactionRows(result: ConversionResult) {
+  result.rows.forEach((row, index) => {
+    const rowNumber = index + 1
+    const invalidFields = Object.entries(row.invalidEdits ?? {}).filter(([, rawValue]) => typeof rawValue === 'string')
+    if (invalidFields.length > 0) {
+      const invalidField = invalidFields[0][0]
+      throw new Error(`Export paused: Row ${rowNumber} has an invalid ${invalidField} edit. Enter a valid amount before exporting.`)
+    }
+    if (!isTransactionRow(row)) return
+    const recognizedDate = canonicalStatementDate(row.date, result.dateConvention) ||
+      (['DD/MM/YYYY', 'MM/DD/YYYY'] as const).some((format) =>
+        canonicalStatementDate(row.date, { format, source: 'user' }),
+      )
+    if (!recognizedDate) {
+      throw new Error(`Export paused: Row ${rowNumber} needs a resolved date. Review the row before exporting.`)
+    }
+
+    const amount = signedTransactionAmount(row)
+    if (amount === undefined || !Number.isFinite(amount)) {
+      throw new Error(`Export paused: Row ${rowNumber} needs a resolved amount. Review the row before exporting.`)
+    }
+    if (row.deposit !== undefined && row.withdrawal !== undefined) {
+      throw new Error(`Export paused: Row ${rowNumber} has both a withdrawal and a deposit. Resolve the direction before exporting.`)
+    }
+    if ((row.withdrawal !== undefined && amount > 0) || (row.deposit !== undefined && amount < 0)) {
+      throw new Error(`Export paused: Row ${rowNumber} has conflicting amount and direction values. Review the row before exporting.`)
+    }
+  })
+}
+
 function totalsForResult(result: ConversionResult) {
   return {
     amount: result.rows.reduce((sum, row) => sum + (row.amount ?? 0), 0),
@@ -883,6 +930,7 @@ export function createQboBlob(result: ConversionResult) {
   if (needsDateConventionChoice(result.rows, result.statementPeriod, result.dateConvention, result.closingBalanceDateRaw ?? result.closingBalanceDate)) {
     throw new Error('Choose DD/MM/YYYY or MM/DD/YYYY before exporting QBO dates.')
   }
+  assertExportableTransactionRows(result)
 
   const { startDate, endDate } = qboDateRange(result.rows, result.statementPeriod, result.dateConvention)
   const closingAsOf = canonicalStatementDate(result.closingBalanceDateRaw ?? result.closingBalanceDate, result.dateConvention)
@@ -890,8 +938,8 @@ export function createQboBlob(result: ConversionResult) {
   const closingBalance = result.validation.closingBalance ?? qboLastBalance(result.rows)
 
   const transactions = result.rows
-    .map((row, index) => qboTransaction(row, index, result.dateConvention))
-    .filter((entry): entry is string => Boolean(entry))
+    .map((row, index) => qboTransaction(row, index, result.dateConvention, result.validation))
+    .filter(Boolean)
     .join('\n')
 
   const now = new Date()
@@ -974,6 +1022,7 @@ export function createQboBlob(result: ConversionResult) {
 }
 
 export async function createDocxBlob(result: ConversionResult) {
+  assertExportableTransactionRows(result)
   const {
     Document,
     HeadingLevel,
@@ -1016,7 +1065,7 @@ export async function createDocxBlob(result: ConversionResult) {
             money(row.withdrawal, result.currencyCode),
             money(row.deposit, result.currencyCode),
             money(row.tax, result.currencyCode),
-            money(row.amount, result.currencyCode),
+            money(signedTransactionAmount(row), result.currencyCode),
             money(row.balance, result.currencyCode),
             rowReviewStatus(result.validation, index),
             rowReviewNotes(result.validation, index),
@@ -1060,6 +1109,7 @@ export async function createDocxBlob(result: ConversionResult) {
 }
 
 export function createPdfBlob(result: ConversionResult) {
+  assertExportableTransactionRows(result)
   return createPdfBlobAsync(result)
 }
 
@@ -1303,6 +1353,17 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
     const tax = asFiniteNumber(record.tax)
     const balance = asFiniteNumber(record.balance)
 
+    const invalidEditsRecord = typeof record.invalidEdits === 'object' && record.invalidEdits
+      ? record.invalidEdits as Record<string, unknown>
+      : undefined
+    const invalidEdits = invalidEditsRecord
+      ? Object.fromEntries(
+          Object.entries(invalidEditsRecord).filter(([field, rawValue]) =>
+            ['withdrawal', 'deposit', 'amount', 'balance'].includes(field) && typeof rawValue === 'string',
+          ),
+        ) as ExtractedRow['invalidEdits']
+      : undefined
+
     return {
       date: asString(record.date)?.trim() || undefined,
       description,
@@ -1315,6 +1376,8 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
       category,
       confidence,
       source,
+      edited: record.edited === true,
+      invalidEdits,
       sourceLineNumbers: readSourceLineNumbers(record.sourceLineNumbers),
     }
   })
@@ -1322,6 +1385,18 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   const provenance = readSourceProvenance(payload.provenance)
   const validation = revalidateRows(rows, currencyCode)
   addSourceCoverageIssue(validation, provenance)
+  rows.forEach((row, rowIndex) => {
+    Object.keys(row.invalidEdits ?? {}).forEach((field) => {
+      validation.issues.push({
+        severity: 'error',
+        code: 'invalid-row-edit',
+        rowIndex,
+        message: `The ${field} value could not be read. Enter a valid amount before exporting.`,
+      })
+    })
+  })
+  validation.issueCount = validation.issues.length
+  if (rows.some((row) => Object.keys(row.invalidEdits ?? {}).length > 0)) validation.status = 'review'
   const importedPeriod = typeof payload.statementPeriod === 'object' && payload.statementPeriod
     ? payload.statementPeriod as ConversionResult['statementPeriod']
     : undefined
@@ -1518,7 +1593,7 @@ async function createPdfBlobAsync(result: ConversionResult) {
   y += 18
 
   pdf.setFont('helvetica', 'normal')
-  result.rows.slice(0, 28).forEach((row, index) => {
+  result.rows.forEach((row, index) => {
     if (y > 742) {
       pdf.addPage()
       y = margin
@@ -2725,23 +2800,26 @@ function qboText(value: string) {
   return qboToAscii(value).replace(/[<>\r\n]/g, ' ').replace(/&/g, 'and').trim()
 }
 
-function qboAmount(row: ExtractedRow) {
-  if (row.amount !== undefined && Number.isFinite(row.amount)) return row.amount
-  const deposit = row.deposit ?? 0
-  const withdrawal = row.withdrawal ?? 0
-  const tax = row.tax ?? 0
-  return deposit - withdrawal - tax
-}
-
-function qboTransaction(row: ExtractedRow, index: number, convention?: StatementDateConvention) {
+function qboTransaction(
+  row: ExtractedRow,
+  index: number,
+  convention: StatementDateConvention | undefined,
+  validation: ValidationSummary,
+) {
+  if (!isTransactionRow(row)) return ''
   const posted = canonicalStatementDate(row.date, convention)?.replaceAll('-', '')
   if (!posted) return ''
-  const amount = qboAmount(row)
-  if (!Number.isFinite(amount) || amount === 0) return ''
+  const amount = signedTransactionAmount(row)
+  if (amount === undefined || !Number.isFinite(amount)) return ''
 
   const description = qboText(row.description || 'Transaction')
   const fitid = qboUid(`${posted}:${amount}:${description}:${index}`)
-  const type = amount < 0 ? 'DEBIT' : 'CREDIT'
+  const type = amount < 0 ? 'DEBIT' : amount > 0 ? 'CREDIT' : 'OTHER'
+  const reviewStatus = getRowReview(validation, index).status
+  const categoryMarker = `[ExtractMint category: ${qboText(row.category || 'Transaction').slice(0, 48)}]`
+  const reviewMarker = `[ExtractMint review: ${reviewStatus}]`
+  const memoSuffix = `${categoryMarker} ${reviewMarker}`
+  const memo = `${description.slice(0, Math.max(0, 255 - memoSuffix.length - 1))} ${memoSuffix}`
 
   return [
     '<STMTTRN>',
@@ -2750,7 +2828,7 @@ function qboTransaction(row: ExtractedRow, index: number, convention?: Statement
     `<TRNAMT>${qboNumber(amount)}`,
     `<FITID>${fitid}`,
     `<NAME>${description.slice(0, 32) || 'Transaction'}`,
-    `<MEMO>${description.slice(0, 255)}`,
+    `<MEMO>${memo}`,
     '</STMTTRN>',
   ].join('\n')
 }

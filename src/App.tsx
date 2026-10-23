@@ -475,6 +475,7 @@ function App() {
     return Number.isFinite(parsed) ? Math.max(1, Math.min(99, parsed)) : 70
   })
   const [editRows, setEditRows] = useState(false)
+  const [rowDrafts, setRowDrafts] = useState<Record<string, { canonicalValue: string; value: string }>>({})
   const [showSourcePreview, setShowSourcePreview] = useState(
     () => storedValue('extractmint.showSourcePreview') === '1',
   )
@@ -482,6 +483,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [pdfPasswordPrompt, setPdfPasswordPrompt] = useState<PdfPasswordPrompt | null>(null)
   const [pdfPasswordInput, setPdfPasswordInput] = useState('')
+  const [exportError, setExportError] = useState<string | null>(null)
   const pdfPasswordInputRef = useRef<HTMLInputElement>(null)
   const pendingPdfPasswordRef = useRef<PendingPdfPassword | null>(null)
   const conversionAbortRef = useRef<AbortController | null>(null)
@@ -984,6 +986,11 @@ function App() {
       | 'balance',
     rawValue: string,
   ) => {
+    setExportError(null)
+    const draftPrefix = `${resultIndex}-${results[resultIndex]?.processedAt ?? 'current'}-${rowIndex}-`
+    setRowDrafts((previous) => Object.fromEntries(
+      Object.entries(previous).filter(([key]) => !key.startsWith(draftPrefix)),
+    ))
     setResults((previous) => {
       const target = previous[resultIndex]
       if (!target) return previous
@@ -994,6 +1001,18 @@ function App() {
       }
       return nextResults
     })
+  }
+
+  const rowDraftKey = (resultIndex: number, rowIndex: number, field: string) =>
+    `${resultIndex}-${results[resultIndex]?.processedAt ?? 'current'}-${rowIndex}-${field}`
+
+  const displayRowDraft = (key: string, canonicalValue: string) => {
+    const draft = rowDrafts[key]
+    return draft?.canonicalValue === canonicalValue ? draft.value : canonicalValue
+  }
+
+  const changeRowDraft = (key: string, canonicalValue: string, value: string) => {
+    setRowDrafts((previous) => ({ ...previous, [key]: { canonicalValue, value } }))
   }
 
   const updateDateConvention = (resultIndex: number, format: StatementDateFormat) => {
@@ -1376,6 +1395,7 @@ function App() {
 
   const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo') => {
     if (!activeResult) return
+    setExportError(null)
     if (format === 'qbo' && needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)) {
       window.alert('Choose DD/MM/YYYY or MM/DD/YYYY in the date format control before exporting QBO.')
       return
@@ -1386,23 +1406,27 @@ function App() {
       if (warning && !window.confirm(`${warning}\n\nQBO cannot carry these review warnings. Continue with the parsed transactions?`)) return
     }
 
-    const converter = await loadConverter()
-    const creators = {
-      xlsx: converter.createExcelBlob,
-      csv: converter.createCsvBlob,
-      docx: converter.createDocxBlob,
-      pdf: converter.createPdfBlob,
-      qbo: converter.createQboBlob,
+    try {
+      const converter = await loadConverter()
+      const creators = {
+        xlsx: converter.createExcelBlob,
+        csv: converter.createCsvBlob,
+        docx: converter.createDocxBlob,
+        pdf: converter.createPdfBlob,
+        qbo: converter.createQboBlob,
+      }
+      const blob = await creators[format](activeResult)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
+      anchor.href = url
+      anchor.download = `${baseName}.${format}`
+      anchor.click()
+      trackExtractMintEvent('export_started')
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Export paused. Review this row before exporting.')
     }
-    const blob = await creators[format](activeResult)
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    const baseName = activeResult.fileName.replace(/\.[^.]+$/, '') || 'extractmint'
-    anchor.href = url
-    anchor.download = `${baseName}.${format}`
-    anchor.click()
-    trackExtractMintEvent('export_started')
-    URL.revokeObjectURL(url)
   }
 
   const downloadReviewJson = () => {
@@ -1424,6 +1448,7 @@ function App() {
 
   const downloadReviewPack = async () => {
     if (results.length === 0) return
+    setExportError(null)
     if (!requireScanWarningAcknowledgement(results)) return
     setIsProcessing(true)
     setProgress({
@@ -1485,6 +1510,7 @@ function App() {
         detail: 'Review pack downloaded',
       })
     } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Export paused. Review the rows before exporting.')
       setProgress({
         fileName: `${results.length} files`,
         stage: 'error',
@@ -1569,6 +1595,7 @@ function App() {
 
   const downloadCombinedWorkbook = async () => {
     if (results.length < 2) return
+    setExportError(null)
     if (!requireScanWarningAcknowledgement(results)) return
     setIsProcessing(true)
     setProgress({
@@ -1595,6 +1622,7 @@ function App() {
         detail: 'Combined workbook downloaded',
       })
     } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Export paused. Review the rows before exporting.')
       setProgress({
         fileName: `${results.length} files`,
         stage: 'error',
@@ -2126,6 +2154,15 @@ function App() {
               </button>
             </div>
 
+            {exportError ? (
+              <section className="scan-quality-warning export-row-error" role="alert" aria-live="assertive">
+                <div>
+                  <strong>Export paused</strong>
+                  <p>{exportError.replace(/^Export paused:\s*/i, '')}</p>
+                </div>
+              </section>
+            ) : null}
+
             {activeResult ? (
               <div className="export-sanity" aria-label="Export sanity checks">
                 {(() => {
@@ -2493,6 +2530,30 @@ function App() {
                         {visibleRows.map(({ row, index }) => {
                           const review = rowReview(activeResult?.validation, index)
                           const isSelected = selectedRowIndex === index
+                          const draftKeys = {
+                            date: rowDraftKey(activeIndex, index, 'date'),
+                            description: rowDraftKey(activeIndex, index, 'description'),
+                            withdrawal: rowDraftKey(activeIndex, index, 'withdrawal'),
+                            deposit: rowDraftKey(activeIndex, index, 'deposit'),
+                            balance: rowDraftKey(activeIndex, index, 'balance'),
+                          }
+                          const canonicalValues = {
+                            date: formatStatementDate(row.date, activeResult?.dateConvention) || '',
+                            description: row.description,
+                            withdrawal: row.invalidEdits?.withdrawal !== undefined
+                              ? row.invalidEdits.withdrawal
+                              : row.withdrawal !== undefined ? String(row.withdrawal) : '',
+                            deposit: row.invalidEdits?.deposit !== undefined
+                              ? row.invalidEdits.deposit
+                              : row.deposit !== undefined ? String(row.deposit) : '',
+                            balance: row.invalidEdits?.balance !== undefined
+                              ? row.invalidEdits.balance
+                              : row.balance !== undefined ? String(row.balance) : '',
+                          }
+                          const inputValue = (field: keyof typeof canonicalValues) =>
+                            displayRowDraft(draftKeys[field], canonicalValues[field])
+                          const updateDraft = (field: keyof typeof canonicalValues, value: string) =>
+                            changeRowDraft(draftKeys[field], canonicalValues[field], value)
                           return (
                             <tr
                               key={`${row.description}-${index}`}
@@ -2510,9 +2571,9 @@ function App() {
                               <td>
                                 {editRows ? (
                                   <input
-                                    key={`${activeIndex}-${index}-date-${row.date ?? ''}`}
-                                    defaultValue={formatStatementDate(row.date, activeResult?.dateConvention)}
+                                    value={inputValue('date')}
                                     placeholder="YYYY-MM-DD"
+                                    onChange={(event) => updateDraft('date', event.target.value)}
                                     onFocus={() => {
                                       setSelectedRowIndex(index)
                                       setPdfPage(bestMatchingPage(activePages, row))
@@ -2531,8 +2592,8 @@ function App() {
                               <td>
                                 {editRows ? (
                                   <input
-                                    key={`${activeIndex}-${index}-desc-${row.description}`}
-                                    defaultValue={row.description}
+                                    value={inputValue('description')}
+                                    onChange={(event) => updateDraft('description', event.target.value)}
                                     onFocus={() => {
                                       setSelectedRowIndex(index)
                                       setPdfPage(bestMatchingPage(activePages, row))
@@ -2549,10 +2610,11 @@ function App() {
                               <td>
                                 {editRows ? (
                                   <input
-                                    key={`${activeIndex}-${index}-withdrawal-${row.withdrawal ?? ''}`}
-                                    defaultValue={row.withdrawal !== undefined ? String(row.withdrawal) : ''}
+                                    value={inputValue('withdrawal')}
                                     inputMode="decimal"
                                     placeholder="-"
+                                    aria-invalid={row.invalidEdits?.withdrawal !== undefined}
+                                    onChange={(event) => updateDraft('withdrawal', event.target.value)}
                                     onFocus={() => {
                                       setSelectedRowIndex(index)
                                       setPdfPage(bestMatchingPage(activePages, row))
@@ -2568,10 +2630,11 @@ function App() {
                               <td>
                                 {editRows ? (
                                   <input
-                                    key={`${activeIndex}-${index}-deposit-${row.deposit ?? ''}`}
-                                    defaultValue={row.deposit !== undefined ? String(row.deposit) : ''}
+                                    value={inputValue('deposit')}
                                     inputMode="decimal"
                                     placeholder="-"
+                                    aria-invalid={row.invalidEdits?.deposit !== undefined}
+                                    onChange={(event) => updateDraft('deposit', event.target.value)}
                                     onFocus={() => {
                                       setSelectedRowIndex(index)
                                       setPdfPage(bestMatchingPage(activePages, row))
@@ -2585,10 +2648,11 @@ function App() {
                               <td>
                                 {editRows ? (
                                   <input
-                                    key={`${activeIndex}-${index}-balance-${row.balance ?? ''}`}
-                                    defaultValue={row.balance !== undefined ? String(row.balance) : ''}
+                                    value={inputValue('balance')}
                                     inputMode="decimal"
                                     placeholder="-"
+                                    aria-invalid={row.invalidEdits?.balance !== undefined}
+                                    onChange={(event) => updateDraft('balance', event.target.value)}
                                     onFocus={() => {
                                       setSelectedRowIndex(index)
                                       setPdfPage(bestMatchingPage(activePages, row))
