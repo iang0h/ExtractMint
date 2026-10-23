@@ -1,5 +1,6 @@
 import type { ConversionResult, ExtractedRow, ValidationSummary } from './converter'
 import { lowerRowConfidence } from './reviewStatus'
+import type { StatementDateConvention } from './statementDates'
 
 export type EditableRowField = 'date' | 'description' | 'reference' | 'withdrawal' | 'deposit' | 'amount' | 'balance'
 
@@ -12,6 +13,7 @@ type RowEditorConverter = {
   refreshStatementPeriod: (
     rows: ExtractedRow[],
     previous?: ConversionResult['statementPeriod'],
+    convention?: StatementDateConvention,
   ) => ConversionResult['statementPeriod']
 }
 
@@ -110,7 +112,7 @@ export function updateConversionRow(
       ),
     },
     statementPeriod: converter
-      ? converter.refreshStatementPeriod(reviewedRows, result.statementPeriod)
+      ? converter.refreshStatementPeriod(reviewedRows, result.statementPeriod, result.dateConvention)
       : result.statementPeriod,
   }
 }

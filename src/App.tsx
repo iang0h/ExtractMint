@@ -28,6 +28,7 @@ import { PdfRedactionTool } from './components/PdfRedactionTool'
 import { trackExtractMintEvent } from './lib/analytics'
 import { getRowReview } from './lib/reviewStatus'
 import { getStatementIntegrityWarning } from './lib/statementIntegrity'
+import { canonicalStatementDate, formatStatementDate, needsDateConventionChoice, statementPeriodLabel as formatStatementPeriodLabel, type StatementDateFormat } from './lib/statementDates'
 import { updateConversionRow } from './lib/rowEditing'
 import { hasUnacknowledgedScanWarning, scanWarningKey } from './lib/scanWarning'
 import type { ConversionResult, ProgressEvent, ValidationSummary } from './lib/converter'
@@ -105,10 +106,13 @@ const storeValue = (key: string, value: string) => {
   }
 }
 
-const statementPeriodLabel = (period?: ConversionResult['statementPeriod']) => {
-  if (!period?.start && !period?.end) return '—'
-  if (period.start && period.end && period.start !== period.end) return `${period.start} → ${period.end}`
-  return period.start ?? period.end ?? '—'
+const statementPeriodLabel = (period?: ConversionResult['statementPeriod'], convention?: ConversionResult['dateConvention']) =>
+  formatStatementPeriodLabel(period, convention)
+
+const statementDateRangeValue = (period?: ConversionResult['statementPeriod'], convention?: ConversionResult['dateConvention']) => {
+  const start = formatStatementDate(period?.start ?? period?.rawStart, convention)
+  const end = formatStatementDate(period?.end ?? period?.rawEnd, convention)
+  return start && end && start !== end ? `${start} → ${end}` : start || end || '—'
 }
 
 const exportSanitySnapshot = (result: ConversionResult): ExportSanitySnapshot => {
@@ -643,9 +647,10 @@ function App() {
       currencyCode: activeResult.currencyCode,
       validationStatus: activeResult.validation.status,
       issueCount: activeResult.validation.issueCount,
-      statementPeriod: statementPeriodLabel(activeResult.statementPeriod),
+      dateFormat: activeResult.dateConvention?.format ?? 'Needs selection',
+      statementPeriod: statementPeriodLabel(activeResult.statementPeriod, activeResult.dateConvention),
       sampleRows: activeResult.rows.slice(0, 5).map((row) => ({
-        date: row.date,
+        date: canonicalStatementDate(row.date, activeResult.dateConvention) ?? (row.date ? `Needs review: ${row.date}` : ''),
         description: row.description,
         withdrawal: row.withdrawal,
         deposit: row.deposit,
@@ -988,6 +993,18 @@ function App() {
         ...updateConversionRow(target, rowIndex, field, rawValue, converter ?? undefined),
       }
       return nextResults
+    })
+  }
+
+  const updateDateConvention = (resultIndex: number, format: StatementDateFormat) => {
+    void loadConverter().then((converter) => {
+      setResults((previous) => {
+        const target = previous[resultIndex]
+        if (!target) return previous
+        const nextResults = [...previous]
+        nextResults[resultIndex] = converter.applyDateConvention(target, format)
+        return nextResults
+      })
     })
   }
 
@@ -1359,6 +1376,10 @@ function App() {
 
   const downloadBlob = async (format: 'xlsx' | 'csv' | 'docx' | 'pdf' | 'qbo') => {
     if (!activeResult) return
+    if (format === 'qbo' && needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)) {
+      window.alert('Choose DD/MM/YYYY or MM/DD/YYYY in the date format control before exporting QBO.')
+      return
+    }
     if (!requireScanWarningAcknowledgement([activeResult])) return
     if (format === 'qbo') {
       const warning = getStatementIntegrityWarning(activeResult)
@@ -2095,7 +2116,11 @@ function App() {
                 <ArrowDownToLine size={16} />
                 CSV
               </button>
-              <button onClick={() => void downloadBlob('qbo')} disabled={!activeResult}>
+              <button
+                onClick={() => void downloadBlob('qbo')}
+                disabled={!activeResult || needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)}
+                title={activeResult && needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate) ? 'Choose a date format before exporting QBO' : undefined}
+              >
                 <ReceiptText size={16} />
                 QuickBooks (QBO)
               </button>
@@ -2261,8 +2286,8 @@ function App() {
                     <strong>{activeResult?.summary.documentKind ?? 'Statement'}</strong>
                   </div>
                   <div>
-                    <span>Statement period</span>
-                    <strong>{statementPeriodLabel(activeResult?.statementPeriod)}</strong>
+                    <span>{activeResult?.statementPeriod?.source === 'explicit' ? 'Statement period' : 'Transaction date range'}</span>
+                    <strong>{statementDateRangeValue(activeResult?.statementPeriod, activeResult?.dateConvention)}</strong>
                   </div>
                   <div className="validation-card">
                     <span>Balance check</span>
@@ -2270,6 +2295,43 @@ function App() {
                     <small>{validationDescription(activeResult?.validation)}</small>
                   </div>
                 </div>
+
+                {activeResult && (activeResult.dateConvention?.format || needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate)) ? (
+                  <section
+                    className={`date-convention-panel${needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate) ? ' needs-choice' : ''}`}
+                    aria-label="Statement date format"
+                    role={needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate) ? 'alert' : undefined}
+                  >
+                    <div>
+                      <strong>{needsDateConventionChoice(activeResult.rows, activeResult.statementPeriod, activeResult.dateConvention, activeResult.closingBalanceDateRaw ?? activeResult.closingBalanceDate) ? 'Choose the statement date format' : 'Statement date format'}</strong>
+                      <small>
+                        {activeResult.dateConvention?.source === 'metadata'
+                          ? 'Read from the statement.'
+                          : activeResult.dateConvention?.source === 'document'
+                            ? 'Detected from unambiguous dates in this statement.'
+                            : activeResult.dateConvention?.source === 'user'
+                              ? 'Using the format you selected.'
+                            : activeResult.dateConvention?.source === 'conflict'
+                              ? 'Date clues conflict. Choose the format from the original statement before exporting to QBO.'
+                              : 'The dates are ambiguous. Choose the format before exporting to QBO.'}
+                      </small>
+                    </div>
+                    <label>
+                      <span>Format</span>
+                      <select
+                        value={activeResult.dateConvention?.format ?? ''}
+                        onChange={(event) => {
+                          const format = event.target.value
+                          if (format === 'DD/MM/YYYY' || format === 'MM/DD/YYYY') updateDateConvention(activeIndex, format)
+                        }}
+                      >
+                        <option value="">Choose format</option>
+                        <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                        <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                      </select>
+                    </label>
+                  </section>
+                ) : null}
 
                 {activeResult && getStatementIntegrityWarning(activeResult) ? (
                   <section className="scan-quality-warning" role="alert" aria-live="polite">
@@ -2449,7 +2511,7 @@ function App() {
                                 {editRows ? (
                                   <input
                                     key={`${activeIndex}-${index}-date-${row.date ?? ''}`}
-                                    defaultValue={row.date ?? ''}
+                                    defaultValue={formatStatementDate(row.date, activeResult?.dateConvention)}
                                     placeholder="YYYY-MM-DD"
                                     onFocus={() => {
                                       setSelectedRowIndex(index)
@@ -2458,7 +2520,12 @@ function App() {
                                     onBlur={(event) => updateRow(activeIndex, index, 'date', event.target.value)}
                                   />
                                 ) : (
-                                  (row.date || 'Detected')
+                                  <>
+                                    {formatStatementDate(row.date, activeResult?.dateConvention) || 'Detected'}
+                                    {row.date && !canonicalStatementDate(row.date, activeResult?.dateConvention) ? (
+                                      <small className="unresolved-date-hint">Date format needs review</small>
+                                    ) : null}
+                                  </>
                                 )}
                               </td>
                               <td>

@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { createServer } from 'vite'
 import { createMultilineStatement } from './fixtures/multiline-statement.mjs'
 import { createColumnStatement, createImageOnlyStatementPdf, reliabilityMagnitudes } from './fixtures/statement-reliability.mjs'
+import { createDateConventionStatement } from './fixtures/date-convention-statements.mjs'
 
 if (!globalThis.DOMMatrix) {
   const canvas = await import('@napi-rs/canvas')
@@ -48,6 +49,144 @@ const server = await createServer({
 try {
   const converter = await server.ssrLoadModule('/src/lib/converter.ts')
   const review = await server.ssrLoadModule('/src/lib/reviewStatus.ts')
+  const statementDates = await server.ssrLoadModule('/src/lib/statementDates.ts')
+  const dmyQbo = (result) => converter.createQboBlob(converter.applyDateConvention(result, 'DD/MM/YYYY'))
+
+  for (const [format, expectedRows, expectedPeriod] of [
+    ['DD/MM/YYYY', ['2026-04-13', '2026-04-14'], ['2026-04-01', '2026-04-30']],
+    ['MM/DD/YYYY', ['2026-04-13', '2026-04-14'], ['2026-04-01', '2026-04-30']],
+  ]) {
+    const text = createDateConventionStatement({ format, closingDate: format === 'MM/DD/YYYY' ? '04/29/2026' : '29/04/2026' })
+    const result = converter.parseExtractedText(text, `invented-${format}.txt`, 'text/plain', { size: text.length, lastModified: 1 })
+    assert.equal(result.dateConvention?.format, format, `${format} format is detected from unambiguous dates in this document`)
+    assert.equal(result.dateConvention?.source, 'document', 'date format detection records its source')
+    assert.deepEqual(result.rows.filter((row) => row.date).map((row) => converter.canonicalStatementDate(row.date, result.dateConvention)), expectedRows)
+    assert.deepEqual([result.statementPeriod?.start, result.statementPeriod?.end], expectedPeriod, 'explicit statement period uses the same convention as transaction dates')
+    assert.equal(result.statementPeriod?.source, 'explicit')
+    const qbo = await converter.createQboBlob(result).text()
+    assert.match(qbo, /<DTSTART>20260401/, 'QBO uses explicit statement start date')
+    assert.match(qbo, /<DTEND>20260430/, 'QBO uses explicit statement end date')
+    assert.match(qbo, /<DTPOSTED>20260413/, 'QBO transaction dates use the detected convention')
+    assert.match(qbo, /<DTASOF>20260429/, 'closing ledger balance uses the printed closing-balance as-of date')
+
+    const ExcelJS = (await import('exceljs')).default
+    const workbook = new ExcelJS.Workbook()
+    await workbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(result)).arrayBuffer()))
+    const summary = workbook.getWorksheet('Summary')
+    const summaryHeaders = summary.getRow(1).values.slice(1).map(String)
+    const summaryRow = summary.getRow(2)
+    assert.equal(summaryRow.getCell(summaryHeaders.indexOf('Date Range Start') + 1).value, '2026-04-01')
+    assert.equal(summaryRow.getCell(summaryHeaders.indexOf('Date Range End') + 1).value, '2026-04-30')
+    assert.equal(summaryRow.getCell(summaryHeaders.indexOf('Date Range Type') + 1).value, 'Statement period')
+    assert.equal(summaryRow.getCell(summaryHeaders.indexOf('Date Format') + 1).value, format)
+    const rowsSheet = workbook.getWorksheet('Rows')
+    const rowHeaders = rowsSheet.getRow(1).values.slice(1).map(String)
+    assert.equal(rowsSheet.getRow(2).getCell(rowHeaders.indexOf('Date') + 1).value, '2026-04-13', 'XLSX rows use the canonical date format')
+  }
+
+  const ambiguousText = createDateConventionStatement({ ambiguous: true, closingDate: '08/04/2026' })
+  const ambiguousDates = converter.parseExtractedText(ambiguousText, 'invented-ambiguous-dates.txt', 'text/plain', { size: ambiguousText.length, lastModified: 1 })
+  assert.equal(ambiguousDates.dateConvention?.format, undefined, 'all-ambiguous dates do not select a convention silently')
+  assert.equal(ambiguousDates.dateConvention?.source, 'ambiguous')
+  assert.deepEqual(ambiguousDates.rows.filter((row) => row.date).map((row) => converter.canonicalStatementDate(row.date, ambiguousDates.dateConvention)), [undefined, undefined])
+  assert.deepEqual([ambiguousDates.statementPeriod?.start, ambiguousDates.statementPeriod?.end], [undefined, undefined], 'ambiguous explicit period stays unresolved')
+  assert.deepEqual([ambiguousDates.statementPeriod?.rawStart, ambiguousDates.statementPeriod?.rawEnd], ['01/04/2026', '07/04/2026'], 'ambiguous explicit dates are retained for a later user choice')
+  assert.throws(() => converter.createQboBlob(ambiguousDates), /Choose DD\/MM\/YYYY or MM\/DD\/YYYY/, 'QBO export waits for an explicit date choice')
+  const metadataConflictText = createDateConventionStatement({ format: 'DD/MM/YYYY', closingDate: '29/04/2026' }) + '\nDate format: MM/DD/YYYY'
+  const metadataConflict = converter.parseExtractedText(metadataConflictText, 'invented-conflicting-metadata.txt', 'text/plain', { size: metadataConflictText.length, lastModified: 1 })
+  assert.equal(metadataConflict.dateConvention?.source, 'conflict', 'conflicting metadata and parsed row evidence require a choice')
+  assert.throws(() => converter.createQboBlob(metadataConflict), /Choose DD\/MM\/YYYY or MM\/DD\/YYYY/)
+  const restoredMetadataConflict = await converter.importReviewJson(new File([converter.createReviewJsonBlob(metadataConflict)], 'invented-conflicting-metadata.extractmint-review.json', { type: 'application/json' }))
+  assert.equal(restoredMetadataConflict.dateConvention?.source, 'conflict', 'review JSON preserves conflict state even when source metadata text is unavailable')
+  assert.throws(() => converter.createQboBlob(restoredMetadataConflict), /Choose DD\/MM\/YYYY or MM\/DD\/YYYY/, 'review import cannot auto-resolve an exported conflict')
+  const resolvedImportedConflict = converter.applyDateConvention(restoredMetadataConflict, 'DD/MM/YYYY')
+  assert.deepEqual(resolvedImportedConflict.rows.filter((row) => row.date).map((row) => converter.canonicalStatementDate(row.date, resolvedImportedConflict.dateConvention)), ['2026-04-13', '2026-04-14'])
+  assert.match(await converter.createQboBlob(resolvedImportedConflict).text(), /<DTPOSTED>20260413/)
+  const continuationLines = ambiguousText.split('\n')
+  const firstAmbiguousRow = continuationLines.findIndex((line) => line.startsWith('03/04/2026\t'))
+  continuationLines.splice(firstAmbiguousRow + 1, 0, '\t04/13/2026 scheduled memo')
+  const ambiguousContinuationText = continuationLines.join('\n')
+  const ambiguousContinuation = converter.parseExtractedText(ambiguousContinuationText, 'invented-ambiguous-continuation.txt', 'text/plain', { size: ambiguousContinuationText.length, lastModified: 1 })
+  assert.equal(ambiguousContinuation.dateConvention?.source, 'ambiguous', 'tab-indented description continuation is not date-format evidence')
+  assert.equal(ambiguousContinuation.dateConvention?.format, undefined)
+  assert.throws(() => converter.createQboBlob(ambiguousContinuation), /Choose DD\/MM\/YYYY or MM\/DD\/YYYY/, 'QBO waits for a choice when only a continuation has an unambiguous-looking date')
+  const chosenContinuationQbo = await converter.createQboBlob(converter.applyDateConvention(ambiguousContinuation, 'DD/MM/YYYY')).text()
+  assert.deepEqual([...chosenContinuationQbo.matchAll(/<DTPOSTED>([^\r\n]+)/g)].map((match) => match[1]), ['20260403', '20260407'])
+  const chosenAmbiguous = converter.applyDateConvention(ambiguousDates, 'DD/MM/YYYY')
+  assert.equal(chosenAmbiguous.dateConvention?.source, 'user')
+  assert.deepEqual(chosenAmbiguous.rows.filter((row) => row.date).map((row) => converter.canonicalStatementDate(row.date, chosenAmbiguous.dateConvention)), ['2026-04-03', '2026-04-07'])
+  assert.deepEqual([chosenAmbiguous.statementPeriod?.start, chosenAmbiguous.statementPeriod?.end], ['2026-04-01', '2026-04-07'])
+  const chosenAmbiguousQbo = await converter.createQboBlob(chosenAmbiguous).text()
+  assert.match(chosenAmbiguousQbo, /<DTSTART>20260401/)
+  assert.match(chosenAmbiguousQbo, /<DTEND>20260407/)
+  assert.match(chosenAmbiguousQbo, /<DTPOSTED>20260403/)
+  assert.match(chosenAmbiguousQbo, /<DTASOF>20260408/, 'the selected convention also resolves closing-balance as-of date')
+
+  const metadataText = `${ambiguousText}\nDate format: DD/MM/YYYY`
+  const metadataDates = converter.parseExtractedText(metadataText, 'invented-metadata-dates.txt', 'text/plain', { size: metadataText.length, lastModified: 1 })
+  assert.deepEqual(metadataDates.dateConvention, { format: 'DD/MM/YYYY', source: 'metadata' }, 'explicit statement metadata resolves otherwise ambiguous dates')
+  assert.deepEqual(metadataDates.rows.filter((row) => row.date).map((row) => converter.canonicalStatementDate(row.date, metadataDates.dateConvention)), ['2026-04-03', '2026-04-07'])
+
+  const datedMemoText = createDateConventionStatement({ format: 'DD/MM/YYYY' }).replace('Synthetic purchase', 'Synthetic purchase due 04/13/2026')
+  const datedMemo = converter.parseExtractedText(datedMemoText, 'invented-date-in-description.txt', 'text/plain', { size: datedMemoText.length, lastModified: 1 })
+  assert.equal(datedMemo.dateConvention?.format, 'DD/MM/YYYY', 'a date embedded in transaction description does not override the row date column')
+  assert.equal(datedMemo.dateConvention?.source, 'document')
+
+  const ambiguousClosingText = [
+    'Synthetic test bank statement USD',
+    'Statement period: 2026-04-01 to 2026-04-30',
+    'Date\tDescription\tReference\tWithdrawal\tDeposit\tTax\tBalance',
+    'OPENING BALANCE\t\t\t\t\t\t100.00',
+    '2026-04-13\tSynthetic purchase\t\t10.00\t\t\t90.00',
+    '2026-04-14\tSynthetic deposit\t\t\t10.00\t\t100.00',
+    'CLOSING BALANCE AS OF 04/08/2026\t\t\t\t\t\t100.00',
+  ].join('\n')
+  const ambiguousClosing = converter.parseExtractedText(ambiguousClosingText, 'invented-ambiguous-closing-date.txt', 'text/plain', { size: ambiguousClosingText.length, lastModified: 1 })
+  assert.equal(ambiguousClosing.dateConvention?.source, 'ambiguous', 'ISO transaction dates do not silently resolve a separate numeric closing date')
+  assert.equal(ambiguousClosing.closingBalanceDateRaw, '04/08/2026')
+  assert.ok(statementDates.needsDateConventionChoice(ambiguousClosing.rows, ambiguousClosing.statementPeriod, ambiguousClosing.dateConvention, ambiguousClosing.closingBalanceDateRaw))
+  assert.throws(() => converter.createQboBlob(ambiguousClosing), /Choose DD\/MM\/YYYY or MM\/DD\/YYYY/, 'QBO does not substitute a period end when the actual closing-balance date is ambiguous')
+  const chosenClosing = converter.applyDateConvention(ambiguousClosing, 'MM/DD/YYYY')
+  assert.match(await converter.createQboBlob(chosenClosing).text(), /<DTASOF>20260408/)
+  const ambiguousClosingJson = converter.createReviewJsonBlob(ambiguousClosing)
+  const restoredAmbiguousClosing = await converter.importReviewJson(new File([ambiguousClosingJson], 'invented-ambiguous-closing.extractmint-review.json', { type: 'application/json' }))
+  assert.equal(restoredAmbiguousClosing.dateConvention?.source, 'ambiguous', 'review JSON preserves an unresolved convention')
+  assert.equal(restoredAmbiguousClosing.closingBalanceDateRaw, '04/08/2026', 'review JSON preserves the raw closing-balance date')
+  assert.throws(() => converter.createQboBlob(restoredAmbiguousClosing), /Choose DD\/MM\/YYYY or MM\/DD\/YYYY/, 'closing date stays blocked after review JSON round trip')
+  const resolvedImportedClosing = converter.applyDateConvention(restoredAmbiguousClosing, 'MM/DD/YYYY')
+  assert.match(await converter.createQboBlob(resolvedImportedClosing).text(), /<DTASOF>20260408/)
+
+  const conflictingText = createDateConventionStatement({ format: 'DD/MM/YYYY', closingDate: '29/04/2026' }).replace('13/04/2026', '04/13/2026')
+  const conflictingDates = converter.parseExtractedText(conflictingText, 'invented-conflicting-dates.txt', 'text/plain', { size: conflictingText.length, lastModified: 1 })
+  assert.equal(conflictingDates.dateConvention?.source, 'conflict', 'contradictory date-order evidence is held for a user choice')
+  assert.equal(converter.canonicalStatementDate(conflictingDates.rows.find((row) => row.date)?.date, conflictingDates.dateConvention), undefined)
+  assert.throws(() => converter.createQboBlob(conflictingDates), /Choose DD\/MM\/YYYY or MM\/DD\/YYYY/, 'QBO export blocks conflicting date evidence')
+
+  const transactionRangeText = createDateConventionStatement({ format: 'DD/MM/YYYY', explicitPeriod: false, closingDate: '29/04/2026' })
+  const transactionRange = converter.parseExtractedText(transactionRangeText, 'invented-transaction-range.txt', 'text/plain', { size: transactionRangeText.length, lastModified: 1 })
+  assert.equal(transactionRange.statementPeriod?.source, 'inferred')
+  assert.deepEqual([transactionRange.statementPeriod?.start, transactionRange.statementPeriod?.end], ['2026-04-13', '2026-04-14'], 'without printed statement dates, the range is derived from transaction dates')
+  assert.match(converter.statementPeriodLabel(transactionRange.statementPeriod, transactionRange.dateConvention), /Transaction date range/)
+  const transactionRangeQbo = await converter.createQboBlob(transactionRange).text()
+  assert.match(transactionRangeQbo, /<DTSTART>20260413/)
+  assert.match(transactionRangeQbo, /<DTEND>20260414/)
+  assert.match(transactionRangeQbo, /<DTASOF>20260429/, 'the closing date is not replaced by transaction range end')
+  const noPrintedClosingDateText = createDateConventionStatement({ format: 'DD/MM/YYYY' })
+  const noPrintedClosingDate = converter.parseExtractedText(noPrintedClosingDateText, 'invented-no-closing-date.txt', 'text/plain', { size: noPrintedClosingDateText.length, lastModified: 1 })
+  const noPrintedClosingDateQbo = await converter.createQboBlob(noPrintedClosingDate).text()
+  assert.doesNotMatch(noPrintedClosingDateQbo, /<LEDGERBAL>/, 'QBO does not invent a closing-balance as-of date from statement-period end')
+  const transactionRangeWorkbook = new (await import('exceljs')).default.Workbook()
+  await transactionRangeWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(transactionRange)).arrayBuffer()))
+  const transactionRangeSummary = transactionRangeWorkbook.getWorksheet('Summary')
+  const transactionRangeHeaders = transactionRangeSummary.getRow(1).values.slice(1).map(String)
+  assert.equal(transactionRangeSummary.getRow(2).getCell(transactionRangeHeaders.indexOf('Date Range Type') + 1).value, 'Transaction date range')
+  assert.equal(transactionRangeSummary.getRow(2).getCell(transactionRangeHeaders.indexOf('Date Range End') + 1).value, '2026-04-14')
+  const csvRows = (await converter.createCsvBlob(transactionRange).text()).split(/\r?\n/).map(parseCsvLine)
+  const csvDateIndex = csvRows[0].indexOf('Date')
+  const csvFirstTransaction = csvRows.find((row) => row[csvDateIndex] === '2026-04-13')
+  assert.ok(csvFirstTransaction, 'CSV has a canonical date for the first transaction')
+  assert.equal(csvRows[0].at(-1), 'Date Format')
+  assert.equal(csvFirstTransaction.at(-1), 'DD/MM/YYYY')
   for (const pageBreak of [false, true]) {
     const fixture = createMultilineStatement({ pageBreak })
     const result = converter.parseExtractedText(fixture.text, 'invented-multiline-statement.txt', 'text/plain', { size: fixture.text.length, lastModified: 1 })
@@ -115,7 +254,7 @@ try {
   assert.deepEqual(trailingMemoResult.provenance.unattachedLineNumbers, [], 'review fix preserves all consumed source data')
   assert.equal(trailingMemoResult.validation.status, 'review', 'ambiguous dated-money text is flagged even when actual running-balance steps reconcile')
   assert.deepEqual(trailingMemoResult.provenance.ambiguousLineNumbers, [5])
-  assert.equal((await converter.createQboBlob(trailingMemoResult).text()).match(/<STMTTRN>/g)?.length, 2, 'QBO contains only the two actual transactions')
+  assert.equal((await dmyQbo(trailingMemoResult).text()).match(/<STMTTRN>/g)?.length, 2, 'QBO contains only the two actual transactions')
 
   for (const memoAmount of ['-999.99', '(999.99)']) {
     const signedMemoText = plainText.replace('12/07/2026 scheduled memo 777.77 only', `12/07/2026 scheduled memo ${memoAmount}`)
@@ -146,7 +285,7 @@ try {
     assert.deepEqual(actualTransactions[0].sourceLineNumbers, [3, 4, 5])
     assert.deepEqual(twoMoneyResult.provenance.ambiguousLineNumbers, [5])
     assert.equal(twoMoneyResult.validation.status, 'review')
-    assert.equal((await converter.createQboBlob(twoMoneyResult).text()).match(/<STMTTRN>/g)?.length, 2, 'two-money memo cannot add an OFX transaction')
+    assert.equal((await dmyQbo(twoMoneyResult).text()).match(/<STMTTRN>/g)?.length, 2, 'two-money memo cannot add an OFX transaction')
   }
 
   const unsignedMemoLine = '12/07/2026 scheduled memo 123.45 999.99'
@@ -189,7 +328,7 @@ try {
   const wrongPairHeaders = wrongPairCsv[0]
   assert.deepEqual(wrongPairCsv.slice(1).filter((row) => row[wrongPairHeaders.indexOf('Date')]).map((row) => [Number(row[wrongPairHeaders.indexOf('Amount')]), Number(row[wrongPairHeaders.indexOf('Balance')])]), [[-5, 994], [5, 1000]], 'CSV preserves the inconsistent source balance and both actual amounts')
 
-  const wrongPairQbo = await converter.createQboBlob(wrongPairBalance).text()
+  const wrongPairQbo = await dmyQbo(wrongPairBalance).text()
   assert.deepEqual([...wrongPairQbo.matchAll(/<TRNAMT>([^\r\n]+)/g)].map((match) => Number(match[1])), [-5, 5], 'QBO retains both source movements while the UI carries the balance warning')
 
   const pairedWithoutOpening = converter.parseExtractedText([
@@ -206,7 +345,7 @@ try {
   const noOpeningCsv = (await converter.createCsvBlob(pairedWithoutOpening).text()).split(/\r?\n/).map(parseCsvLine)
   const noOpeningAmountColumn = noOpeningCsv[0].indexOf('Amount')
   assert.deepEqual(noOpeningCsv.slice(1).map((row) => Number(row[noOpeningAmountColumn])), [-5, 5], 'CSV preserves both no-opening source amounts')
-  assert.deepEqual([...((await converter.createQboBlob(pairedWithoutOpening).text()).matchAll(/<TRNAMT>([^\r\n]+)/g))].map((match) => Number(match[1])), [-5, 5], 'QBO preserves both no-opening source amounts')
+  assert.deepEqual([...((await dmyQbo(pairedWithoutOpening).text()).matchAll(/<TRNAMT>([^\r\n]+)/g))].map((match) => Number(match[1])), [-5, 5], 'QBO preserves both no-opening source amounts')
 
   const sparsePlain = converter.parseExtractedText([
     'Cloudberry Test Bank synthetic statement USD',
@@ -275,7 +414,7 @@ try {
   for (const sheetName of ['Summary', 'Reconciliation']) {
     assert.ok(JSON.stringify(warningCombined.getWorksheet(sheetName).getSheetValues()).includes(warning), `Combined XLSX ${sheetName} carries the warning`)
   }
-  const inconsistentQbo = await converter.createQboBlob(inconsistent).text()
+  const inconsistentQbo = await dmyQbo(inconsistent).text()
   assert.equal((inconsistentQbo.match(/<STMTTRN>/g) ?? []).length, multiline.transactionCount, 'QBO has exact source transactions')
   assert.doesNotMatch(inconsistentQbo, /WARNING|INCONSISTENCY|FAKE|MISSINGROW/i, 'QBO adds no unsupported warning tags or fake transactions')
   const oneCentError = converter.parseExtractedText(

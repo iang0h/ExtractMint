@@ -1053,6 +1053,58 @@ footer {
   background: #edf8f1;
 }
 
+.date-convention-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfaf7;
+}
+
+.date-convention-panel.needs-choice {
+  border-color: #dfb45a;
+  background: #fff7e4;
+}
+
+.date-convention-panel strong,
+.date-convention-panel small {
+  display: block;
+}
+
+.date-convention-panel small {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.date-convention-panel label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.date-convention-panel select {
+  min-width: 142px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+}
+
+.unresolved-date-hint {
+  display: block;
+  margin-top: 4px;
+  color: #8a5600;
+  font-size: 11px;
+}
+
 .validation-card strong {
   color: var(--mint-dark);
 }
@@ -2298,6 +2350,15 @@ footer strong {
 
   .scan-quality-warning {
     grid-template-columns: 1fr;
+  }
+
+  .date-convention-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .date-convention-panel label {
+    justify-content: space-between;
   }
 
   .export-sanity-discrepancy {

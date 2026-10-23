@@ -3,6 +3,17 @@ import { getPersistentOcrText, setPersistentOcrText } from './ocrCache'
 import { attachPdfPasswordPrompt } from './pdfPasswordPrompt.mjs'
 import { getRowReview, lowerRowConfidence } from './reviewStatus'
 import { getStatementIntegrityWarning } from './statementIntegrity'
+import {
+  canonicalStatementDate,
+  detectStatementDateConvention,
+  formatStatementDate,
+  needsDateConventionChoice,
+  type StatementDateConvention,
+  type StatementDateFormat,
+  statementPeriodLabel as formatStatementPeriodLabel,
+} from './statementDates'
+
+export { canonicalStatementDate } from './statementDates'
 
 export type ProgressStage =
   | 'ready'
@@ -65,16 +76,23 @@ export type SourceProvenance = {
   ignoredLineNumbers: number[]
 }
 
+export type StatementPeriod = {
+  start?: string
+  end?: string
+  rawStart?: string
+  rawEnd?: string
+  source: 'explicit' | 'inferred'
+}
+
 export type ConversionResult = {
   workspaceOrigin?: 'sample-preview' | 'synthetic-sample' | 'upload'
   fileName: string
   fileType: string
   currencyCode: string
-  statementPeriod?: {
-    start?: string
-    end?: string
-    source: 'explicit' | 'inferred'
-  }
+  statementPeriod?: StatementPeriod
+  dateConvention?: StatementDateConvention
+  closingBalanceDate?: string
+  closingBalanceDateRaw?: string
   fileMeta: {
     size: number
     lastModified: number
@@ -141,10 +159,44 @@ export function revalidateRows(
 export function refreshStatementPeriod(
   rows: ExtractedRow[],
   previous?: ConversionResult['statementPeriod'],
+  convention?: StatementDateConvention,
 ): ConversionResult['statementPeriod'] | undefined {
   if (previous?.source === 'explicit') return previous
-  const inferred = inferStatementPeriodFromRows(rows)
+  const inferred = inferStatementPeriodFromRows(rows, convention)
   return inferred ? { ...inferred, source: 'inferred' } : undefined
+}
+
+export function applyDateConvention(result: ConversionResult, format: StatementDateFormat): ConversionResult {
+  const dateConvention: StatementDateConvention = { format, source: 'user' }
+  const statementPeriod = result.statementPeriod?.source === 'explicit'
+    ? {
+        ...result.statementPeriod,
+        start: canonicalStatementDate(result.statementPeriod.rawStart ?? result.statementPeriod.start, dateConvention),
+        end: canonicalStatementDate(result.statementPeriod.rawEnd ?? result.statementPeriod.end, dateConvention),
+      }
+    : refreshStatementPeriod(result.rows, undefined, dateConvention)
+  return {
+    ...result,
+    dateConvention,
+    statementPeriod,
+    closingBalanceDate: canonicalStatementDate(result.closingBalanceDateRaw ?? result.closingBalanceDate, dateConvention),
+  }
+}
+
+export function statementPeriodLabel(
+  period?: ConversionResult['statementPeriod'],
+  convention?: StatementDateConvention,
+) {
+  return formatStatementPeriodLabel(period, convention)
+}
+
+function dateRangeType(period?: ConversionResult['statementPeriod']) {
+  if (!period) return ''
+  return period.source === 'explicit' ? 'Statement period' : 'Transaction date range'
+}
+
+function dateRangeValue(value?: string, rawValue?: string, convention?: StatementDateConvention) {
+  return formatStatementDate(value ?? rawValue, convention)
 }
 
 export async function convertFiles(
@@ -246,8 +298,10 @@ export async function createExcelBlob(result: ConversionResult) {
     { header: 'File', key: 'file', width: 34 },
     { header: 'Kind', key: 'kind', width: 18 },
     { header: 'Currency', key: 'currency', width: 12 },
-    { header: 'Statement Start', key: 'statementStart', width: 18 },
-    { header: 'Statement End', key: 'statementEnd', width: 18 },
+    { header: 'Date Range Type', key: 'dateRangeType', width: 24 },
+    { header: 'Date Format', key: 'dateFormat', width: 18 },
+    { header: 'Date Range Start', key: 'statementStart', width: 18 },
+    { header: 'Date Range End', key: 'statementEnd', width: 18 },
     { header: 'Confidence', key: 'confidence', width: 16 },
     { header: 'Total', key: 'total', width: 16 },
     { header: 'Validation', key: 'validation', width: 18 },
@@ -263,8 +317,10 @@ export async function createExcelBlob(result: ConversionResult) {
     file: result.fileName,
     kind: result.summary.documentKind,
     currency: result.currencyCode,
-    statementStart: result.statementPeriod?.start ?? '',
-    statementEnd: result.statementPeriod?.end ?? '',
+    dateRangeType: dateRangeType(result.statementPeriod),
+    dateFormat: result.dateConvention?.format ?? (result.dateConvention?.source === 'ambiguous' || result.dateConvention?.source === 'conflict' ? 'Needs selection' : ''),
+    statementStart: dateRangeValue(result.statementPeriod?.start, result.statementPeriod?.rawStart, result.dateConvention),
+    statementEnd: dateRangeValue(result.statementPeriod?.end, result.statementPeriod?.rawEnd, result.dateConvention),
     confidence: `${result.confidence}%`,
     total: result.summary.total,
     validation: validationLabel(result.validation.status),
@@ -379,9 +435,9 @@ export async function createExcelBlob(result: ConversionResult) {
       notes: 'Count of validation issues logged in the Summary sheet.',
     },
     {
-      metric: 'Statement period',
-      value: `${result.statementPeriod?.start ?? ''}${result.statementPeriod?.end ? ` → ${result.statementPeriod.end}` : ''}`,
-      notes: result.statementPeriod?.source ? `Source: ${result.statementPeriod.source}` : '',
+      metric: dateRangeType(result.statementPeriod) || 'Date range',
+      value: `${dateRangeValue(result.statementPeriod?.start, result.statementPeriod?.rawStart, result.dateConvention)}${dateRangeValue(result.statementPeriod?.end, result.statementPeriod?.rawEnd, result.dateConvention) ? ` → ${dateRangeValue(result.statementPeriod?.end, result.statementPeriod?.rawEnd, result.dateConvention)}` : ''}`,
+      notes: result.dateConvention?.format ? `Format: ${result.dateConvention.format}` : 'Date format needs user selection when dates are ambiguous.',
     },
     {
       metric: 'File SHA-256',
@@ -419,7 +475,7 @@ export async function createExcelBlob(result: ConversionResult) {
   })
   result.rows.forEach((row, index) => {
     rows.addRow({
-      date: row.date ?? '',
+      date: formatStatementDate(row.date, result.dateConvention),
       description: row.description,
       reference: row.reference ?? '',
       withdrawal: numberOrNull(row.withdrawal),
@@ -463,8 +519,10 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     { header: 'File', key: 'file', width: 34 },
     { header: 'Kind', key: 'kind', width: 18 },
     { header: 'Currency', key: 'currency', width: 12 },
-    { header: 'Statement Start', key: 'statementStart', width: 18 },
-    { header: 'Statement End', key: 'statementEnd', width: 18 },
+    { header: 'Date Range Type', key: 'dateRangeType', width: 24 },
+    { header: 'Date Format', key: 'dateFormat', width: 18 },
+    { header: 'Date Range Start', key: 'statementStart', width: 18 },
+    { header: 'Date Range End', key: 'statementEnd', width: 18 },
     { header: 'Rows', key: 'rows', width: 10 },
     { header: 'Confidence', key: 'confidence', width: 16 },
     { header: 'Opening Balance', key: 'opening', width: 18 },
@@ -495,8 +553,9 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
   reconciliationSheet.columns = [
     { header: 'File', key: 'file', width: 34 },
     { header: 'Currency', key: 'currency', width: 12 },
-    { header: 'Statement Start', key: 'statementStart', width: 18 },
-    { header: 'Statement End', key: 'statementEnd', width: 18 },
+    { header: 'Date Range Type', key: 'dateRangeType', width: 24 },
+    { header: 'Date Range Start', key: 'statementStart', width: 18 },
+    { header: 'Date Range End', key: 'statementEnd', width: 18 },
     { header: 'Rows', key: 'rows', width: 10 },
     { header: 'Opening Balance', key: 'opening', width: 18 },
     { header: 'Closing Balance', key: 'closing', width: 18 },
@@ -547,8 +606,10 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
       file: result.fileName,
       kind: result.summary.documentKind,
       currency: result.currencyCode,
-      statementStart: result.statementPeriod?.start ?? '',
-      statementEnd: result.statementPeriod?.end ?? '',
+      dateRangeType: dateRangeType(result.statementPeriod),
+      dateFormat: result.dateConvention?.format ?? (result.dateConvention?.source === 'ambiguous' || result.dateConvention?.source === 'conflict' ? 'Needs selection' : ''),
+      statementStart: dateRangeValue(result.statementPeriod?.start, result.statementPeriod?.rawStart, result.dateConvention),
+      statementEnd: dateRangeValue(result.statementPeriod?.end, result.statementPeriod?.rawEnd, result.dateConvention),
       rows: result.rows.length,
       confidence: `${result.confidence}%`,
       opening: numberOrNull(opening),
@@ -568,8 +629,9 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     reconciliationSheet.addRow({
       file: result.fileName,
       currency: result.currencyCode,
-      statementStart: result.statementPeriod?.start ?? '',
-      statementEnd: result.statementPeriod?.end ?? '',
+      dateRangeType: dateRangeType(result.statementPeriod),
+      statementStart: dateRangeValue(result.statementPeriod?.start, result.statementPeriod?.rawStart, result.dateConvention),
+      statementEnd: dateRangeValue(result.statementPeriod?.end, result.statementPeriod?.rawEnd, result.dateConvention),
       rows: result.rows.length,
       opening: numberOrNull(reconciliation.openingBalance),
       closing: numberOrNull(reconciliation.closingBalance),
@@ -621,7 +683,7 @@ export async function createCombinedExcelBlob(results: ConversionResult[]) {
     })
     result.rows.forEach((row, index) => {
       rowsSheet.addRow({
-        date: row.date ?? '',
+        date: formatStatementDate(row.date, result.dateConvention),
         description: row.description,
         reference: row.reference ?? '',
         withdrawal: numberOrNull(row.withdrawal),
@@ -672,9 +734,10 @@ export function createCsvBlob(result: ConversionResult) {
       'Source',
       'Source Lines',
       'Statement Warnings',
+      'Date Format',
     ],
     ...result.rows.map((row, index) => [
-      row.date ?? '',
+      formatStatementDate(row.date, result.dateConvention),
       row.description,
       row.reference ?? '',
       String(row.withdrawal ?? ''),
@@ -689,6 +752,7 @@ export function createCsvBlob(result: ConversionResult) {
       row.source,
       row.sourceLineNumbers?.join(', ') ?? '',
       getStatementIntegrityWarning(result) ?? '',
+      result.dateConvention?.format ?? (result.dateConvention?.source === 'ambiguous' || result.dateConvention?.source === 'conflict' ? 'Needs selection' : ''),
     ]),
   ]
   const csv = rows
@@ -816,12 +880,17 @@ function uniqueSheetName(fileName: string, usedNames: Set<string>) {
 }
 
 export function createQboBlob(result: ConversionResult) {
-  const { startDate, endDate } = qboDateRange(result.rows, result.statementPeriod)
+  if (needsDateConventionChoice(result.rows, result.statementPeriod, result.dateConvention, result.closingBalanceDateRaw ?? result.closingBalanceDate)) {
+    throw new Error('Choose DD/MM/YYYY or MM/DD/YYYY before exporting QBO dates.')
+  }
+
+  const { startDate, endDate } = qboDateRange(result.rows, result.statementPeriod, result.dateConvention)
+  const closingAsOf = canonicalStatementDate(result.closingBalanceDateRaw ?? result.closingBalanceDate, result.dateConvention)
   const openingBalance = result.validation.openingBalance
   const closingBalance = result.validation.closingBalance ?? qboLastBalance(result.rows)
 
   const transactions = result.rows
-    .map((row, index) => qboTransaction(row, index))
+    .map((row, index) => qboTransaction(row, index, result.dateConvention))
     .filter((entry): entry is string => Boolean(entry))
     .join('\n')
 
@@ -877,18 +946,18 @@ export function createQboBlob(result: ConversionResult) {
       .join('\n'),
   )
 
-  if (closingBalance !== undefined) {
+  if (closingBalance !== undefined && closingAsOf) {
     parts.push(
       [
         '<LEDGERBAL>',
         `<BALAMT>${qboNumber(closingBalance)}`,
-        endDate ? `<DTASOF>${endDate}` : `<DTASOF>${qboFormatDate(now)}`,
+        closingAsOf ? `<DTASOF>${closingAsOf.replaceAll('-', '')}` : '',
         '</LEDGERBAL>',
-      ].join('\n'),
+      ].filter(Boolean).join('\n'),
     )
   }
 
-  if (openingBalance !== undefined) {
+  if (openingBalance !== undefined && result.statementPeriod?.source === 'explicit' && startDate) {
     parts.push(
       [
         '<AVAILBAL>',
@@ -941,7 +1010,7 @@ export async function createDocxBlob(result: ConversionResult) {
       (row, index) =>
         new TableRow({
           children: [
-            row.date ?? '',
+          formatStatementDate(row.date, result.dateConvention),
             row.description,
             row.reference ?? '',
             money(row.withdrawal, result.currencyCode),
@@ -966,12 +1035,10 @@ export async function createDocxBlob(result: ConversionResult) {
             heading: HeadingLevel.TITLE,
           }),
           new Paragraph(`Source file: ${result.fileName}`),
-          ...(result.statementPeriod?.start || result.statementPeriod?.end
+          ...(result.statementPeriod?.start || result.statementPeriod?.end || result.statementPeriod?.rawStart || result.statementPeriod?.rawEnd
             ? [
                 new Paragraph(
-                  `Statement period: ${[result.statementPeriod.start, result.statementPeriod.end]
-                    .filter(Boolean)
-                    .join(' to ')}`,
+                  statementPeriodLabel(result.statementPeriod, result.dateConvention),
                 ),
               ]
             : []),
@@ -1004,6 +1071,9 @@ export function createReviewJsonBlob(result: ConversionResult) {
     fileType: result.fileType,
     currencyCode: result.currencyCode,
     statementPeriod: result.statementPeriod,
+    dateConvention: result.dateConvention,
+    closingBalanceDate: result.closingBalanceDate,
+    closingBalanceDateRaw: result.closingBalanceDateRaw,
     fileMeta: result.fileMeta,
     processedAt: result.processedAt,
     confidence: result.confidence,
@@ -1252,16 +1322,46 @@ export async function importReviewJson(file: File): Promise<ConversionResult> {
   const provenance = readSourceProvenance(payload.provenance)
   const validation = revalidateRows(rows, currencyCode)
   addSourceCoverageIssue(validation, provenance)
-  const statementPeriod =
-    typeof payload.statementPeriod === 'object' && payload.statementPeriod
-      ? refreshStatementPeriod(rows, payload.statementPeriod as ConversionResult['statementPeriod'])
-      : refreshStatementPeriod(rows)
-
+  const importedPeriod = typeof payload.statementPeriod === 'object' && payload.statementPeriod
+    ? payload.statementPeriod as ConversionResult['statementPeriod']
+    : undefined
+  const closingBalanceDateRaw = asString(payload.closingBalanceDateRaw) ?? asString(payload.closingBalanceDate)
+  const dateConventionValue = typeof payload.dateConvention === 'object' && payload.dateConvention
+    ? payload.dateConvention as StatementDateConvention
+    : undefined
+  const validDateConventionSource = dateConventionValue &&
+    ['document', 'metadata', 'user', 'ambiguous', 'conflict'].includes(dateConventionValue.source)
+  const unresolvedDateConvention = dateConventionValue?.source === 'ambiguous' || dateConventionValue?.source === 'conflict'
+  const validDateConventionFormat = dateConventionValue &&
+    ['DD/MM/YYYY', 'MM/DD/YYYY'].includes(dateConventionValue.format ?? '')
+  const dateEvidenceLines = [
+    ...(importedPeriod?.source === 'explicit'
+      ? [`Statement period: ${importedPeriod.rawStart ?? importedPeriod.start ?? ''} to ${importedPeriod.rawEnd ?? importedPeriod.end ?? ''}`]
+      : []),
+    ...(closingBalanceDateRaw ? [`CLOSING BALANCE AS OF ${closingBalanceDateRaw}`] : []),
+  ]
+  const dateConvention = validDateConventionSource && (unresolvedDateConvention
+    ? dateConventionValue?.format === undefined
+    : validDateConventionFormat)
+    ? dateConventionValue
+    : detectStatementDateConvention(dateEvidenceLines, rows)
+  const statementPeriod = importedPeriod?.source === 'explicit'
+    ? {
+        ...importedPeriod,
+        rawStart: importedPeriod.rawStart ?? importedPeriod.start,
+        rawEnd: importedPeriod.rawEnd ?? importedPeriod.end,
+        start: canonicalStatementDate(importedPeriod.rawStart ?? importedPeriod.start, dateConvention),
+        end: canonicalStatementDate(importedPeriod.rawEnd ?? importedPeriod.end, dateConvention),
+      }
+    : refreshStatementPeriod(rows, undefined, dateConvention)
   return {
     fileName,
     fileType,
     currencyCode,
     statementPeriod,
+    dateConvention,
+    closingBalanceDate: canonicalStatementDate(closingBalanceDateRaw, dateConvention),
+    closingBalanceDateRaw,
     fileMeta,
     rawText: '',
     provenance,
@@ -1392,11 +1492,9 @@ async function createPdfBlobAsync(result: ConversionResult) {
   pdf.setFontSize(10)
   pdf.text(`Source: ${result.fileName}`, margin, y)
   y += 16
-  if (result.statementPeriod?.start || result.statementPeriod?.end) {
+  if (result.statementPeriod?.start || result.statementPeriod?.end || result.statementPeriod?.rawStart || result.statementPeriod?.rawEnd) {
     pdf.text(
-      `Statement period: ${[result.statementPeriod.start, result.statementPeriod.end]
-        .filter(Boolean)
-        .join(' to ')}`,
+      statementPeriodLabel(result.statementPeriod, result.dateConvention),
       margin,
       y,
     )
@@ -1425,7 +1523,7 @@ async function createPdfBlobAsync(result: ConversionResult) {
       pdf.addPage()
       y = margin
     }
-    pdf.text(row.date ?? '-', margin, y)
+    pdf.text(formatStatementDate(row.date, result.dateConvention) || '-', margin, y)
     pdf.text(pdf.splitTextToSize(row.description, 210), margin + 82, y)
     pdf.text(money(row.withdrawal, result.currencyCode), margin + 310, y)
     pdf.text(money(row.deposit, result.currencyCode), margin + 390, y)
@@ -1898,7 +1996,9 @@ export function parseExtractedText(
   const parsed = structured.rows.length > 0 ? structured : parseUnstructuredStatement(lines)
   const rows = parsed.rows
   const fallbackRows = rows.length > 0 ? rows : buildFallbackRows(lines)
-  const statementPeriod = detectStatementPeriod(lines, fallbackRows)
+  const dateConvention = detectStatementDateConvention(lines, fallbackRows)
+  const statementPeriod = detectStatementPeriod(lines, fallbackRows, dateConvention)
+  const closingBalanceDate = detectClosingBalanceDate(lines, dateConvention)
   const currencyCode = detectCurrencyCode(normalized, fileName)
   const validation = validateBalances(fallbackRows, currencyCode)
   addSourceCoverageIssue(validation, parsed.provenance)
@@ -1940,6 +2040,9 @@ export function parseExtractedText(
     fileType,
     currencyCode,
     statementPeriod,
+    dateConvention,
+    closingBalanceDate: closingBalanceDate.date,
+    closingBalanceDateRaw: closingBalanceDate.raw,
     fileMeta,
     rawText: normalized,
     provenance: rows.length > 0 ? parsed.provenance : undefined,
@@ -2273,54 +2376,17 @@ function extractDatesFromLine(line: string) {
   return Array.from(new Set(matches.map((value) => value.trim()))).slice(0, 6)
 }
 
-function parseDateToIso(input: string) {
-  const value = input.trim()
-  if (!value) return undefined
-
-  const iso = value.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
-  if (iso) {
-    const year = iso[1]
-    const month = Number(iso[2])
-    const day = Number(iso[3])
-    if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  }
-
-  const slash = value.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
-  if (slash) {
-    const first = Number(slash[1])
-    const second = Number(slash[2])
-    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
-    const [month, day] = first > 12 ? [second, first] : [first, second]
-    if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  }
-
-  const monthName = value.match(
-    /^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2}),?\s+(\d{2,4})$/i,
-  )
-  if (monthName) {
-    const monthKey = monthName[1].slice(0, 3).toLowerCase()
-    const day = Number(monthName[2])
-    const year = monthName[3].length === 2 ? `20${monthName[3]}` : monthName[3]
-    const monthIndex = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(
-      monthKey,
-    )
-    if (monthIndex === -1 || day < 1 || day > 31) return undefined
-    const month = monthIndex + 1
-    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  }
-
-  return undefined
-}
-
 function normalizeIsoRange(start?: string, end?: string) {
   if (!start && !end) return undefined
   if (start && end && start > end) return { start: end, end: start }
   return { start, end }
 }
 
-function detectStatementPeriod(lines: string[], rows: ExtractedRow[]): ConversionResult['statementPeriod'] | undefined {
+function detectStatementPeriod(
+  lines: string[],
+  rows: ExtractedRow[],
+  convention?: StatementDateConvention,
+): ConversionResult['statementPeriod'] | undefined {
   for (const line of lines) {
     const text = line.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim()
     if (!text) continue
@@ -2328,27 +2394,42 @@ function detectStatementPeriod(lines: string[], rows: ExtractedRow[]): Conversio
 
     const dates = extractDatesFromLine(text)
     if (dates.length < 2) continue
-    const first = parseDateToIso(dates[0] ?? '')
-    const second = parseDateToIso(dates[1] ?? '')
+    const rawStart = dates[0]
+    const rawEnd = dates[1]
+    const first = canonicalStatementDate(rawStart, convention)
+    const second = canonicalStatementDate(rawEnd, convention)
     const normalized = normalizeIsoRange(first, second)
-    if (normalized?.start || normalized?.end) {
-      return { ...normalized, source: 'explicit' }
+    return {
+      ...normalized,
+      rawStart: first && second && first > second ? rawEnd : rawStart,
+      rawEnd: first && second && first > second ? rawStart : rawEnd,
+      source: 'explicit',
     }
   }
 
-  const inferred = inferStatementPeriodFromRows(rows)
+  const inferred = inferStatementPeriodFromRows(rows, convention)
   return inferred ? { ...inferred, source: 'inferred' } : undefined
 }
 
-function inferStatementPeriodFromRows(rows: ExtractedRow[]) {
+function inferStatementPeriodFromRows(rows: ExtractedRow[], convention?: StatementDateConvention) {
   const parsed = rows
-    .map((row) => parseDateToIso(row.date ?? ''))
-    .filter((value): value is string => Boolean(value))
-    .sort()
+    .map((row) => ({ raw: row.date, date: canonicalStatementDate(row.date, convention) }))
+    .filter((value): value is { raw: string; date: string } => Boolean(value.raw && value.date))
+    .sort((left, right) => left.date.localeCompare(right.date))
   if (parsed.length === 0) return undefined
-  const start = parsed[0]
-  const end = parsed[parsed.length - 1]
-  return normalizeIsoRange(start, end)
+  const first = parsed[0]
+  const last = parsed[parsed.length - 1]
+  return {
+    ...normalizeIsoRange(first.date, last.date),
+    rawStart: first.raw,
+    rawEnd: last.raw,
+  }
+}
+
+function detectClosingBalanceDate(lines: string[], convention?: StatementDateConvention) {
+  const line = [...lines].reverse().find((candidate) => /\b(?:closing|ending|final) balance\b/i.test(candidate))
+  const raw = line ? extractDatesFromLine(line).at(-1) : undefined
+  return { raw, date: canonicalStatementDate(raw, convention) }
 }
 
 function classifyStructuredRow(description: string, amount?: number) {
@@ -2644,22 +2725,6 @@ function qboText(value: string) {
   return qboToAscii(value).replace(/[<>\r\n]/g, ' ').replace(/&/g, 'and').trim()
 }
 
-function qboGuessPostedDate(value?: string) {
-  if (!value) return undefined
-  const trimmed = value.trim()
-  const iso = trimmed.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
-  if (iso) return `${iso[1]}${iso[2].padStart(2, '0')}${iso[3].padStart(2, '0')}`
-
-  const slash = trimmed.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/)
-  if (!slash) return undefined
-  const first = Number(slash[1])
-  const second = Number(slash[2])
-  const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
-  const [month, day] = first > 12 ? [second, first] : [first, second]
-  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined
-  return `${year}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`
-}
-
 function qboAmount(row: ExtractedRow) {
   if (row.amount !== undefined && Number.isFinite(row.amount)) return row.amount
   const deposit = row.deposit ?? 0
@@ -2668,8 +2733,8 @@ function qboAmount(row: ExtractedRow) {
   return deposit - withdrawal - tax
 }
 
-function qboTransaction(row: ExtractedRow, index: number) {
-  const posted = qboGuessPostedDate(row.date)
+function qboTransaction(row: ExtractedRow, index: number, convention?: StatementDateConvention) {
+  const posted = canonicalStatementDate(row.date, convention)?.replaceAll('-', '')
   if (!posted) return ''
   const amount = qboAmount(row)
   if (!Number.isFinite(amount) || amount === 0) return ''
@@ -2690,12 +2755,18 @@ function qboTransaction(row: ExtractedRow, index: number) {
   ].join('\n')
 }
 
-function qboDateRange(rows: ExtractedRow[], period?: ConversionResult['statementPeriod']) {
-  const explicitStart = period?.start ? qboGuessPostedDate(period.start) : undefined
-  const explicitEnd = period?.end ? qboGuessPostedDate(period.end) : undefined
+function qboDateRange(
+  rows: ExtractedRow[],
+  period?: ConversionResult['statementPeriod'],
+  convention?: StatementDateConvention,
+) {
+  const explicitStart = canonicalStatementDate(period?.start ?? period?.rawStart, convention)?.replaceAll('-', '')
+  const explicitEnd = canonicalStatementDate(period?.end ?? period?.rawEnd, convention)?.replaceAll('-', '')
+
+  if (period?.source === 'explicit') return { startDate: explicitStart, endDate: explicitEnd }
 
   const postedDates = rows
-    .map((row) => qboGuessPostedDate(row.date))
+    .map((row) => canonicalStatementDate(row.date, convention)?.replaceAll('-', ''))
     .filter((value): value is string => Boolean(value))
     .sort()
 
