@@ -10,7 +10,7 @@ ExtractMint processes documents in your browser by default. The optional Ask Ext
 
 ## Ask ExtractMint
 
-When you submit a question with a converted document active, the browser sends the question and a compact context to ExtractMint's `/api/agent/` endpoint. That context includes the file name, document type, currency, statement period, row count, confidence and validation details, plus up to five extracted rows with dates, descriptions, amounts, deposits, withdrawals, and balances. The original PDF is not included.
+When you submit a question with a converted document active, the browser sends the question and a compact context to ExtractMint's `/api/agent/` endpoint. That context includes the file name, document type, currency, statement period, row count, overall confidence and validation details, plus up to five extracted rows with dates, descriptions, amounts, deposits, withdrawals, balances, and row confidence. The original PDF is not included.
 
 If an AI provider is configured for the agent, the question and context are forwarded to that provider to generate a reply. If no provider is configured, the endpoint uses built-in guidance. Avoid asking about a document if you do not want these selected details sent to the endpoint and, when configured, the AI provider. Review the provider's own privacy terms for its handling and retention.
 
