@@ -1,5 +1,6 @@
 import {
   buildFreeLlmPayload,
+  classifyGatewayFailure,
   createFallbackAnswer,
   parseChatCompletionText,
   resolveFreeLlmConfig,
@@ -39,15 +40,19 @@ export default async function handler(request, response) {
       body: JSON.stringify(buildFreeLlmPayload(question, context, config.model)),
     })
 
-    const payload = await upstream.json().catch(() => null)
-
     if (!upstream.ok) {
-      const message = payload?.error?.message || `FreeLLMAPI returned HTTP ${upstream.status}`
-      throw new Error(message)
+      const error = new Error('Upstream HTTP failure')
+      error.name = 'UpstreamHttpError'
+      throw error
     }
 
+    const payload = await upstream.json().catch(() => null)
     const answer = parseChatCompletionText(payload)
-    if (!answer) throw new Error('FreeLLMAPI returned an empty answer')
+    if (!answer) {
+      const error = new Error('Invalid provider response')
+      error.name = 'InvalidProviderResponseError'
+      throw error
+    }
 
     return response.status(200).json({
       answer,
@@ -59,7 +64,7 @@ export default async function handler(request, response) {
       answer: createFallbackAnswer(question, context, { configured: true }),
       provider: 'local-fallback',
       configured: true,
-      warning: error instanceof Error ? error.message : 'FreeLLMAPI request failed',
+      warning: classifyGatewayFailure(error),
     })
   }
 }

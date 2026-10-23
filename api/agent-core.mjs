@@ -66,6 +66,18 @@ export function parseChatCompletionText(payload) {
   return typeof text === 'string' ? text.trim() : ''
 }
 
+export function classifyGatewayFailure(error) {
+  const name = String(error?.name ?? '')
+  const message = String(error?.message ?? '').toLowerCase()
+  if (name === 'AbortError' || /\b(timeout|timed out|aborted)\b/.test(message)) return 'timeout'
+  if (name === 'UpstreamHttpError' || /^http\s+\d{3}\b/.test(message)) return 'upstream-http'
+  if (name === 'InvalidProviderResponseError') return 'invalid-response'
+  if (/\b(fetch failed|network|enotfound|eai_again|econnrefused|econnreset|socket hang up)\b/.test(message)) {
+    return 'network'
+  }
+  return 'unknown'
+}
+
 export function createFallbackAnswer(question, context = {}, options = {}) {
   const issueCount = Number(context.issueCount ?? 0)
   const rowCount = Number(context.rowCount ?? 0)
@@ -85,11 +97,9 @@ export function createFallbackAnswer(question, context = {}, options = {}) {
     : 'For reconciliation, verify date order, descriptions, withdrawals, deposits, balances, and the statement period before filing or importing.'
 
   return [
+    'AI answers temporarily unavailable — showing built-in guidance.',
     `For ${fileName}, ExtractMint has ${rowCount} rows at ${confidence}% confidence for ${period}.`,
     `Validation status: ${status}. ${reviewLine}`,
     exportLine,
-    options.configured
-      ? 'FreeLLMAPI is configured, but the gateway is not reachable yet. This is the built-in local guidance until the gateway URL responds.'
-      : 'FreeLLMAPI is not configured yet, so this is the built-in local guidance. Add FREELLMAPI_BASE_URL and FREELLMAPI_API_KEY in Vercel to enable live AI answers.',
   ].join('\n\n')
 }
