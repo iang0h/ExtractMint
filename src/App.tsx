@@ -441,6 +441,11 @@ type PdfPageMatchCandidate = {
   snippet: string
 }
 
+type PdfRowMatchResult = {
+  matches: PdfPageMatchCandidate[]
+  status: 'ready' | 'error'
+}
+
 type TelemetryEvent = {
   at: string
   fileType: string
@@ -520,11 +525,9 @@ function App() {
   const pdfDocRef = useRef<unknown>(null)
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null)
   const [pdfMatchInfo, setPdfMatchInfo] = useState<PdfMatchInfo | null>(null)
-  const [pdfRowMatches, setPdfRowMatches] = useState<PdfPageMatchCandidate[]>([])
-  const [pdfRowMatchStatus, setPdfRowMatchStatus] = useState<'idle' | 'indexing' | 'ready' | 'error'>('idle')
+  const [pdfRowMatchResults, setPdfRowMatchResults] = useState<Map<string, PdfRowMatchResult>>(() => new Map())
   const pdfTextIndexRef = useRef<Map<string, string>>(new Map())
   const pdfRawTextIndexRef = useRef<Map<string, string>>(new Map())
-  const pdfRowMatchCacheRef = useRef<Map<string, PdfPageMatchCandidate[]>>(new Map())
   const [agentQuestion, setAgentQuestion] = useState('What should I check before exporting to Excel?')
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([
     {
@@ -601,16 +604,6 @@ function App() {
     return thumbnailPages(pdfPageCount, pdfPage, 12)
   }, [activePdfUrl, activeSha, pdfPage, pdfPageCount, showSourcePreview])
   const selectedRow = selectedRowIndex !== null ? (activeResult?.rows?.[selectedRowIndex] ?? null) : null
-  const pageCandidates = useMemo(() => {
-    if (!selectedRow) return []
-    if (pdfRowMatches.length > 0) {
-      return pdfRowMatches
-        .map((match) => ({ pageNumber: match.pageNumber, score: match.confidence }))
-        .filter((item) => item.score > 0)
-        .slice(0, 8)
-    }
-    return rankMatchingPages(activePages, selectedRow).filter((item) => item.score > 0).slice(0, 6)
-  }, [activePages, pdfRowMatches, selectedRow])
   const pdfHighlightQueries = useMemo(() => {
     if (!selectedRow) return []
     const queries: string[] = []
@@ -642,6 +635,41 @@ function App() {
     () => (pdfHighlightQueries ?? []).map(normalizePdfMatchText).filter(Boolean).join('|'),
     [pdfHighlightQueries],
   )
+  const pdfRowMatchTokens = useMemo(
+    () => Array.from(new Set((pdfHighlightQueries ?? [])
+      .map(normalizePdfMatchText)
+      .flatMap((query) => query.split(' '))
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 2))),
+    [pdfHighlightQueries],
+  )
+  const pdfRowMatchTotalWeight = useMemo(
+    () => pdfRowMatchTokens.reduce((sum, token) => sum + tokenWeight(token), 0),
+    [pdfRowMatchTokens],
+  )
+  const activePdfRowMatchKey = showSourcePreview && activeSha && selectedRow && selectedRowIndex !== null && pdfDoc && pdfPageCount
+    ? `${activeSha}:${selectedRowIndex}:${pdfRowMatchQueriesKey}`
+    : null
+  const activePdfRowMatchResult = activePdfRowMatchKey
+    ? pdfRowMatchResults.get(activePdfRowMatchKey)
+    : undefined
+  const pdfRowMatches = useMemo(
+    () => activePdfRowMatchResult?.matches ?? [],
+    [activePdfRowMatchResult],
+  )
+  const pdfRowMatchStatus = !activePdfRowMatchKey || pdfRowMatchTotalWeight <= 0
+    ? 'idle'
+    : activePdfRowMatchResult?.status ?? 'indexing'
+  const pageCandidates = useMemo(() => {
+    if (!selectedRow) return []
+    if (pdfRowMatches.length > 0) {
+      return pdfRowMatches
+        .map((match) => ({ pageNumber: match.pageNumber, score: match.confidence }))
+        .filter((item) => item.score > 0)
+        .slice(0, 8)
+    }
+    return rankMatchingPages(activePages, selectedRow).filter((item) => item.score > 0).slice(0, 6)
+  }, [activePages, pdfRowMatches, selectedRow])
   const agentContext = useMemo(() => {
     if (!activeResult) return null
     return {
@@ -693,8 +721,6 @@ function App() {
       setPdfPageCount(null)
       setPdfThumbStatus('idle')
       setPdfMatchInfo(null)
-      setPdfRowMatches([])
-      setPdfRowMatchStatus('idle')
       return
     }
 
@@ -741,8 +767,6 @@ function App() {
         setPdfDoc(null)
         setPdfPageCount(null)
         setPdfThumbStatus('error')
-        setPdfRowMatches([])
-        setPdfRowMatchStatus('error')
         console.warn('PDF preview load failed', error)
       }
     })()
@@ -754,85 +778,57 @@ function App() {
   }, [activePdfUrl, activePdfSignature, pdfDocumentsVersion, showSourcePreview])
 
   useEffect(() => {
-    if (!showSourcePreview || !activeSha || !selectedRow || selectedRowIndex === null) {
-      setPdfRowMatches([])
-      setPdfRowMatchStatus('idle')
-      return
-    }
-    if (!pdfDoc || !pdfPageCount) {
-      setPdfRowMatches([])
-      setPdfRowMatchStatus('idle')
-      return
-    }
+    const document = pdfDoc
+    const documentSha = activeSha
+    const pageCount = pdfPageCount
+    if (!activePdfRowMatchKey || !document || !documentSha || !pageCount || pdfRowMatchTotalWeight <= 0) return
 
-    const cacheKey = `${activeSha}:${selectedRowIndex}:${pdfRowMatchQueriesKey}`
-    const cached = pdfRowMatchCacheRef.current.get(cacheKey)
-    if (cached) {
-      setPdfRowMatches(cached)
-      setPdfRowMatchStatus('ready')
-      return
-    }
-
-    const queries = (pdfHighlightQueries ?? []).map(normalizePdfMatchText).filter(Boolean)
-    const tokens = Array.from(
-      new Set(
-        queries
-          .flatMap((query) => query.split(' '))
-          .map((token) => token.trim())
-          .filter((token) => token.length >= 2),
-      ),
-    )
-    const totalWeight = tokens.reduce((sum, token) => sum + tokenWeight(token), 0)
-    if (tokens.length === 0 || totalWeight <= 0) {
-      setPdfRowMatches([])
-      setPdfRowMatchStatus('idle')
-      return
-    }
+    const cacheKey = activePdfRowMatchKey
+    if (pdfRowMatchResults.has(cacheKey)) return
 
     let cancelled = false
-    setPdfRowMatchStatus('indexing')
 
     void (async () => {
       try {
         const matches: PdfPageMatchCandidate[] = []
-	        for (let pageNumber = 1; pageNumber <= pdfPageCount; pageNumber += 1) {
-	          if (cancelled) return
-	          const pageKey = `${activeSha}:${pageNumber}`
-	          let normalizedPageText = pdfTextIndexRef.current.get(pageKey)
-	          let rawPageText = pdfRawTextIndexRef.current.get(pageKey) ?? ''
-	          if (!normalizedPageText && persistPdfTextIndex) {
-	            const persistent = await getPersistentPdfPageText(pageKey)
-	            if (cancelled) return
-	            if (persistent) {
-	              rawPageText = persistent.rawText
-	              normalizedPageText = persistent.normalizedText
-	              pdfTextIndexRef.current.set(pageKey, normalizedPageText)
-	              pdfRawTextIndexRef.current.set(pageKey, rawPageText)
-	            }
-	          }
-	          if (!normalizedPageText) {
-	            const page = await pdfDoc.getPage(pageNumber)
-	            if (cancelled) return
-	            const content = await page.getTextContent()
-	            if (cancelled) return
-	            const rawText = (content.items ?? [])
-	              .map((item) => ('str' in item ? (item.str ?? '') : ''))
-	              .join(' ')
-	              .replace(/\s+/g, ' ')
-	              .trim()
-	            rawPageText = rawText
-	            normalizedPageText = normalizePdfMatchText(rawText)
-	            pdfTextIndexRef.current.set(pageKey, normalizedPageText)
-	            pdfRawTextIndexRef.current.set(pageKey, rawText)
-	            if (persistPdfTextIndex) {
-	              void setPersistentPdfPageText(pageKey, rawText, normalizedPageText)
-	            }
-	          }
+        for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+          if (cancelled) return
+          const pageKey = `${documentSha}:${pageNumber}`
+          let normalizedPageText = pdfTextIndexRef.current.get(pageKey)
+          let rawPageText = pdfRawTextIndexRef.current.get(pageKey) ?? ''
+          if (!normalizedPageText && persistPdfTextIndex) {
+            const persistent = await getPersistentPdfPageText(pageKey)
+            if (cancelled) return
+            if (persistent) {
+              rawPageText = persistent.rawText
+              normalizedPageText = persistent.normalizedText
+              pdfTextIndexRef.current.set(pageKey, normalizedPageText)
+              pdfRawTextIndexRef.current.set(pageKey, rawPageText)
+            }
+          }
+          if (!normalizedPageText) {
+            const page = await document.getPage(pageNumber)
+            if (cancelled) return
+            const content = await page.getTextContent()
+            if (cancelled) return
+            const rawText = (content.items ?? [])
+              .map((item) => ('str' in item ? (item.str ?? '') : ''))
+              .join(' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+            rawPageText = rawText
+            normalizedPageText = normalizePdfMatchText(rawText)
+            pdfTextIndexRef.current.set(pageKey, normalizedPageText)
+            pdfRawTextIndexRef.current.set(pageKey, rawText)
+            if (persistPdfTextIndex) {
+              void setPersistentPdfPageText(pageKey, rawText, normalizedPageText)
+            }
+          }
 
           if (!normalizedPageText) continue
           let matchedWeight = 0
           let matchedTokens = 0
-          for (const token of tokens) {
+          for (const token of pdfRowMatchTokens) {
             if (normalizedPageText.includes(token)) {
               matchedWeight += tokenWeight(token)
               matchedTokens += 1
@@ -840,22 +836,20 @@ function App() {
           }
           if (matchedWeight <= 0) continue
 
-	          matches.push({
-	            pageNumber,
-	            confidence: Math.max(0, Math.min(100, Math.round((matchedWeight / totalWeight) * 100))),
-	            matchedTokens,
-	            totalTokens: tokens.length,
-	            snippet: bestSnippetFromPageText(rawPageText, tokens, 90),
-	          })
-	        }
+          matches.push({
+            pageNumber,
+            confidence: Math.max(0, Math.min(100, Math.round((matchedWeight / pdfRowMatchTotalWeight) * 100))),
+            matchedTokens,
+            totalTokens: pdfRowMatchTokens.length,
+            snippet: bestSnippetFromPageText(rawPageText, pdfRowMatchTokens, 90),
+          })
+        }
 
         if (cancelled) return
         const ranked = matches
           .sort((a, b) => b.confidence - a.confidence || a.pageNumber - b.pageNumber)
           .slice(0, 8)
-        pdfRowMatchCacheRef.current.set(cacheKey, ranked)
-        setPdfRowMatches(ranked)
-        setPdfRowMatchStatus('ready')
+        setPdfRowMatchResults((previous) => new Map(previous).set(cacheKey, { matches: ranked, status: 'ready' }))
         if (persistPdfTextIndex) {
           void (async () => {
             setPdfTextIndexStats(await getPersistentPdfTextIndexStats())
@@ -864,8 +858,7 @@ function App() {
       } catch (error) {
         if (cancelled) return
         console.warn('PDF row match indexing failed', error)
-        setPdfRowMatches([])
-        setPdfRowMatchStatus('error')
+        setPdfRowMatchResults((previous) => new Map(previous).set(cacheKey, { matches: [], status: 'error' }))
       }
     })()
 
@@ -873,16 +866,15 @@ function App() {
       cancelled = true
     }
   }, [
+    activePdfRowMatchKey,
     activeSha,
     pdfDoc,
-    pdfHighlightQueries,
     pdfPageCount,
-    pdfRowMatchQueriesKey,
-	    selectedRow,
-	    selectedRowIndex,
-	    persistPdfTextIndex,
-	    showSourcePreview,
-	  ])
+    pdfRowMatchTokens,
+    pdfRowMatchTotalWeight,
+    pdfRowMatchResults,
+    persistPdfTextIndex,
+  ])
 
   useEffect(() => {
     if (!activeSha || !activePdfUrl || !showSourcePreview) return
@@ -946,10 +938,8 @@ function App() {
 
         pdfTextIndexRef.current.clear()
         pdfRawTextIndexRef.current.clear()
-        pdfRowMatchCacheRef.current.clear()
-        setPdfRowMatches([])
+        setPdfRowMatchResults(new Map())
         setPdfMatchInfo(null)
-        setPdfRowMatchStatus('idle')
 
         const converter = getConverterIfLoaded()
         converter?.clearInMemoryOcrCache()
