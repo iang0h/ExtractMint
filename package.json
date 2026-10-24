@@ -14,6 +14,7 @@
     "test:statement-reliability": "node tests/statement-reliability.test.mjs",
     "test:provided-statements": "node tests/provided-statement-regressions.test.mjs",
     "test:e2e:exports": "node tests/export-edit.e2e.mjs",
+    "test:e2e:reliability-layout": "node tests/reliability-layout.e2e.mjs",
     "test:synthetic-sample": "node tests/synthetic-sample-loader.test.mjs",
     "preview": "vite preview",
     "deploy:static": "npm run build",

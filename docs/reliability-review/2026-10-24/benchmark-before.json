@@ -1,0 +1,319 @@
+{
+  "schema": "extractmint.synthetic-statement-benchmark.v1",
+  "synthetic": true,
+  "corpus": {
+    "name": "ExtractMint synthetic statement baseline",
+    "disclaimer": "All names, references, descriptions, and amounts are invented benchmark data.",
+    "caseCount": 2,
+    "transactionCount": 6,
+    "scope": "Digital text PDFs generated in memory from invented fixture data."
+  },
+  "limitation": "Synthetic digital-PDF fixtures only. These scores do not represent real-bank coverage, scanned-PDF/OCR performance, or production accuracy.",
+  "generatedAt": "2026-10-24T01:21:30.361Z",
+  "results": [
+    {
+      "id": "synthetic-english-ledger",
+      "language": "en",
+      "expectedCount": 3,
+      "extractedCount": 3,
+      "matchedCount": 0,
+      "precision": 0,
+      "recall": 0,
+      "fields": {
+        "date": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "description": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "reference": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "amount": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "withdrawal": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "deposit": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "balance": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "tax": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        }
+      },
+      "balance": {
+        "status": "review",
+        "checkedRows": 4,
+        "issueCount": 6,
+        "passed": false
+      },
+      "passed": false,
+      "unmatchedExpected": [
+        {
+          "date": "03/04/2026",
+          "description": "Studio supplies",
+          "reference": "SYN-EN-001",
+          "withdrawal": 125.5,
+          "amount": -125.5,
+          "balance": 874.5
+        },
+        {
+          "date": "05/04/2026",
+          "description": "Project credit",
+          "reference": "SYN-EN-002",
+          "deposit": 300,
+          "amount": 300,
+          "balance": 1174.5
+        },
+        {
+          "date": "07/04/2026",
+          "description": "Service charge",
+          "reference": "SYN-EN-003",
+          "withdrawal": 62,
+          "amount": -62,
+          "balance": 1112.5
+        }
+      ],
+      "unmatchedExtracted": [
+        {
+          "date": "03/04/2026",
+          "description": "Studio supplies SYN-EN-001",
+          "withdrawal": 125.5,
+          "balance": 874.5,
+          "amount": -125.5,
+          "category": "Withdrawal",
+          "confidence": 68,
+          "source": "Line 9",
+          "sourceLineNumbers": [
+            9
+          ]
+        },
+        {
+          "date": "05/04/2026",
+          "description": "Project credit SYN-EN-002",
+          "deposit": 300,
+          "balance": 1174.5,
+          "amount": 300,
+          "category": "Deposit",
+          "confidence": 68,
+          "source": "Line 10",
+          "sourceLineNumbers": [
+            10
+          ]
+        },
+        {
+          "date": "07/04/2026",
+          "description": "Service charge SYN-EN-003",
+          "withdrawal": 62,
+          "balance": 1112.5,
+          "amount": -62,
+          "category": "Expense",
+          "confidence": 68,
+          "source": "Line 11",
+          "sourceLineNumbers": [
+            11
+          ]
+        }
+      ],
+      "mismatches": []
+    },
+    {
+      "id": "synthetic-malay-ledger",
+      "language": "ms",
+      "expectedCount": 3,
+      "extractedCount": 3,
+      "matchedCount": 0,
+      "precision": 0,
+      "recall": 0,
+      "fields": {
+        "date": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "description": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "reference": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "amount": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "withdrawal": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "deposit": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "balance": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        },
+        "tax": {
+          "exact": 0,
+          "total": 3,
+          "rate": 0
+        }
+      },
+      "balance": {
+        "status": "review",
+        "checkedRows": 4,
+        "issueCount": 3,
+        "passed": false
+      },
+      "passed": false,
+      "unmatchedExpected": [
+        {
+          "date": "09/04/2026",
+          "description": "Tambang rekaan",
+          "reference": "SYN-MS-001",
+          "withdrawal": 45,
+          "amount": -45,
+          "balance": 205
+        },
+        {
+          "date": "11/04/2026",
+          "description": "Kredit projek",
+          "reference": "SYN-MS-002",
+          "deposit": 80,
+          "amount": 80,
+          "balance": 285
+        },
+        {
+          "date": "13/04/2026",
+          "description": "Bayaran rekaan",
+          "reference": "SYN-MS-003",
+          "withdrawal": 105,
+          "amount": -105,
+          "balance": 180
+        }
+      ],
+      "unmatchedExtracted": [
+        {
+          "date": "09/04/2026",
+          "description": "Tambang rekaan SYN-MS-001",
+          "withdrawal": 45,
+          "balance": 205,
+          "amount": -45,
+          "category": "Withdrawal",
+          "confidence": 68,
+          "source": "Line 9",
+          "sourceLineNumbers": [
+            9
+          ]
+        },
+        {
+          "date": "11/04/2026",
+          "description": "Kredit projek SYN-MS-002",
+          "deposit": 80,
+          "balance": 285,
+          "amount": 80,
+          "category": "Deposit",
+          "confidence": 68,
+          "source": "Line 10",
+          "sourceLineNumbers": [
+            10
+          ]
+        },
+        {
+          "date": "13/04/2026",
+          "description": "Bayaran rekaan SYN-MS-003",
+          "withdrawal": 105,
+          "balance": 180,
+          "amount": -105,
+          "category": "Withdrawal",
+          "confidence": 68,
+          "source": "Line 11",
+          "sourceLineNumbers": [
+            11
+          ]
+        }
+      ],
+      "mismatches": []
+    }
+  ],
+  "aggregate": {
+    "expectedCount": 6,
+    "extractedCount": 6,
+    "matchedCount": 0,
+    "precision": 0,
+    "recall": 0,
+    "fields": {
+      "date": {
+        "exact": 0,
+        "total": 6,
+        "rate": 0
+      },
+      "description": {
+        "exact": 0,
+        "total": 6,
+        "rate": 0
+      },
+      "reference": {
+        "exact": 0,
+        "total": 6,
+        "rate": 0
+      },
+      "amount": {
+        "exact": 0,
+        "total": 6,
+        "rate": 0
+      },
+      "withdrawal": {
+        "exact": 0,
+        "total": 6,
+        "rate": 0
+      },
+      "deposit": {
+        "exact": 0,
+        "total": 6,
+        "rate": 0
+      },
+      "balance": {
+        "exact": 0,
+        "total": 6,
+        "rate": 0
+      },
+      "tax": {
+        "exact": 0,
+        "total": 6,
+        "rate": 0
+      }
+    },
+    "balancesValid": false,
+    "passed": false
+  },
+  "passed": false
+}

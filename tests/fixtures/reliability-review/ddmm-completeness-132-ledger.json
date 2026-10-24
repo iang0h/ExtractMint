@@ -1,0 +1,1594 @@
+{
+  "synthetic": true,
+  "dateFormat": "DD/MM/YYYY",
+  "openingBalance": 10000,
+  "closingBalance": 10834.9,
+  "transactions": [
+    {
+      "id": "001",
+      "date": "13/04/2026",
+      "description": "POS PURCHASE GROCERY MART",
+      "reference": "REF-DDMM-001",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 9987.65,
+      "sourceLines": [
+        6
+      ]
+    },
+    {
+      "id": "002",
+      "date": "14/04/2026",
+      "description": "DEMO TXN 002 DEPOSIT",
+      "reference": "REF-DDMM-002",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10012.65,
+      "sourceLines": [
+        7,
+        8
+      ]
+    },
+    {
+      "id": "003",
+      "date": "15/04/2026",
+      "description": "DEMO TXN 003 PURCHASE",
+      "reference": "REF-DDMM-003",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10000.3,
+      "sourceLines": [
+        9
+      ]
+    },
+    {
+      "id": "004",
+      "date": "16/04/2026",
+      "description": "DEMO TXN 004 DEPOSIT",
+      "reference": "REF-DDMM-004",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10025.3,
+      "sourceLines": [
+        10
+      ]
+    },
+    {
+      "id": "005",
+      "date": "17/04/2026",
+      "description": "DEMO TXN 005 PURCHASE",
+      "reference": "REF-DDMM-005",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10012.95,
+      "sourceLines": [
+        11
+      ]
+    },
+    {
+      "id": "006",
+      "date": "18/04/2026",
+      "description": "DEMO TXN 006 DEPOSIT",
+      "reference": "REF-DDMM-006",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10037.95,
+      "sourceLines": [
+        12
+      ]
+    },
+    {
+      "id": "007",
+      "date": "19/04/2026",
+      "description": "DEMO TXN 007 PURCHASE",
+      "reference": "REF-DDMM-007",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10025.6,
+      "sourceLines": [
+        13
+      ]
+    },
+    {
+      "id": "008",
+      "date": "20/04/2026",
+      "description": "DEMO TXN 008 DEPOSIT",
+      "reference": "REF-DDMM-008",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10050.6,
+      "sourceLines": [
+        14
+      ]
+    },
+    {
+      "id": "009",
+      "date": "21/04/2026",
+      "description": "DEMO TXN 009 PURCHASE",
+      "reference": "REF-DDMM-009",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10038.25,
+      "sourceLines": [
+        15
+      ]
+    },
+    {
+      "id": "010",
+      "date": "22/04/2026",
+      "description": "DEMO TXN 010 DEPOSIT",
+      "reference": "REF-DDMM-010",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10063.25,
+      "sourceLines": [
+        16
+      ]
+    },
+    {
+      "id": "011",
+      "date": "23/04/2026",
+      "description": "DEMO TXN 011 PURCHASE",
+      "reference": "REF-DDMM-011",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10050.9,
+      "sourceLines": [
+        17
+      ]
+    },
+    {
+      "id": "012",
+      "date": "24/04/2026",
+      "description": "DEMO TXN 012 DEPOSIT",
+      "reference": "REF-DDMM-012",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10075.9,
+      "sourceLines": [
+        18
+      ]
+    },
+    {
+      "id": "013",
+      "date": "25/04/2026",
+      "description": "DEMO TXN 013 PURCHASE",
+      "reference": "REF-DDMM-013",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10063.55,
+      "sourceLines": [
+        19
+      ]
+    },
+    {
+      "id": "014",
+      "date": "26/04/2026",
+      "description": "DEMO TXN 014 DEPOSIT",
+      "reference": "REF-DDMM-014",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10088.55,
+      "sourceLines": [
+        20
+      ]
+    },
+    {
+      "id": "015",
+      "date": "27/04/2026",
+      "description": "DEMO TXN 015 PURCHASE",
+      "reference": "REF-DDMM-015",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10076.2,
+      "sourceLines": [
+        21
+      ]
+    },
+    {
+      "id": "016",
+      "date": "28/04/2026",
+      "description": "DEMO TXN 016 DEPOSIT",
+      "reference": "REF-DDMM-016",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10101.2,
+      "sourceLines": [
+        22
+      ]
+    },
+    {
+      "id": "017",
+      "date": "13/05/2026",
+      "description": "DEMO TXN 017 PURCHASE",
+      "reference": "REF-DDMM-017",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10088.85,
+      "sourceLines": [
+        23
+      ]
+    },
+    {
+      "id": "018",
+      "date": "14/05/2026",
+      "description": "DEMO TXN 018 DEPOSIT",
+      "reference": "REF-DDMM-018",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10113.85,
+      "sourceLines": [
+        24
+      ]
+    },
+    {
+      "id": "019",
+      "date": "15/05/2026",
+      "description": "DEMO TXN 019 PURCHASE",
+      "reference": "REF-DDMM-019",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10101.5,
+      "sourceLines": [
+        25
+      ]
+    },
+    {
+      "id": "020",
+      "date": "16/05/2026",
+      "description": "DEMO TXN 020 HARDWARE CONTINUED DESCRIPTION REF-DDMM-020",
+      "reference": "REF-DDMM-020",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10126.5,
+      "sourceLines": [
+        26,
+        31
+      ]
+    },
+    {
+      "id": "021",
+      "date": "17/05/2026",
+      "description": "DEMO TXN 021 PURCHASE",
+      "reference": "REF-DDMM-021",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10114.15,
+      "sourceLines": [
+        32
+      ]
+    },
+    {
+      "id": "022",
+      "date": "18/05/2026",
+      "description": "DEMO TXN 022 DEPOSIT",
+      "reference": "REF-DDMM-022",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10139.15,
+      "sourceLines": [
+        33
+      ]
+    },
+    {
+      "id": "023",
+      "date": "19/05/2026",
+      "description": "DEMO TXN 023 PURCHASE",
+      "reference": "REF-DDMM-023",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10126.8,
+      "sourceLines": [
+        34
+      ]
+    },
+    {
+      "id": "024",
+      "date": "20/05/2026",
+      "description": "DEMO TXN 024 DEPOSIT",
+      "reference": "REF-DDMM-024",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10151.8,
+      "sourceLines": [
+        35
+      ]
+    },
+    {
+      "id": "025",
+      "date": "21/05/2026",
+      "description": "DEMO TXN 025 PURCHASE",
+      "reference": "REF-DDMM-025",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10139.45,
+      "sourceLines": [
+        36
+      ]
+    },
+    {
+      "id": "026",
+      "date": "22/05/2026",
+      "description": "DEMO TXN 026 DEPOSIT",
+      "reference": "REF-DDMM-026",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10164.45,
+      "sourceLines": [
+        37
+      ]
+    },
+    {
+      "id": "027",
+      "date": "23/05/2026",
+      "description": "DEMO TXN 027 PURCHASE",
+      "reference": "REF-DDMM-027",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10152.1,
+      "sourceLines": [
+        38
+      ]
+    },
+    {
+      "id": "028",
+      "date": "24/05/2026",
+      "description": "DEMO TXN 028 DEPOSIT",
+      "reference": "REF-DDMM-028",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10177.1,
+      "sourceLines": [
+        39
+      ]
+    },
+    {
+      "id": "029",
+      "date": "25/05/2026",
+      "description": "DEMO TXN 029 PURCHASE",
+      "reference": "REF-DDMM-029",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10164.75,
+      "sourceLines": [
+        40
+      ]
+    },
+    {
+      "id": "030",
+      "date": "26/05/2026",
+      "description": "DEMO TXN 030 DEPOSIT",
+      "reference": "REF-DDMM-030",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10189.75,
+      "sourceLines": [
+        41
+      ]
+    },
+    {
+      "id": "031",
+      "date": "27/05/2026",
+      "description": "DEMO TXN 031 PURCHASE",
+      "reference": "REF-DDMM-031",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10177.4,
+      "sourceLines": [
+        42
+      ]
+    },
+    {
+      "id": "032",
+      "date": "28/05/2026",
+      "description": "DEMO TXN 032 DEPOSIT",
+      "reference": "REF-DDMM-032",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10202.4,
+      "sourceLines": [
+        43
+      ]
+    },
+    {
+      "id": "033",
+      "date": "13/06/2026",
+      "description": "DEMO TXN 033 PURCHASE",
+      "reference": "REF-DDMM-033",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10190.05,
+      "sourceLines": [
+        44
+      ]
+    },
+    {
+      "id": "034",
+      "date": "14/06/2026",
+      "description": "DEMO TXN 034 DEPOSIT",
+      "reference": "REF-DDMM-034",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10215.05,
+      "sourceLines": [
+        45
+      ]
+    },
+    {
+      "id": "035",
+      "date": "15/06/2026",
+      "description": "DEMO TXN 035 PURCHASE",
+      "reference": "REF-DDMM-035",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10202.7,
+      "sourceLines": [
+        46
+      ]
+    },
+    {
+      "id": "036",
+      "date": "16/06/2026",
+      "description": "DEMO TXN 036 DEPOSIT",
+      "reference": "REF-DDMM-036",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10227.7,
+      "sourceLines": [
+        47
+      ]
+    },
+    {
+      "id": "037",
+      "date": "17/06/2026",
+      "description": "DEMO TXN 037 PURCHASE",
+      "reference": "REF-DDMM-037",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10215.35,
+      "sourceLines": [
+        48
+      ]
+    },
+    {
+      "id": "038",
+      "date": "18/06/2026",
+      "description": "DEMO TXN 038 DEPOSIT",
+      "reference": "REF-DDMM-038",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10240.35,
+      "sourceLines": [
+        49
+      ]
+    },
+    {
+      "id": "039",
+      "date": "19/06/2026",
+      "description": "DEMO TXN 039 PURCHASE",
+      "reference": "REF-DDMM-039",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10228,
+      "sourceLines": [
+        50
+      ]
+    },
+    {
+      "id": "040",
+      "date": "20/06/2026",
+      "description": "DEMO TXN 040 DEPOSIT",
+      "reference": "REF-DDMM-040",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10253,
+      "sourceLines": [
+        51
+      ]
+    },
+    {
+      "id": "041",
+      "date": "21/06/2026",
+      "description": "DEMO TXN 041 PURCHASE",
+      "reference": "REF-DDMM-041",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10240.65,
+      "sourceLines": [
+        56
+      ]
+    },
+    {
+      "id": "042",
+      "date": "22/06/2026",
+      "description": "DEMO TXN 042 DEPOSIT",
+      "reference": "REF-DDMM-042",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10265.65,
+      "sourceLines": [
+        57
+      ]
+    },
+    {
+      "id": "043",
+      "date": "23/06/2026",
+      "description": "DEMO TXN 043 PURCHASE",
+      "reference": "REF-DDMM-043",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10253.3,
+      "sourceLines": [
+        58
+      ]
+    },
+    {
+      "id": "044",
+      "date": "24/06/2026",
+      "description": "DEMO TXN 044 DEPOSIT",
+      "reference": "REF-DDMM-044",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10278.3,
+      "sourceLines": [
+        59
+      ]
+    },
+    {
+      "id": "045",
+      "date": "25/06/2026",
+      "description": "DEMO TXN 045 PURCHASE",
+      "reference": "REF-DDMM-045",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10265.95,
+      "sourceLines": [
+        60
+      ]
+    },
+    {
+      "id": "046",
+      "date": "26/06/2026",
+      "description": "DEMO TXN 046 DEPOSIT",
+      "reference": "REF-DDMM-046",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10290.95,
+      "sourceLines": [
+        61
+      ]
+    },
+    {
+      "id": "047",
+      "date": "27/06/2026",
+      "description": "DEMO TXN 047 PURCHASE",
+      "reference": "REF-DDMM-047",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10278.6,
+      "sourceLines": [
+        62
+      ]
+    },
+    {
+      "id": "048",
+      "date": "28/06/2026",
+      "description": "DEMO TXN 048 DEPOSIT",
+      "reference": "REF-DDMM-048",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10303.6,
+      "sourceLines": [
+        63
+      ]
+    },
+    {
+      "id": "049",
+      "date": "13/07/2026",
+      "description": "DEMO TXN 049 PURCHASE",
+      "reference": "REF-DDMM-049",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10291.25,
+      "sourceLines": [
+        64
+      ]
+    },
+    {
+      "id": "050",
+      "date": "14/07/2026",
+      "description": "DEMO TXN 050 DEPOSIT",
+      "reference": "REF-DDMM-050",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10316.25,
+      "sourceLines": [
+        65
+      ]
+    },
+    {
+      "id": "051",
+      "date": "15/07/2026",
+      "description": "DEMO TXN 051 PURCHASE",
+      "reference": "REF-DDMM-051",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10303.9,
+      "sourceLines": [
+        66
+      ]
+    },
+    {
+      "id": "052",
+      "date": "16/07/2026",
+      "description": "DEMO TXN 052 DEPOSIT",
+      "reference": "REF-DDMM-052",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10328.9,
+      "sourceLines": [
+        67
+      ]
+    },
+    {
+      "id": "053",
+      "date": "17/07/2026",
+      "description": "DEMO TXN 053 PURCHASE",
+      "reference": "REF-DDMM-053",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10316.55,
+      "sourceLines": [
+        68
+      ]
+    },
+    {
+      "id": "054",
+      "date": "18/07/2026",
+      "description": "DEMO TXN 054 DEPOSIT",
+      "reference": "REF-DDMM-054",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10341.55,
+      "sourceLines": [
+        69
+      ]
+    },
+    {
+      "id": "055",
+      "date": "19/07/2026",
+      "description": "DEMO TXN 055 PURCHASE",
+      "reference": "REF-DDMM-055",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10329.2,
+      "sourceLines": [
+        70
+      ]
+    },
+    {
+      "id": "056",
+      "date": "20/07/2026",
+      "description": "DEMO TXN 056 DEPOSIT",
+      "reference": "REF-DDMM-056",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10354.2,
+      "sourceLines": [
+        71
+      ]
+    },
+    {
+      "id": "057",
+      "date": "21/07/2026",
+      "description": "DEMO TXN 057 PURCHASE",
+      "reference": "REF-DDMM-057",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10341.85,
+      "sourceLines": [
+        72
+      ]
+    },
+    {
+      "id": "058",
+      "date": "22/07/2026",
+      "description": "DEMO TXN 058 DEPOSIT",
+      "reference": "REF-DDMM-058",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10366.85,
+      "sourceLines": [
+        73
+      ]
+    },
+    {
+      "id": "059",
+      "date": "23/07/2026",
+      "description": "DEMO TXN 059 PURCHASE",
+      "reference": "REF-DDMM-059",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10354.5,
+      "sourceLines": [
+        74
+      ]
+    },
+    {
+      "id": "060",
+      "date": "24/07/2026",
+      "description": "DEMO TXN 060 DEPOSIT",
+      "reference": "REF-DDMM-060",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10379.5,
+      "sourceLines": [
+        75
+      ]
+    },
+    {
+      "id": "061",
+      "date": "25/07/2026",
+      "description": "DEMO TXN 061 PURCHASE",
+      "reference": "REF-DDMM-061",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10367.15,
+      "sourceLines": [
+        80
+      ]
+    },
+    {
+      "id": "062",
+      "date": "26/07/2026",
+      "description": "DEMO TXN 062 DEPOSIT",
+      "reference": "REF-DDMM-062",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10392.15,
+      "sourceLines": [
+        81
+      ]
+    },
+    {
+      "id": "063",
+      "date": "27/07/2026",
+      "description": "DEMO TXN 063 PURCHASE",
+      "reference": "REF-DDMM-063",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10379.8,
+      "sourceLines": [
+        82
+      ]
+    },
+    {
+      "id": "064",
+      "date": "28/07/2026",
+      "description": "DEMO TXN 064 DEPOSIT",
+      "reference": "REF-DDMM-064",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10404.8,
+      "sourceLines": [
+        83
+      ]
+    },
+    {
+      "id": "065",
+      "date": "13/08/2026",
+      "description": "DEMO TXN 065 PURCHASE",
+      "reference": "REF-DDMM-065",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10392.45,
+      "sourceLines": [
+        84
+      ]
+    },
+    {
+      "id": "066",
+      "date": "14/08/2026",
+      "description": "DEMO TXN 066 DEPOSIT",
+      "reference": "REF-DDMM-066",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10417.45,
+      "sourceLines": [
+        85
+      ]
+    },
+    {
+      "id": "067",
+      "date": "15/08/2026",
+      "description": "DEMO TXN 067 PURCHASE",
+      "reference": "REF-DDMM-067",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10405.1,
+      "sourceLines": [
+        86
+      ]
+    },
+    {
+      "id": "068",
+      "date": "16/08/2026",
+      "description": "DEMO TXN 068 DEPOSIT",
+      "reference": "REF-DDMM-068",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10430.1,
+      "sourceLines": [
+        87
+      ]
+    },
+    {
+      "id": "069",
+      "date": "17/08/2026",
+      "description": "DEMO TXN 069 PURCHASE",
+      "reference": "REF-DDMM-069",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10417.75,
+      "sourceLines": [
+        88
+      ]
+    },
+    {
+      "id": "070",
+      "date": "18/08/2026",
+      "description": "DEMO TXN 070 DEPOSIT",
+      "reference": "REF-DDMM-070",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10442.75,
+      "sourceLines": [
+        89
+      ]
+    },
+    {
+      "id": "071",
+      "date": "19/08/2026",
+      "description": "DEMO TXN 071 PURCHASE",
+      "reference": "REF-DDMM-071",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10430.4,
+      "sourceLines": [
+        90
+      ]
+    },
+    {
+      "id": "072",
+      "date": "20/08/2026",
+      "description": "DEMO TXN 072 DEPOSIT",
+      "reference": "REF-DDMM-072",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10455.4,
+      "sourceLines": [
+        91
+      ]
+    },
+    {
+      "id": "073",
+      "date": "21/08/2026",
+      "description": "DEMO TXN 073 PURCHASE",
+      "reference": "REF-DDMM-073",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10443.05,
+      "sourceLines": [
+        92
+      ]
+    },
+    {
+      "id": "074",
+      "date": "22/08/2026",
+      "description": "DEMO TXN 074 DEPOSIT",
+      "reference": "REF-DDMM-074",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10468.05,
+      "sourceLines": [
+        93
+      ]
+    },
+    {
+      "id": "075",
+      "date": "23/08/2026",
+      "description": "DEMO TXN 075 PURCHASE",
+      "reference": "REF-DDMM-075",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10455.7,
+      "sourceLines": [
+        94
+      ]
+    },
+    {
+      "id": "076",
+      "date": "24/08/2026",
+      "description": "DEMO TXN 076 DEPOSIT",
+      "reference": "REF-DDMM-076",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10480.7,
+      "sourceLines": [
+        95
+      ]
+    },
+    {
+      "id": "077",
+      "date": "25/08/2026",
+      "description": "DEMO TXN 077 PURCHASE",
+      "reference": "REF-DDMM-077",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10468.35,
+      "sourceLines": [
+        96
+      ]
+    },
+    {
+      "id": "078",
+      "date": "26/08/2026",
+      "description": "DEMO TXN 078 DEPOSIT",
+      "reference": "REF-DDMM-078",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10493.35,
+      "sourceLines": [
+        97
+      ]
+    },
+    {
+      "id": "079",
+      "date": "27/08/2026",
+      "description": "DEMO TXN 079 PURCHASE",
+      "reference": "REF-DDMM-079",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10481,
+      "sourceLines": [
+        98
+      ]
+    },
+    {
+      "id": "080",
+      "date": "28/08/2026",
+      "description": "DEMO TXN 080 DEPOSIT",
+      "reference": "REF-DDMM-080",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10506,
+      "sourceLines": [
+        99
+      ]
+    },
+    {
+      "id": "081",
+      "date": "13/09/2026",
+      "description": "DEMO TXN 081 PURCHASE",
+      "reference": "REF-DDMM-081",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10493.65,
+      "sourceLines": [
+        104
+      ]
+    },
+    {
+      "id": "082",
+      "date": "14/09/2026",
+      "description": "DEMO TXN 082 DEPOSIT",
+      "reference": "REF-DDMM-082",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10518.65,
+      "sourceLines": [
+        105
+      ]
+    },
+    {
+      "id": "083",
+      "date": "15/09/2026",
+      "description": "DEMO TXN 083 PURCHASE",
+      "reference": "REF-DDMM-083",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10506.3,
+      "sourceLines": [
+        106
+      ]
+    },
+    {
+      "id": "084",
+      "date": "16/09/2026",
+      "description": "DEMO TXN 084 DEPOSIT",
+      "reference": "REF-DDMM-084",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10531.3,
+      "sourceLines": [
+        107
+      ]
+    },
+    {
+      "id": "085",
+      "date": "17/09/2026",
+      "description": "DEMO TXN 085 PURCHASE",
+      "reference": "REF-DDMM-085",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10518.95,
+      "sourceLines": [
+        108
+      ]
+    },
+    {
+      "id": "086",
+      "date": "18/09/2026",
+      "description": "DEMO TXN 086 DEPOSIT",
+      "reference": "REF-DDMM-086",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10543.95,
+      "sourceLines": [
+        109
+      ]
+    },
+    {
+      "id": "087",
+      "date": "19/09/2026",
+      "description": "DEMO TXN 087 PURCHASE",
+      "reference": "REF-DDMM-087",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10531.6,
+      "sourceLines": [
+        110
+      ]
+    },
+    {
+      "id": "088",
+      "date": "20/09/2026",
+      "description": "DEMO TXN 088 DEPOSIT",
+      "reference": "REF-DDMM-088",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10556.6,
+      "sourceLines": [
+        111
+      ]
+    },
+    {
+      "id": "089",
+      "date": "21/09/2026",
+      "description": "DEMO TXN 089 PURCHASE",
+      "reference": "REF-DDMM-089",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10544.25,
+      "sourceLines": [
+        112
+      ]
+    },
+    {
+      "id": "090",
+      "date": "22/09/2026",
+      "description": "DEMO TXN 090 DEPOSIT",
+      "reference": "REF-DDMM-090",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10569.25,
+      "sourceLines": [
+        113
+      ]
+    },
+    {
+      "id": "091",
+      "date": "23/09/2026",
+      "description": "DEMO TXN 091 PURCHASE",
+      "reference": "REF-DDMM-091",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10556.9,
+      "sourceLines": [
+        114
+      ]
+    },
+    {
+      "id": "092",
+      "date": "24/09/2026",
+      "description": "DEMO TXN 092 DEPOSIT",
+      "reference": "REF-DDMM-092",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10581.9,
+      "sourceLines": [
+        115
+      ]
+    },
+    {
+      "id": "093",
+      "date": "25/09/2026",
+      "description": "DEMO TXN 093 PURCHASE",
+      "reference": "REF-DDMM-093",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10569.55,
+      "sourceLines": [
+        116
+      ]
+    },
+    {
+      "id": "094",
+      "date": "26/09/2026",
+      "description": "DEMO TXN 094 DEPOSIT",
+      "reference": "REF-DDMM-094",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10594.55,
+      "sourceLines": [
+        117
+      ]
+    },
+    {
+      "id": "095",
+      "date": "27/09/2026",
+      "description": "DEMO TXN 095 PURCHASE",
+      "reference": "REF-DDMM-095",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10582.2,
+      "sourceLines": [
+        118
+      ]
+    },
+    {
+      "id": "096",
+      "date": "28/09/2026",
+      "description": "DEMO TXN 096 DEPOSIT",
+      "reference": "REF-DDMM-096",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10607.2,
+      "sourceLines": [
+        119
+      ]
+    },
+    {
+      "id": "097",
+      "date": "13/10/2026",
+      "description": "DEMO TXN 097 PURCHASE",
+      "reference": "REF-DDMM-097",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10594.85,
+      "sourceLines": [
+        120
+      ]
+    },
+    {
+      "id": "098",
+      "date": "14/10/2026",
+      "description": "DEMO TXN 098 DEPOSIT",
+      "reference": "REF-DDMM-098",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10619.85,
+      "sourceLines": [
+        121
+      ]
+    },
+    {
+      "id": "099",
+      "date": "15/10/2026",
+      "description": "DEMO TXN 099 PURCHASE",
+      "reference": "REF-DDMM-099",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10607.5,
+      "sourceLines": [
+        122
+      ]
+    },
+    {
+      "id": "100",
+      "date": "16/10/2026",
+      "description": "DEMO TXN 100 DEPOSIT",
+      "reference": "REF-DDMM-100",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10632.5,
+      "sourceLines": [
+        123
+      ]
+    },
+    {
+      "id": "101",
+      "date": "17/10/2026",
+      "description": "DEMO TXN 101 PURCHASE",
+      "reference": "REF-DDMM-101",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10620.15,
+      "sourceLines": [
+        128
+      ]
+    },
+    {
+      "id": "102",
+      "date": "18/10/2026",
+      "description": "DEMO TXN 102 DEPOSIT",
+      "reference": "REF-DDMM-102",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10645.15,
+      "sourceLines": [
+        129
+      ]
+    },
+    {
+      "id": "103",
+      "date": "19/10/2026",
+      "description": "DEMO TXN 103 PURCHASE",
+      "reference": "REF-DDMM-103",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10632.8,
+      "sourceLines": [
+        130
+      ]
+    },
+    {
+      "id": "104",
+      "date": "20/10/2026",
+      "description": "DEMO TXN 104 DEPOSIT",
+      "reference": "REF-DDMM-104",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10657.8,
+      "sourceLines": [
+        131
+      ]
+    },
+    {
+      "id": "105",
+      "date": "21/10/2026",
+      "description": "DEMO TXN 105 PURCHASE",
+      "reference": "REF-DDMM-105",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10645.45,
+      "sourceLines": [
+        132
+      ]
+    },
+    {
+      "id": "106",
+      "date": "22/10/2026",
+      "description": "DEMO TXN 106 DEPOSIT",
+      "reference": "REF-DDMM-106",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10670.45,
+      "sourceLines": [
+        133
+      ]
+    },
+    {
+      "id": "107",
+      "date": "23/10/2026",
+      "description": "DEMO TXN 107 PURCHASE",
+      "reference": "REF-DDMM-107",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10658.1,
+      "sourceLines": [
+        134
+      ]
+    },
+    {
+      "id": "108",
+      "date": "24/10/2026",
+      "description": "DEMO TXN 108 DEPOSIT",
+      "reference": "REF-DDMM-108",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10683.1,
+      "sourceLines": [
+        135
+      ]
+    },
+    {
+      "id": "109",
+      "date": "25/10/2026",
+      "description": "DEMO TXN 109 PURCHASE",
+      "reference": "REF-DDMM-109",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10670.75,
+      "sourceLines": [
+        136
+      ]
+    },
+    {
+      "id": "110",
+      "date": "26/10/2026",
+      "description": "DEMO TXN 110 DEPOSIT",
+      "reference": "REF-DDMM-110",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10695.75,
+      "sourceLines": [
+        137
+      ]
+    },
+    {
+      "id": "111",
+      "date": "27/10/2026",
+      "description": "DEMO TXN 111 PURCHASE",
+      "reference": "REF-DDMM-111",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10683.4,
+      "sourceLines": [
+        138
+      ]
+    },
+    {
+      "id": "112",
+      "date": "28/10/2026",
+      "description": "DEMO TXN 112 DEPOSIT",
+      "reference": "REF-DDMM-112",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10708.4,
+      "sourceLines": [
+        139
+      ]
+    },
+    {
+      "id": "113",
+      "date": "13/11/2026",
+      "description": "DEMO TXN 113 PURCHASE",
+      "reference": "REF-DDMM-113",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10696.05,
+      "sourceLines": [
+        140
+      ]
+    },
+    {
+      "id": "114",
+      "date": "14/11/2026",
+      "description": "DEMO TXN 114 DEPOSIT",
+      "reference": "REF-DDMM-114",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10721.05,
+      "sourceLines": [
+        141
+      ]
+    },
+    {
+      "id": "115",
+      "date": "15/11/2026",
+      "description": "DEMO TXN 115 PURCHASE",
+      "reference": "REF-DDMM-115",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10708.7,
+      "sourceLines": [
+        142
+      ]
+    },
+    {
+      "id": "116",
+      "date": "16/11/2026",
+      "description": "DEMO TXN 116 DEPOSIT",
+      "reference": "REF-DDMM-116",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10733.7,
+      "sourceLines": [
+        143
+      ]
+    },
+    {
+      "id": "117",
+      "date": "17/11/2026",
+      "description": "DEMO TXN 117 PURCHASE",
+      "reference": "REF-DDMM-117",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10721.35,
+      "sourceLines": [
+        144
+      ]
+    },
+    {
+      "id": "118",
+      "date": "18/11/2026",
+      "description": "DEMO TXN 118 DEPOSIT",
+      "reference": "REF-DDMM-118",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10746.35,
+      "sourceLines": [
+        145
+      ]
+    },
+    {
+      "id": "119",
+      "date": "19/11/2026",
+      "description": "DEMO TXN 119 PURCHASE",
+      "reference": "REF-DDMM-119",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10734,
+      "sourceLines": [
+        146
+      ]
+    },
+    {
+      "id": "120",
+      "date": "20/11/2026",
+      "description": "DEMO TXN 120 DEPOSIT",
+      "reference": "REF-DDMM-120",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10759,
+      "sourceLines": [
+        147
+      ]
+    },
+    {
+      "id": "121",
+      "date": "21/11/2026",
+      "description": "DEMO TXN 121 PURCHASE",
+      "reference": "REF-DDMM-121",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10746.65,
+      "sourceLines": [
+        152
+      ]
+    },
+    {
+      "id": "122",
+      "date": "22/11/2026",
+      "description": "DEMO TXN 122 DEPOSIT",
+      "reference": "REF-DDMM-122",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10771.65,
+      "sourceLines": [
+        153
+      ]
+    },
+    {
+      "id": "123",
+      "date": "23/11/2026",
+      "description": "DEMO TXN 123 PURCHASE",
+      "reference": "REF-DDMM-123",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10759.3,
+      "sourceLines": [
+        154
+      ]
+    },
+    {
+      "id": "124",
+      "date": "24/11/2026",
+      "description": "DEMO TXN 124 DEPOSIT",
+      "reference": "REF-DDMM-124",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10784.3,
+      "sourceLines": [
+        155
+      ]
+    },
+    {
+      "id": "125",
+      "date": "25/11/2026",
+      "description": "DEMO TXN 125 PURCHASE",
+      "reference": "REF-DDMM-125",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10771.95,
+      "sourceLines": [
+        156
+      ]
+    },
+    {
+      "id": "126",
+      "date": "26/11/2026",
+      "description": "DEMO TXN 126 DEPOSIT",
+      "reference": "REF-DDMM-126",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10796.95,
+      "sourceLines": [
+        157
+      ]
+    },
+    {
+      "id": "127",
+      "date": "27/11/2026",
+      "description": "DEMO TXN 127 PURCHASE",
+      "reference": "REF-DDMM-127",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10784.6,
+      "sourceLines": [
+        158
+      ]
+    },
+    {
+      "id": "128",
+      "date": "28/11/2026",
+      "description": "DEMO TXN 128 DEPOSIT",
+      "reference": "REF-DDMM-128",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10809.6,
+      "sourceLines": [
+        159
+      ]
+    },
+    {
+      "id": "129",
+      "date": "13/12/2026",
+      "description": "DEMO TXN 129 PURCHASE",
+      "reference": "REF-DDMM-129",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10797.25,
+      "sourceLines": [
+        160
+      ]
+    },
+    {
+      "id": "130",
+      "date": "14/12/2026",
+      "description": "DEMO TXN 130 DEPOSIT",
+      "reference": "REF-DDMM-130",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10822.25,
+      "sourceLines": [
+        161
+      ]
+    },
+    {
+      "id": "131",
+      "date": "15/12/2026",
+      "description": "DEMO TXN 131 PURCHASE",
+      "reference": "REF-DDMM-131",
+      "withdrawal": 12.35,
+      "amount": -12.35,
+      "balance": 10809.9,
+      "sourceLines": [
+        162
+      ]
+    },
+    {
+      "id": "132",
+      "date": "16/12/2026",
+      "description": "DEMO TXN 132 DEPOSIT",
+      "reference": "REF-DDMM-132",
+      "deposit": 25,
+      "amount": 25,
+      "balance": 10834.9,
+      "sourceLines": [
+        163
+      ]
+    }
+  ]
+}

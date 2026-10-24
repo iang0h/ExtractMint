@@ -18,8 +18,10 @@ function wrappedLines(text, maxLength = 94) {
   return lines
 }
 
-export function createStatementPdf(statementCase) {
+export function createStatementPdf(statementCase, options = {}) {
   const pdf = new jsPDF({ unit: 'pt', format: 'letter', compress: true })
+  const includeDateFormat = options.includeDateFormat ?? Boolean(statementCase.dateFormat)
+  const includeHeaders = options.includeHeaders ?? true
   const left = 22
   let y = 38
   pdf.setFont('helvetica', 'normal')
@@ -34,10 +36,21 @@ export function createStatementPdf(statementCase) {
   y += 18
   pdf.setFontSize(10)
   pdf.text('SYNTHETIC STATEMENT — LOCAL BENCHMARK', left, y)
-  y += 18
+  y += includeDateFormat ? 14 : 18
+  if (includeDateFormat && statementCase.dateFormat) {
+    pdf.setFontSize(8)
+    pdf.text(`Date format: ${statementCase.dateFormat}`, left, y)
+    y += 14
+  }
 
   const columns = [20, 72, 250, 320, 395, 470, 510]
   pdf.setFontSize(8)
+  if (includeHeaders) {
+    statementCase.headers.forEach((header, columnIndex) => {
+      if (header) pdf.text(String(header), columns[columnIndex], y)
+    })
+    y += 15
+  }
   statementCase.tableRows.forEach((row) => {
     row.cells.forEach((cell, columnIndex) => {
       if (cell) pdf.text(String(cell), columns[columnIndex], y)

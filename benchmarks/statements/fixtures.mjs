@@ -20,6 +20,7 @@ export const statementCases = [
   {
     id: 'synthetic-english-ledger',
     language: 'en',
+    dateFormat: 'DD/MM/YYYY',
     headers: ['Date', 'Description', 'Reference', 'Withdrawal', 'Deposit', 'Tax', 'Balance'],
     introText: inertIntro,
     openingBalance: 1000,
@@ -85,6 +86,7 @@ export const statementCases = [
   {
     id: 'synthetic-malay-ledger',
     language: 'ms',
+    dateFormat: 'DD/MM/YYYY',
     headers: ['Tarikh', 'Diskripsi', 'No. Rujukan', 'Pengeluaran', 'Deposit', 'Cukai', 'Baki'],
     introText: inertIntro,
     openingBalance: 250,

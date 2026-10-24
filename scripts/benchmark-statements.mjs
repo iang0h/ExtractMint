@@ -52,13 +52,19 @@ function parseArguments(args) {
   return { jsonPath: jsonPath ? resolve(jsonPath) : undefined }
 }
 
-function normalizeDate(value) {
+function normalizeDate(value, format) {
   const text = String(value ?? '').trim()
+  const valid = (year, month, day) => {
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
+    return date.getUTCFullYear() === Number(year) &&
+      date.getUTCMonth() + 1 === Number(month) &&
+      date.getUTCDate() === Number(day)
+  }
   const iso = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
   if (iso) {
     const month = Number(iso[2])
     const day = Number(iso[3])
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    if (valid(iso[1], month, day)) {
       return `${iso[1]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     }
   }
@@ -68,8 +74,10 @@ function normalizeDate(value) {
     const first = Number(slash[1])
     const second = Number(slash[2])
     const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3]
-    const [month, day] = first > 12 ? [second, first] : [first, second]
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+    const resolvedFormat = format ?? (first > 12 ? 'DD/MM/YYYY' : second > 12 ? 'MM/DD/YYYY' : undefined)
+    if (!resolvedFormat) return undefined
+    const [month, day] = resolvedFormat === 'DD/MM/YYYY' ? [second, first] : [first, second]
+    if (valid(year, month, day)) {
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     }
   }
@@ -84,12 +92,12 @@ function normalizeDate(value) {
     const month = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(
       monthKey,
     ) + 1
-    if (month >= 1 && day >= 1 && day <= 31) {
+    if (valid(year, month, day)) {
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     }
   }
 
-  return text.toLocaleLowerCase('en-US').replace(/\s+/g, ' ')
+  return undefined
 }
 
 function normalizeDescription(value) {
@@ -122,11 +130,11 @@ function findExactReference(expected, actual, unusedActual) {
   )
 }
 
-function canUseDateDescriptionFallback(expected, actual) {
+function canUseDateDescriptionFallback(expected, actual, dateFormat) {
   // When both rows have references, a differing reference must remain a row mismatch.
   if (normalizedReference(expected.reference) && normalizedReference(actual.reference)) return false
-  const expectedDate = normalizeDate(expected.date)
-  const actualDate = normalizeDate(actual.date)
+  const expectedDate = normalizeDate(expected.date, dateFormat)
+  const actualDate = normalizeDate(actual.date, dateFormat)
   const expectedDescription = normalizeDescription(expected.description)
   const actualDescription = normalizeDescription(actual.description)
   return Boolean(
@@ -139,7 +147,7 @@ function canUseDateDescriptionFallback(expected, actual) {
   )
 }
 
-function matchRows(expectedRows, actualRows) {
+function matchRows(expectedRows, actualRows, dateFormat) {
   const unusedActual = new Set(actualRows.map((_, index) => index))
   const matches = []
   const unmatchedExpected = []
@@ -159,7 +167,7 @@ function matchRows(expectedRows, actualRows) {
   for (const expectedIndex of unmatchedExpected) {
     const expected = expectedRows[expectedIndex]
     const actualIndex = actualRows.findIndex(
-      (row, index) => unusedActual.has(index) && canUseDateDescriptionFallback(expected, row),
+      (row, index) => unusedActual.has(index) && canUseDateDescriptionFallback(expected, row, dateFormat),
     )
     if (actualIndex < 0) {
       stillUnmatched.push(expectedIndex)
@@ -177,7 +185,7 @@ function matchRows(expectedRows, actualRows) {
   }
 }
 
-function fieldValuesEqual(field, expected, actual) {
+function fieldValuesEqual(field, expected, actual, dateFormat) {
   const expectedValue = expected[field]
   const actualValue = actual[field]
 
@@ -186,7 +194,11 @@ function fieldValuesEqual(field, expected, actual) {
   }
   if (actualValue === undefined || actualValue === null) return false
 
-  if (field === 'date') return normalizeDate(expectedValue) === normalizeDate(actualValue)
+  if (field === 'date') {
+    const expectedDate = normalizeDate(expectedValue, dateFormat)
+    const actualDate = normalizeDate(actualValue, dateFormat)
+    return Boolean(expectedDate && actualDate && expectedDate === actualDate)
+  }
   if (field === 'reference') {
     return normalizedReference(expectedValue) === normalizedReference(actualValue)
   }
@@ -207,7 +219,7 @@ function rate(exact, total) {
 function scoreCase(statementCase, result) {
   const actualRows = result.rows.filter((row) => !isBalanceMarker(row))
   const expectedRows = statementCase.expectedRows
-  const { matches, unmatchedExpected, unmatchedActual } = matchRows(expectedRows, actualRows)
+  const { matches, unmatchedExpected, unmatchedActual } = matchRows(expectedRows, actualRows, statementCase.dateFormat)
   const fieldCounts = Object.fromEntries(
     scoredFields.map((field) => [field, { exact: 0, total: expectedRows.length }]),
   )
@@ -218,7 +230,7 @@ function scoreCase(statementCase, result) {
     const actual = actualRows[match.actualIndex]
     const exactFields = {}
     for (const field of scoredFields) {
-      exactFields[field] = fieldValuesEqual(field, expected, actual)
+      exactFields[field] = fieldValuesEqual(field, expected, actual, statementCase.dateFormat)
       if (exactFields[field]) fieldCounts[field].exact += 1
     }
     exactByExpectedIndex.set(match.expectedIndex, exactFields)
@@ -252,6 +264,7 @@ function scoreCase(statementCase, result) {
   return {
     id: statementCase.id,
     language: statementCase.language,
+    dateFormat: result.dateConvention?.format ?? (result.dateConvention?.source === 'ambiguous' ? 'Needs selection' : 'Conflicting clues'),
     expectedCount: expectedRows.length,
     extractedCount: actualRows.length,
     matchedCount: matches.length,

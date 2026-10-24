@@ -1,0 +1,191 @@
+{
+  "schema": "extractmint.synthetic-statement-benchmark.v1",
+  "synthetic": true,
+  "corpus": {
+    "name": "ExtractMint synthetic statement baseline",
+    "disclaimer": "All names, references, descriptions, and amounts are invented benchmark data.",
+    "caseCount": 2,
+    "transactionCount": 6,
+    "scope": "Digital text PDFs generated in memory from invented fixture data."
+  },
+  "limitation": "Synthetic digital-PDF fixtures only. These scores do not represent real-bank coverage, scanned-PDF/OCR performance, or production accuracy.",
+  "generatedAt": "2026-10-24T01:37:57.282Z",
+  "results": [
+    {
+      "id": "synthetic-english-ledger",
+      "language": "en",
+      "dateFormat": "DD/MM/YYYY",
+      "expectedCount": 3,
+      "extractedCount": 3,
+      "matchedCount": 3,
+      "precision": 1,
+      "recall": 1,
+      "fields": {
+        "date": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "description": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "reference": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "amount": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "withdrawal": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "deposit": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "balance": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "tax": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        }
+      },
+      "balance": {
+        "status": "valid",
+        "checkedRows": 4,
+        "issueCount": 0,
+        "passed": true
+      },
+      "passed": true,
+      "unmatchedExpected": [],
+      "unmatchedExtracted": [],
+      "mismatches": []
+    },
+    {
+      "id": "synthetic-malay-ledger",
+      "language": "ms",
+      "dateFormat": "DD/MM/YYYY",
+      "expectedCount": 3,
+      "extractedCount": 3,
+      "matchedCount": 3,
+      "precision": 1,
+      "recall": 1,
+      "fields": {
+        "date": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "description": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "reference": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "amount": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "withdrawal": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "deposit": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "balance": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        },
+        "tax": {
+          "exact": 3,
+          "total": 3,
+          "rate": 1
+        }
+      },
+      "balance": {
+        "status": "valid",
+        "checkedRows": 4,
+        "issueCount": 0,
+        "passed": true
+      },
+      "passed": true,
+      "unmatchedExpected": [],
+      "unmatchedExtracted": [],
+      "mismatches": []
+    }
+  ],
+  "aggregate": {
+    "expectedCount": 6,
+    "extractedCount": 6,
+    "matchedCount": 6,
+    "precision": 1,
+    "recall": 1,
+    "fields": {
+      "date": {
+        "exact": 6,
+        "total": 6,
+        "rate": 1
+      },
+      "description": {
+        "exact": 6,
+        "total": 6,
+        "rate": 1
+      },
+      "reference": {
+        "exact": 6,
+        "total": 6,
+        "rate": 1
+      },
+      "amount": {
+        "exact": 6,
+        "total": 6,
+        "rate": 1
+      },
+      "withdrawal": {
+        "exact": 6,
+        "total": 6,
+        "rate": 1
+      },
+      "deposit": {
+        "exact": 6,
+        "total": 6,
+        "rate": 1
+      },
+      "balance": {
+        "exact": 6,
+        "total": 6,
+        "rate": 1
+      },
+      "tax": {
+        "exact": 6,
+        "total": 6,
+        "rate": 1
+      }
+    },
+    "balancesValid": true,
+    "passed": true
+  },
+  "passed": true
+}

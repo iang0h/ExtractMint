@@ -52,6 +52,7 @@ try {
   const statementDates = await server.ssrLoadModule('/src/lib/statementDates.ts')
   const financialSummary = await server.ssrLoadModule('/src/lib/financialSummary.ts')
   const dmyQbo = (result) => converter.createQboBlob(converter.applyDateConvention(result, 'DD/MM/YYYY'))
+  const dmyCsv = (result) => converter.createCsvBlob(converter.applyDateConvention(result, 'DD/MM/YYYY'))
 
   for (const [format, expectedRows, expectedPeriod] of [
     ['DD/MM/YYYY', ['2026-04-13', '2026-04-14'], ['2026-04-01', '2026-04-30']],
@@ -207,7 +208,10 @@ try {
       assert.deepEqual(row.sourceLineNumbers, fixture.transactionSourceLines[index], 'every transaction source line stays attached')
     })
     assert.equal(balance, fixture.closingBalance)
-    assert.equal(result.validation.status, 'valid')
+    assert.equal(result.validation.status, 'review', 'ambiguous numeric dates require a user choice before verification')
+    assert.ok(result.validation.issues.some((issue) => issue.code === 'unresolved-date'), 'ambiguous transaction dates are disclosed')
+    const dateResolved = converter.applyDateConvention(result, 'DD/MM/YYYY')
+    assert.equal(dateResolved.validation.status, 'valid', 'choosing the printed DD/MM format restores the clean reconciliation status')
     assert.deepEqual(result.provenance.unattachedLineNumbers, [], 'no consumed source line is silently lost')
     assert.equal(result.provenance.rowStartLineNumbers.length, result.rows.length)
     assert.deepEqual([...result.provenance.attachedLineNumbers].sort((a, b) => a - b), result.provenance.consumedLineNumbers)
@@ -325,7 +329,7 @@ try {
   assert.equal(wrongPairBalance.validation.status, 'review')
   assert.deepEqual(wrongPairBalance.validation.issues.filter((issue) => issue.code === 'balance-step-inconsistency').map((issue) => issue.delta), [-1, 1], 'validator flags both wrong source balance steps instead of deleting a row')
   assert.deepEqual(wrongPairBalance.provenance.ambiguousLineNumbers, [], 'explicit source header preserves transaction layout despite a balance mismatch')
-  const wrongPairCsv = (await converter.createCsvBlob(wrongPairBalance).text()).split(/\r?\n/).map(parseCsvLine)
+  const wrongPairCsv = (await dmyCsv(wrongPairBalance).text()).split(/\r?\n/).map(parseCsvLine)
   const wrongPairHeaders = wrongPairCsv[0]
   assert.deepEqual(wrongPairCsv.slice(1).filter((row) => row[wrongPairHeaders.indexOf('Date')]).map((row) => [Number(row[wrongPairHeaders.indexOf('Amount')]), Number(row[wrongPairHeaders.indexOf('Balance')])]), [[-5, 994], [5, 1000]], 'CSV preserves the inconsistent source balance and both actual amounts')
 
@@ -343,7 +347,7 @@ try {
   assert.deepEqual(noOpeningTransactions.map((row) => [row.date, row.amount, row.balance]), [['01/06/2026', -5, 995], ['02/06/2026', 5, 1000]], 'explicit source header preserves actual paired transactions without an opening balance')
   assert.deepEqual(noOpeningTransactions.map((row) => row.sourceLineNumbers), [[3], [4]])
   assert.deepEqual(pairedWithoutOpening.provenance.ambiguousLineNumbers, [])
-  const noOpeningCsv = (await converter.createCsvBlob(pairedWithoutOpening).text()).split(/\r?\n/).map(parseCsvLine)
+  const noOpeningCsv = (await dmyCsv(pairedWithoutOpening).text()).split(/\r?\n/).map(parseCsvLine)
   const noOpeningAmountColumn = noOpeningCsv[0].indexOf('Amount')
   assert.deepEqual(noOpeningCsv.slice(1).map((row) => Number(row[noOpeningAmountColumn])), [-5, 5], 'CSV preserves both no-opening source amounts')
   assert.deepEqual([...((await dmyQbo(pairedWithoutOpening).text()).matchAll(/<TRNAMT>([^\r\n]+)/g))].map((match) => Number(match[1])), [-5, 5], 'QBO preserves both no-opening source amounts')
@@ -358,9 +362,11 @@ try {
   assert.equal(sparsePlain.rows.filter((row) => row.date).length, 3, 'plain fallback retains a dated transaction with a trailing amount even when balance is absent')
   assert.equal(sparsePlain.rows[2].amount, -2, 'sparse plain source amount is preserved')
   console.log(`Sparse balance review regression: amounts=${sparsePlain.rows.filter((row) => row.date).map((row) => row.amount).join(',')}; validation=${sparsePlain.validation.status}; issues=${sparsePlain.validation.issueCount}`)
-  assert.equal(sparsePlain.validation.status, 'valid', 'the balance step includes the intervening parsed -2.00 transaction')
-  assert.equal(sparsePlain.validation.issueCount, 0)
-  assert.equal(sparsePlain.validation.checkedRows, 2, 'both observed balance intervals are checked')
+  assert.equal(sparsePlain.validation.status, 'review', 'ambiguous dates stay in review before a user choice')
+  const sparsePlainResolved = converter.applyDateConvention(sparsePlain, 'DD/MM/YYYY')
+  assert.equal(sparsePlainResolved.validation.status, 'valid', 'after choosing the date format, the balance step includes the intervening parsed -2.00 transaction')
+  assert.equal(sparsePlainResolved.validation.issueCount, 0)
+  assert.equal(sparsePlainResolved.validation.checkedRows, 2, 'both observed balance intervals are checked')
   assert.equal(sparsePlain.rows[2].balance, undefined, 'validation never supplies an invented intermediate balance')
   assert.equal(sparsePlain.rows[1].balance + sparsePlain.rows[2].amount + sparsePlain.rows[3].amount, sparsePlain.rows[3].balance, '995 - 2 + 7 equals the source closing balance 1000 exactly')
   const sparseOneCentError = sparsePlain.rows.map((row, index) => index === 3 ? { ...row, balance: 1000.01 } : row)
@@ -376,13 +382,16 @@ try {
     '03/06/2026 Fictional credit +3.00 1,000.00',
   ].join('\n'), 'invented-supported-unsigned.txt', 'text/plain', { size: 100, lastModified: 1 })
   assert.deepEqual(supportedUnsigned.rows.filter((row) => row.date).map((row) => row.amount), [-5, 2, 3], 'surrounding balance evidence retains a genuine unsigned sparse transaction unchanged')
-  assert.equal(supportedUnsigned.validation.status, 'valid', 'supported unsigned sparse interval also reconciles')
-  assert.equal(supportedUnsigned.validation.issueCount, 0)
+  assert.equal(supportedUnsigned.validation.status, 'review', 'ambiguous dates stay in review before a user choice')
+  const supportedUnsignedResolved = converter.applyDateConvention(supportedUnsigned, 'DD/MM/YYYY')
+  assert.equal(supportedUnsignedResolved.validation.status, 'valid', 'the selected date format resolves the supported unsigned sparse interval')
+  assert.equal(supportedUnsignedResolved.validation.issueCount, 0)
 
   const inconsistent = converter.parseExtractedText(
     multiline.text.replace('399,999.99', '399,998.99'),
     'invented-inconsistent-statement.txt', 'text/plain', { size: 100, lastModified: 1 },
   )
+  const inconsistentDmy = converter.applyDateConvention(inconsistent, 'DD/MM/YYYY')
   assert.equal(inconsistent.rows.filter((row) => row.amount !== undefined).length, multiline.transactionCount, 'inconsistency guard never invents or deletes rows')
   assert.equal(inconsistent.rows[1].amount, -0.01, 'guard preserves the stated tiny withdrawal')
   assert.equal(inconsistent.rows[1].balance, 399998.99, 'guard preserves the inconsistent source balance')
@@ -390,7 +399,7 @@ try {
   const integrity = await server.ssrLoadModule('/src/lib/statementIntegrity.ts')
   const ambiguousWarning = integrity.getStatementIntegrityWarning(trailingMemoResult)
   assert.match(ambiguousWarning, /Ambiguous transaction starts on source lines: 5/)
-  assert.match(await converter.createCsvBlob(trailingMemoResult).text(), /Ambiguous transaction starts on source lines: 5/, 'ambiguous source warning carries into CSV')
+  assert.match(await dmyCsv(trailingMemoResult).text(), /Ambiguous transaction starts on source lines: 5/, 'ambiguous source warning carries into CSV')
   const restoredMemo = await converter.importReviewJson(new File([converter.createReviewJsonBlob(trailingMemoResult)], 'invented-memo.extractmint-review.json', { type: 'application/json' }))
   assert.deepEqual(restoredMemo.provenance.ambiguousLineNumbers, [5], 'review round trip preserves ambiguous source locations')
   assert.equal(restoredMemo.validation.status, 'review', 'review import restores the ambiguity warning')
@@ -399,19 +408,19 @@ try {
   assert.match(warning, /balance.step inconsistency/i)
   assert.match(warning, /not proof.*missing/i, 'warning does not diagnose a missing row from a balance mismatch')
   assert.match(warning, /net.zero/i, 'warning explains the limit of balance-only completeness checks')
-  const warningCsv = await converter.createCsvBlob(inconsistent).text()
+  const warningCsv = await dmyCsv(inconsistent).text()
   const warningCsvLines = warningCsv.split(/\r?\n/).map(parseCsvLine)
   const warningColumn = warningCsvLines[0].indexOf('Statement Warnings')
   assert.ok(warningColumn >= 0, 'CSV carries an explicit statement warning column')
   assert.equal(warningCsvLines[1][warningColumn], warning, 'warning persists even on rows with no row-level issue')
   const WarningExcelJS = (await import('exceljs')).default
   const warningWorkbook = new WarningExcelJS.Workbook()
-  await warningWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(inconsistent)).arrayBuffer()))
+  await warningWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(inconsistentDmy)).arrayBuffer()))
   for (const sheetName of ['Summary', 'Reconciliation']) {
     assert.ok(JSON.stringify(warningWorkbook.getWorksheet(sheetName).getSheetValues()).includes(warning), `XLSX ${sheetName} carries the balance inconsistency warning`)
   }
   const warningCombined = new WarningExcelJS.Workbook()
-  await warningCombined.xlsx.load(Buffer.from(await (await converter.createCombinedExcelBlob([inconsistent])).arrayBuffer()))
+  await warningCombined.xlsx.load(Buffer.from(await (await converter.createCombinedExcelBlob([inconsistentDmy])).arrayBuffer()))
   for (const sheetName of ['Summary', 'Reconciliation']) {
     assert.ok(JSON.stringify(warningCombined.getWorksheet(sheetName).getSheetValues()).includes(warning), `Combined XLSX ${sheetName} carries the warning`)
   }
@@ -593,14 +602,14 @@ try {
   assert.equal(scanResult.summary.amountStatus, 'unreadable', 'OCR missing a dated transaction must mark amounts unreadable')
   assert.equal(scanResult.summary.total, undefined, 'a closing balance is not presented as a detected transaction total')
   assert.throws(
-    () => converter.createQboBlob(scanResult),
+    () => dmyQbo(scanResult),
     /amounts are not readable/i,
     'QBO stays blocked when OCR may have missed transaction amounts',
   )
-  const scanCsv = await converter.createCsvBlob(scanResult).text()
+  const scanCsv = await dmyCsv(scanResult).text()
   assert.match(scanCsv, /Amounts could not be read/i, 'CSV carries a visible scan warning after the UI acknowledgement gate')
   const scanWorkbook = new (await import('exceljs')).default.Workbook()
-  await scanWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(scanResult)).arrayBuffer()))
+  await scanWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(converter.applyDateConvention(scanResult, 'DD/MM/YYYY'))).arrayBuffer()))
   const scanSummaryHeaders = scanWorkbook.getWorksheet('Summary').getRow(1).values.slice(1).map(String)
   const scanSummaryRow = scanWorkbook.getWorksheet('Summary').getRow(2)
   assert.equal(
@@ -711,10 +720,10 @@ try {
     false,
     'the preserved running-balance warning remains acknowledged for this source file',
   )
-  const missingBalanceCsv = await converter.createCsvBlob(editedMissingScanBalance).text()
+  const missingBalanceCsv = await dmyCsv(editedMissingScanBalance).text()
   assert.match(missingBalanceCsv, /running-balance values could not be read/i, 'acknowledged CSV keeps the visible running-balance warning')
   const missingBalanceWorkbook = new (await import('exceljs')).default.Workbook()
-  await missingBalanceWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(editedMissingScanBalance)).arrayBuffer()))
+  await missingBalanceWorkbook.xlsx.load(Buffer.from(await (await converter.createExcelBlob(converter.applyDateConvention(editedMissingScanBalance, 'DD/MM/YYYY'))).arrayBuffer()))
   const missingBalanceSummaryHeaders = missingBalanceWorkbook.getWorksheet('Summary').getRow(1).values.slice(1).map(String)
   const missingBalanceSummaryRow = missingBalanceWorkbook.getWorksheet('Summary').getRow(2)
   assert.match(

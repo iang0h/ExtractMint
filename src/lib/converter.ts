@@ -52,7 +52,7 @@ export type ExtractedRow = {
 
 export type ValidationIssue = {
   severity: 'info' | 'warning' | 'error'
-  code?: 'balance-step-inconsistency' | 'source-line-unattached' | 'ambiguous-transaction-start' | 'invalid-row-edit'
+  code?: 'balance-step-inconsistency' | 'source-line-unattached' | 'ambiguous-transaction-start' | 'invalid-row-edit' | 'missing-description' | 'unresolved-date' | 'unresolved-date-convention'
   message: string
   rowIndex?: number
   expectedBalance?: number
@@ -183,11 +183,32 @@ export function applyDateConvention(result: ConversionResult, format: StatementD
         end: canonicalStatementDate(result.statementPeriod.rawEnd ?? result.statementPeriod.end, dateConvention),
       }
     : refreshStatementPeriod(result.rows, undefined, dateConvention)
+  const previousDateIssueRows = new Set(result.validation.issues
+    .filter((issue) => issue.code === 'unresolved-date')
+    .flatMap((issue) => issue.rowIndex === undefined ? [] : [issue.rowIndex]))
+  const retainedIssues = result.validation.issues.filter((issue) => issue.code !== 'unresolved-date' && issue.code !== 'unresolved-date-convention')
+  const validation: ValidationSummary = {
+    ...result.validation,
+    status: retainedIssues.length > 0 ? 'review' : result.validation.checkedRows > 0 ? 'valid' : 'missing',
+    issueCount: retainedIssues.length,
+    issues: retainedIssues,
+  }
+  addUnresolvedDateIssues(validation, result.rows, statementPeriod, dateConvention, result.closingBalanceDateRaw ?? result.closingBalanceDate)
+  const rowsToRecheck = result.rows.map((row, index) => {
+    const onlyDateIssue = previousDateIssueRows.has(index) &&
+      !retainedIssues.some((issue) => issue.rowIndex === index)
+    return onlyDateIssue ? { ...row, confidence: Math.max(row.confidence, 84) } : row
+  })
+  const rows = lowerRowConfidence(rowsToRecheck, validation)
+  const confidence = confidenceForResult(result.fileType, rows, result.rawText, validation, result.pdfColumnMethods, result.scanQualityWarning)
   return {
     ...result,
     dateConvention,
     statementPeriod,
     closingBalanceDate: canonicalStatementDate(result.closingBalanceDateRaw ?? result.closingBalanceDate, dateConvention),
+    validation,
+    rows,
+    confidence,
   }
 }
 
@@ -797,6 +818,52 @@ function addSourceCoverageIssue(validation: ValidationSummary, provenance?: Sour
   if (provenance.unattachedLineNumbers.length > 0 || provenance.ambiguousLineNumbers.length > 0) validation.status = 'review'
 }
 
+function addMissingDescriptionIssues(validation: ValidationSummary, rows: ExtractedRow[]) {
+  rows.forEach((row, rowIndex) => {
+    if (!row.date || row.description.trim()) return
+    validation.issues.push({
+      severity: 'warning',
+      code: 'missing-description',
+      rowIndex,
+      message: 'Transaction description is missing. Check the source before using this row.',
+    })
+  })
+  if (validation.issues.some((issue) => issue.code === 'missing-description')) {
+    validation.issueCount = validation.issues.length
+    validation.status = 'review'
+  }
+}
+
+function addUnresolvedDateIssues(
+  validation: ValidationSummary,
+  rows: ExtractedRow[],
+  period: ConversionResult['statementPeriod'],
+  convention: StatementDateConvention | undefined,
+  closingBalanceDate?: string,
+) {
+  if (!needsDateConventionChoice(rows, period, convention, closingBalanceDate)) return
+  const unresolvedRows = rows.flatMap((row, rowIndex) =>
+    row.date && !canonicalStatementDate(row.date, convention) ? [rowIndex] : [],
+  )
+  unresolvedRows.forEach((rowIndex) => {
+    validation.issues.push({
+      severity: 'warning',
+      code: 'unresolved-date',
+      rowIndex,
+      message: 'Date format needs a user choice before this transaction date is resolved.',
+    })
+  })
+  if (unresolvedRows.length === 0) {
+    validation.issues.push({
+      severity: 'warning',
+      code: 'unresolved-date-convention',
+      message: 'Statement date clues conflict or are ambiguous. Choose the printed format before using the date range or exporting QBO.',
+    })
+  }
+  validation.issueCount = validation.issues.length
+  validation.status = 'review'
+}
+
 function readSourceLineNumbers(value: unknown): number[] | undefined {
   return Array.isArray(value) && value.every((line) => Number.isSafeInteger(line) && line > 0)
     ? [...value]
@@ -851,10 +918,10 @@ function assertExportableTransactionRows(result: ConversionResult) {
       throw new Error(`Export paused: Row ${rowNumber} has an invalid ${invalidField} edit. Enter a valid amount before exporting.`)
     }
     if (!isTransactionRow(row)) return
-    const recognizedDate = canonicalStatementDate(row.date, result.dateConvention) ||
-      (['DD/MM/YYYY', 'MM/DD/YYYY'] as const).some((format) =>
-        canonicalStatementDate(row.date, { format, source: 'user' }),
-      )
+    if (!row.description.trim()) {
+      throw new Error(`Export paused: Row ${rowNumber} needs a resolved description. Check the source before exporting.`)
+    }
+    const recognizedDate = canonicalStatementDate(row.date, result.dateConvention)
     if (!recognizedDate) {
       throw new Error(`Export paused: Row ${rowNumber} needs a resolved date. Review the row before exporting.`)
     }
@@ -946,6 +1013,9 @@ export function createQboBlob(result: ConversionResult) {
   }
   if (needsDateConventionChoice(result.rows, result.statementPeriod, result.dateConvention, result.closingBalanceDateRaw ?? result.closingBalanceDate)) {
     throw new Error('Choose DD/MM/YYYY or MM/DD/YYYY before exporting QBO dates.')
+  }
+  if (result.provenance?.unattachedLineNumbers.length) {
+    throw new Error('Export paused: Some source lines could not be attached to a transaction. Review the source before exporting QBO.')
   }
   assertExportableTransactionRows(result)
 
@@ -1910,7 +1980,7 @@ type PositionedText = {
   width: number
 }
 
-type PdfColumnAnchor = { index: number; right: number }
+type PdfColumnAnchor = { index: number; x: number; right: number }
 type PdfColumnMethod = 'header' | 'clusters' | 'legacy'
 
 function formatPdfTextItems(items: unknown[]) {
@@ -1986,7 +2056,7 @@ function findPdfHeaderAnchors(lines: PositionedText[][]) {
     const anchors: PdfColumnAnchor[] = []
     line.forEach((item) => {
       const index = headerColumnIndex(item.str)
-      if (index !== undefined) anchors.push({ index, right: item.x + item.width })
+      if (index !== undefined) anchors.push({ index, x: item.x, right: item.x + item.width })
     })
     const indexed = new Set(anchors.map(({ index }) => index))
     if (indexed.has(0) && indexed.has(1) && indexed.has(3) && indexed.has(4) && indexed.has(6)) {
@@ -1998,22 +2068,25 @@ function findPdfHeaderAnchors(lines: PositionedText[][]) {
 
 function headerColumnIndex(value: string) {
   const text = value.replace(/\s+/g, ' ').trim().toLowerCase()
-  if (/^(date|transaction date|posting date|value date)(\b|\s)/i.test(text)) return 0
-  if (/^(description|details|narrative|transaction description|particulars)(\b|\s)/i.test(text)) return 1
-  if (/^(reference|ref(\s*no)?|transaction id)(\b|\s)/i.test(text)) return 2
-  if (/^(debit|debits|withdrawal|withdrawals|money out|paid out|outgoing)(\b|\s)/i.test(text)) return 3
+  if (/^(date|transaction date|posting date|value date|tarikh)(\b|\s)/i.test(text)) return 0
+  if (/^(description|details|narrative|transaction description|particulars|diskripsi|keterangan)(\b|\s)/i.test(text)) return 1
+  if (/^(reference|ref(\s*no)?|transaction id|no\.? rujukan|rujukan)(\b|\s)/i.test(text)) return 2
+  if (/^(debit|debits|withdrawal|withdrawals|money out|paid out|outgoing|pengeluaran)(\b|\s)/i.test(text)) return 3
   if (/^(credit|credits|deposit|deposits|money in|paid in|incoming)(\b|\s)/i.test(text)) return 4
-  if (/^(tax|fee)(\b|\s)/i.test(text)) return 5
-  if (/^(balance|running balance|available balance)(\b|\s)/i.test(text)) return 6
+  if (/^(tax|fee|cukai)(\b|\s)/i.test(text)) return 5
+  if (/^(balance|running balance|available balance|baki)(\b|\s)/i.test(text)) return 6
   return undefined
 }
 
 function columnForHeaderAnchors(item: PositionedText, anchors: PdfColumnAnchor[]) {
   const direct = headerColumnIndex(item.str)
   if (direct !== undefined) return direct
-  const edge = item.x + item.width
+  // Long descriptions can end beyond their visual column. Use their left edge;
+  // right-aligned monetary cells still match against the header's right edge.
+  const positionedMoney = looksLikePositionedMoney(item.str)
+  const position = positionedMoney ? item.x + item.width : item.x
   return anchors.reduce((best, anchor) => {
-    const distance = Math.abs(anchor.right - edge)
+    const distance = Math.abs((positionedMoney ? anchor.right : anchor.x) - position)
     return distance < best.distance ? { index: anchor.index, distance } : best
   }, { index: anchors[0]?.index ?? 1, distance: Number.POSITIVE_INFINITY }).index
 }
@@ -2110,6 +2183,8 @@ export function parseExtractedText(
   const currencyCode = detectCurrencyCode(normalized, fileName)
   const validation = validateBalances(fallbackRows, currencyCode)
   addSourceCoverageIssue(validation, parsed.provenance)
+  addMissingDescriptionIssues(validation, fallbackRows)
+  addUnresolvedDateIssues(validation, fallbackRows, statementPeriod, dateConvention, closingBalanceDate.raw ?? closingBalanceDate.date)
   if (pdfColumnMethods?.some(({ method }) => method !== 'header')) {
     const fallbackIssues = fallbackRows.flatMap((row, rowIndex) => row.date ? [{
       severity: 'warning' as const,
@@ -2137,11 +2212,7 @@ export function parseExtractedText(
   }
   const reviewedRows = lowerRowConfidence(fallbackRows, validation)
   const summary = summarize(lines, reviewedRows, fileName, validation, scanAmountsUnreadable)
-  const confidence = Math.min(
-    scoreConfidence(fileType, reviewedRows, normalized, validation),
-    pdfColumnMethods?.some(({ method }) => method !== 'header') ? 68 : 98,
-    scanQualityWarning ? 55 : 98,
-  )
+  const confidence = confidenceForResult(fileType, reviewedRows, normalized, validation, pdfColumnMethods, scanQualityWarning)
 
   return {
     fileName,
@@ -2444,6 +2515,7 @@ function isStatementNoise(line: string) {
   const text = line.replace(/\t/g, ' ').replace(/\s+/g, ' ').trim()
   if (!text) return true
   return (
+    /^[\w\s&.'’()/:-]{2,100}\s-\s(?:Account\s+)?Statement$/i.test(text) ||
     /^Page \/|^Halaman$|^Page \d+(?: of \d+)?$/i.test(text) ||
     /^Statement Date \/|^Tarikh Penyata$|^Should you have|^or call our CIMB/i.test(text) ||
     /\b(statement period|important notice|please note|effective from|effective on|terms and conditions|fee schedule|contact us|page \d+ of \d+)\b/i.test(text) ||
@@ -2654,6 +2726,21 @@ function scoreConfidence(
   return Math.max(20, Math.min(98, score))
 }
 
+function confidenceForResult(
+  fileType: string,
+  rows: ExtractedRow[],
+  rawText: string,
+  validation: ValidationSummary,
+  pdfColumnMethods?: ConversionResult['pdfColumnMethods'],
+  scanQualityWarning?: string,
+) {
+  return Math.min(
+    scoreConfidence(fileType, rows, rawText, validation),
+    pdfColumnMethods?.some(({ method }) => method !== 'header') ? 68 : 98,
+    scanQualityWarning ? 55 : 98,
+  )
+}
+
 function validateBalances(
   rows: ExtractedRow[],
   currencyCode: string,
@@ -2851,12 +2938,24 @@ function qboUid(seed: string) {
   return `UID-${Math.abs(hash).toString(16)}`
 }
 
-function qboToAscii(value: string) {
-  return value.replace(/[^\x20-\x7E]/g, ' ')
+const qboNameLimit = 32
+const qboReferenceLimit = 32
+const qboMemoLimit = 255
+
+function qboText(value: string, field: string) {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim()
+  const hasUnsupportedChars = [...normalized].some((character) => {
+    const code = character.charCodeAt(0)
+    return code <= 0x1f || code === 0x7f || code > 0x7e
+  })
+  if (hasUnsupportedChars) {
+    throw new Error(`Export paused: QBO ${field} contains characters outside the export's declared US-ASCII encoding. Use CSV or Excel to preserve them.`)
+  }
+  return normalized
 }
 
-function qboText(value: string) {
-  return qboToAscii(value).replace(/[<>\r\n]/g, ' ').replace(/&/g, 'and').trim()
+function qboEscapeText(value: string) {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 }
 
 function qboTransaction(
@@ -2871,14 +2970,22 @@ function qboTransaction(
   const amount = signedTransactionAmount(row)
   if (amount === undefined || !Number.isFinite(amount)) return ''
 
-  const description = qboText(row.description || 'Transaction')
+  const description = qboText(row.description, 'description')
+  const reference = row.reference ? qboText(row.reference, 'reference') : ''
+  const category = qboText(row.category || 'Transaction', 'category')
   const fitid = qboUid(`${posted}:${amount}:${description}:${index}`)
   const type = amount < 0 ? 'DEBIT' : amount > 0 ? 'CREDIT' : 'OTHER'
   const reviewStatus = getRowReview(validation, index).status
-  const categoryMarker = `[ExtractMint category: ${qboText(row.category || 'Transaction').slice(0, 48)}]`
+  const categoryMarker = `[ExtractMint category: ${category}]`
   const reviewMarker = `[ExtractMint review: ${reviewStatus}]`
-  const memoSuffix = `${categoryMarker} ${reviewMarker}`
-  const memo = `${description.slice(0, Math.max(0, 255 - memoSuffix.length - 1))} ${memoSuffix}`
+  const memoParts = [description]
+  if (reference && reference.length > qboReferenceLimit) memoParts.push(`Source reference: ${reference}`)
+  if (row.sourceLineNumbers?.length) memoParts.push(`Source lines: ${row.sourceLineNumbers.join(', ')}`)
+  memoParts.push(categoryMarker, reviewMarker)
+  const memo = memoParts.join(' | ')
+  if (memo.length > qboMemoLimit) {
+    throw new Error(`Export paused: Row ${index + 1} exceeds the ${qboMemoLimit}-character QBO memo limit. Shorten the description or reference, or use CSV or Excel to preserve the full text.`)
+  }
 
   return [
     '<STMTTRN>',
@@ -2886,10 +2993,11 @@ function qboTransaction(
     `<DTPOSTED>${posted}`,
     `<TRNAMT>${qboNumber(amount)}`,
     `<FITID>${fitid}`,
-    `<NAME>${description.slice(0, 32) || 'Transaction'}`,
-    `<MEMO>${memo}`,
+    reference && reference.length <= qboReferenceLimit ? `<REFNUM>${qboEscapeText(reference)}` : '',
+    `<NAME>${qboEscapeText(description.slice(0, qboNameLimit))}`,
+    `<MEMO>${qboEscapeText(memo)}`,
     '</STMTTRN>',
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 }
 
 function qboDateRange(

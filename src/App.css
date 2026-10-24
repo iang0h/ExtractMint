@@ -2919,6 +2919,15 @@ footer strong {
 }
 
 @media (max-width: 560px) {
+  .product-stage,
+  .converter-card,
+  .results-section,
+  .preview-panel,
+  .export-sanity-card,
+  .export-sanity-header {
+    min-width: 0;
+  }
+
   .site-header {
     width: 100%;
     padding: 11px 16px;
@@ -2944,10 +2953,16 @@ footer strong {
   .dropzone {
     margin: 12px;
     padding: 18px;
+    max-width: calc(100% - 24px);
   }
 
   .dropzone strong {
     font-size: 18px;
+  }
+
+  .dropzone small {
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
   .synthetic-sample-action {
@@ -2967,5 +2982,43 @@ footer strong {
   .summary-band div + div {
     border-top: 1px solid var(--line);
     border-left: 0;
+  }
+
+  .export-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .export-row button {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .export-sanity-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .export-sanity-status {
+    align-self: flex-start;
+  }
+
+  footer {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 12px;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .footer-links a {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 }
