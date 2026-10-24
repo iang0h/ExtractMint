@@ -12,6 +12,7 @@
     "test:agent": "node tests/agent-core.test.mjs",
     "test:seo": "node tests/seo-artifacts.test.mjs",
     "test:statement-reliability": "node tests/statement-reliability.test.mjs",
+    "test:provided-statements": "node tests/provided-statement-regressions.test.mjs",
     "test:e2e:exports": "node tests/export-edit.e2e.mjs",
     "test:synthetic-sample": "node tests/synthetic-sample-loader.test.mjs",
     "preview": "vite preview",
